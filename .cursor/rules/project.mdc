@@ -1,0 +1,14 @@
+---
+description: Core defaults for will-chief-of-staff — small diffs, match style, verify with tools
+alwaysApply: true
+---
+
+# Project defaults
+
+- **Scope**: Change only what the task requires. No unrelated refactors or extra files.
+- **Style**: Read neighboring code first; match naming, types, imports, and comment density.
+- **Verification**: When the repo has scripts or tests, run the relevant ones after substantive edits. Use the terminal for a real environment when investigating failures.
+- **Rules & skills**: Follow `.cursor/rules/` and any project skills when present.
+- **Citations**: When pointing at code, use the workspace line-range format the editor expects so navigation is one click.
+
+If requirements conflict, prefer the user’s explicit instructions for the current task.
