@@ -15,7 +15,7 @@ function SidebarLink({
   capture,
   active
 }: {
-  href: Route;
+  href: Route | { pathname: Route; query: { from: string } };
   label: string;
   icon: ComponentType<{ className?: string }>;
   capture?: boolean;
@@ -41,6 +41,17 @@ function SidebarLink({
 
 export function DesktopSidebar() {
   const pathname = usePathname();
+
+  function hrefForItem(href: Route, isCapture?: boolean) {
+    if (!isCapture || pathname === href) {
+      return href;
+    }
+
+    return {
+      pathname: href,
+      query: { from: pathname }
+    };
+  }
 
   return (
     <aside className="hidden w-[284px] flex-col border-r border-white/8 px-5 py-6 md:flex">
@@ -70,7 +81,7 @@ export function DesktopSidebar() {
         {desktopSecondaryNav.map((item) => (
           <SidebarLink
             key={item.href}
-            href={item.href}
+            href={hrefForItem(item.href, item.isCapture)}
             label={item.label}
             icon={item.icon}
             capture={item.isCapture}

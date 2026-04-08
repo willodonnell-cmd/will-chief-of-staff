@@ -1,18 +1,19 @@
 import type { Route } from "next";
-import type { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 import {
   BriefcaseBusiness,
-  CirclePlus,
   Inbox,
   Target,
   Users,
   Waypoints
 } from "lucide-react";
 
+import { CaptureMicrophoneIcon } from "@/components/icons/capture-microphone-icon";
+
 export type NavItem = {
   label: string;
   href: Route;
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   shortLabel?: string;
   isCapture?: boolean;
 };
@@ -20,7 +21,7 @@ export type NavItem = {
 export const mobileNavItems: NavItem[] = [
   { label: "Today", href: "/", icon: Target },
   { label: "Inbox", href: "/inbox", icon: Inbox },
-  { label: "Capture", href: "/capture", icon: CirclePlus, isCapture: true },
+  { label: "Capture", href: "/capture", icon: CaptureMicrophoneIcon, isCapture: true },
   { label: "People", href: "/people", icon: Users },
   { label: "Initiatives", href: "/initiatives", icon: Waypoints, shortLabel: "Plans" }
 ];
@@ -34,5 +35,5 @@ export const desktopPrimaryNav: NavItem[] = [
 ];
 
 export const desktopSecondaryNav: NavItem[] = [
-  { label: "Capture", href: "/capture", icon: CirclePlus, isCapture: true }
+  { label: "Capture", href: "/capture", icon: CaptureMicrophoneIcon, isCapture: true }
 ];

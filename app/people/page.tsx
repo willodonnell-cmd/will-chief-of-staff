@@ -1,20 +1,11 @@
-import { BriefCard } from "@/components/shell/brief-card";
-import { PageIntro } from "@/components/shell/page-intro";
+import { RouteScaffold } from "@/components/shell/route-scaffold";
 
 export default function PeoplePage() {
   return (
-    <div className="space-y-6">
-      <PageIntro
-        eyebrow="People"
-        title="Relationship briefs first."
-        description="People pages are framed as durable context rather than noisy activity streams, supporting executive prep and thoughtful follow-through."
-      />
-      <BriefCard
-        eyebrow="Design note"
-        title="Hierarchy over contrast."
-        body="The shell relies on spacing, type scale, and card grouping so people context can expand without turning into a dashboard of alerts."
-      />
-    </div>
+    <RouteScaffold
+      eyebrow="People"
+      title="Relationship route scaffold."
+      description="This first pass provides only the container, content plane, and navigation behavior for future people views."
+    />
   );
 }
-

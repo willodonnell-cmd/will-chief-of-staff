@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,6 +9,17 @@ import { cn } from "@/lib/utils";
 
 export function MobileBottomNav() {
   const pathname = usePathname();
+
+  function hrefForItem(href: Route, isCapture?: boolean) {
+    if (!isCapture || pathname === href) {
+      return href;
+    }
+
+    return {
+      pathname: href,
+      query: { from: pathname }
+    };
+  }
 
   return (
     <nav className="fixed inset-x-0 bottom-4 z-50 px-3 md:hidden">
@@ -19,9 +31,9 @@ export function MobileBottomNav() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={hrefForItem(item.href, item.isCapture)}
               className={cn(
-                "flex min-h-[72px] flex-col items-center justify-center rounded-[1.4rem] px-1 text-center transition",
+                "flex min-h-[72px] flex-col items-center justify-center rounded-[1.4rem] px-1 text-center transition-colors duration-200",
                 item.isCapture
                   ? "relative -mt-6 bg-white text-[rgb(var(--color-shell))] shadow-lg shadow-black/30"
                   : active
@@ -40,4 +52,3 @@ export function MobileBottomNav() {
     </nav>
   );
 }
-

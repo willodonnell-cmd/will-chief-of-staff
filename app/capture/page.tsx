@@ -1,16 +1,21 @@
-import { CaptureCard } from "@/components/shell/capture-card";
+import { CaptureFlow } from "@/components/capture/capture-flow";
 import { PageIntro } from "@/components/shell/page-intro";
 
-export default function CapturePage() {
+export default async function CapturePage({
+  searchParams
+}: {
+  searchParams: Promise<{ from?: string }>;
+}) {
+  const { from } = await searchParams;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 lg:space-y-8">
       <PageIntro
         eyebrow="Capture"
-        title="The fastest path from thought to trusted system."
-        description="Capture is centered in mobile navigation and elevated on larger screens so fragmented inputs can land without asking the user to choose the right destination first."
+        title="Capture without leaving the current working posture."
+        description="Capture inherits context from wherever it was opened, keeps privacy quiet and explicit, and confirms gently once the note or task is saved."
       />
-      <CaptureCard />
+      <CaptureFlow initialFrom={from ?? null} />
     </div>
   );
 }
-
