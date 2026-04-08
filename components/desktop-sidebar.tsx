@@ -1,0 +1,83 @@
+"use client";
+
+import type { Route } from "next";
+import type { ComponentType } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+import { desktopPrimaryNav, desktopSecondaryNav } from "@/lib/navigation";
+import { cn } from "@/lib/utils";
+
+function SidebarLink({
+  href,
+  label,
+  icon: Icon,
+  capture,
+  active
+}: {
+  href: Route;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  capture?: boolean;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition",
+        capture
+          ? "bg-white text-[rgb(var(--color-shell))] shadow-lg shadow-black/20"
+          : active
+            ? "bg-white/8 text-white"
+            : "text-[rgb(var(--color-shell-muted))] hover:bg-white/5 hover:text-white"
+      )}
+    >
+      <Icon className={cn("h-5 w-5", capture ? "" : active ? "text-white" : "text-white/70")} />
+      <span className={cn("font-medium", capture ? "text-[rgb(var(--color-shell))]" : "")}>{label}</span>
+    </Link>
+  );
+}
+
+export function DesktopSidebar() {
+  const pathname = usePathname();
+
+  return (
+    <aside className="hidden w-[284px] flex-col border-r border-white/8 px-5 py-6 md:flex">
+      <div className="rounded-[1.5rem] border border-white/8 bg-white/5 p-5">
+        <p className="text-[0.72rem] uppercase tracking-[0.24em] text-[rgb(var(--color-shell-muted))]">
+          Command surface
+        </p>
+        <p className="mt-3 text-xl font-medium text-white">Protect attention. Pull depth only when needed.</p>
+      </div>
+
+      <nav className="mt-8 space-y-2">
+        {desktopPrimaryNav.map((item) => (
+          <SidebarLink
+            key={item.href}
+            href={item.href}
+            label={item.label}
+            icon={item.icon}
+            active={pathname === item.href}
+          />
+        ))}
+      </nav>
+
+      <div className="mt-auto space-y-3">
+        <p className="px-4 text-[0.72rem] uppercase tracking-[0.24em] text-[rgb(var(--color-shell-muted))]">
+          Quick action
+        </p>
+        {desktopSecondaryNav.map((item) => (
+          <SidebarLink
+            key={item.href}
+            href={item.href}
+            label={item.label}
+            icon={item.icon}
+            capture={item.isCapture}
+            active={pathname === item.href}
+          />
+        ))}
+      </div>
+    </aside>
+  );
+}
