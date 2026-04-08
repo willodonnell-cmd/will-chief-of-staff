@@ -60,3 +60,11 @@
 - Deeper relationship context stays collapsed by default so the page can remain glanceable.
 - Explicit `no attention needed` language is allowed when the relationship is in a quiet state.
 - Corvette appears only when protected relationship context exists.
+
+## Initiative decisions
+
+- Initiative pages are strategic briefs first rather than project dashboards.
+- The top layer is ordered as `why this matters now`, `summary / context`, `current risks / tensions`, then `key changes since last review`.
+- Deeper sections stay collapsed by default and expand progressively for stakeholders, signals, open loops, history, linked briefings, and success markers.
+- The system is allowed to explicitly say an initiative does not currently need attention.
+- Refined B treatment is reserved for the initiative element that truly carries the current strategic gravity.
