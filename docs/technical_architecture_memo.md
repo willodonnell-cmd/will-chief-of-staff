@@ -41,3 +41,12 @@
 - Add real route-level product surfaces after the shell is approved.
 - Add Supabase auth/session wiring and schema-backed data models.
 - Introduce Trigger.dev jobs for summarization, inbox processing, and recurring chief-of-staff workflows.
+
+## Inbox decisions
+
+- Priority Inbox is ordered as `Needs Attention`, `Possible Misses`, then `Priority Threads`.
+- Sections are intentionally tight, with compact rows and low item counts by default.
+- Each row exposes one primary action, usually `Open`.
+- Cold outreach is excluded from the surfaced set by default.
+- No explicit clear/done control appears in list rows; triage continues inside the opened thread.
+- Elevated treatment is reserved for the rare inbox item that clearly warrants stronger emphasis.

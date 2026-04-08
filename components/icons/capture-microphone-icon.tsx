@@ -8,6 +8,8 @@ export function CaptureMicrophoneIcon({ className, ...props }: CaptureMicrophone
   return (
     <svg
       viewBox="0 0 24 24"
+      width="24"
+      height="24"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.8"
@@ -25,4 +27,3 @@ export function CaptureMicrophoneIcon({ className, ...props }: CaptureMicrophone
     </svg>
   );
 }
-
