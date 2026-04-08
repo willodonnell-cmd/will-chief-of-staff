@@ -5,6 +5,7 @@ import type { ComponentType } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { CaptureShellControl } from "@/components/capture/capture-shell-control";
 import { desktopPrimaryNav, desktopSecondaryNav } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +55,7 @@ export function DesktopSidebar() {
   }
 
   return (
-    <aside className="hidden w-[284px] flex-col border-r border-white/8 px-5 py-6 md:flex">
+    <aside className="hidden h-full min-h-0 w-[284px] flex-col border-r border-white/8 px-5 py-6 md:flex">
       <div className="rounded-[1.5rem] border border-white/8 bg-white/5 p-5">
         <p className="text-[0.72rem] uppercase tracking-[0.24em] text-[rgb(var(--color-shell-muted))]">
           Command surface
@@ -62,7 +63,7 @@ export function DesktopSidebar() {
         <p className="mt-3 text-xl font-medium text-white">Protect attention. Pull depth only when needed.</p>
       </div>
 
-      <nav className="mt-8 space-y-2">
+      <nav className="mt-8 flex-1 space-y-2 overflow-y-auto pr-1">
         {desktopPrimaryNav.map((item) => (
           <SidebarLink
             key={item.href}
@@ -74,20 +75,16 @@ export function DesktopSidebar() {
         ))}
       </nav>
 
-      <div className="mt-auto space-y-3">
-        <p className="px-4 text-[0.72rem] uppercase tracking-[0.24em] text-[rgb(var(--color-shell-muted))]">
-          Quick action
-        </p>
-        {desktopSecondaryNav.map((item) => (
-          <SidebarLink
-            key={item.href}
-            href={hrefForItem(item.href, item.isCapture)}
-            label={item.label}
-            icon={item.icon}
-            capture={item.isCapture}
-            active={pathname === item.href}
-          />
-        ))}
+      <div className="mt-6 shrink-0 border-t border-white/8 pt-5">
+        <div className="flex items-center px-4">
+          {desktopSecondaryNav.map((item) => (
+            <CaptureShellControl
+              key={item.href}
+              href={hrefForItem(item.href, item.isCapture)}
+              active={pathname === item.href}
+            />
+          ))}
+        </div>
       </div>
     </aside>
   );

@@ -15,19 +15,23 @@
 - The shell follows the product rules: dark, architectural navigation around a light mineral content plane.
 - Mobile uses a 5-slot bottom navigation with Capture centered and elevated.
 - iPad and Mac expand into a persistent sidebar shell instead of becoming separate native apps.
+- The shell owns the viewport height and keeps page content scrolling independently inside the main content region.
+- Capture stays anchored to the visible shell on every device rather than moving with page length.
 - Components are token-driven so palette, spacing, elevation, and typography can evolve without rewriting layouts.
 - The first pass stays intentionally structural: shell, navigation, responsive layout, and route scaffolding only.
 
 ## Capture decisions
 
 - Capture is always available from the center slot of the iPhone bottom nav and from a persistent shell action on iPad and Mac.
+- Mobile Capture remains fixed to the visible viewport inside the bottom nav while content scrolls behind it.
+- Desktop and iPad Capture remain in a persistent shell location while page content scrolls independently.
 - The Capture action inherits route context by passing the current path into the `/capture` route.
 - The Capture surface supports `note` and `task` patterns in one shared flow.
 - Privacy supports `open`, `protected`, and `hybrid` modes.
 - Hybrid capture keeps the main note attached to working context while sensitive detail stays in a protected field.
 - Confirmation is intentionally subtle: one line of feedback with adjacent `Undo` and `Edit` actions.
 - Corvette red appears only inside protected and hybrid privacy states.
-- The Capture icon is a custom old-school microphone so it stays in the same symbolic family as Corvette rather than reading as a generic utility action.
+- The Capture control is icon-only in shell navigation and uses a custom old-school microphone so it stays in the same symbolic family as Corvette rather than reading as a generic utility action.
 
 ## Initial project structure
 
@@ -76,3 +80,12 @@
 - Backgrounded commitments mostly stay out of sight, with only a very small quiet section when useful.
 - The detail view leads with `what it is + why it matters`, then status/risk, stakeholder context, suggested next step, linked context, and subtle recent history.
 - Recent history is present but intentionally non-focal.
+
+## Admin decisions
+
+- Admin is a layered hybrid control surface rather than a systems console.
+- The landing page keeps one visible `Recommended changes` module above the broader settings groups.
+- Recommended changes must explain the summary, what each change impacts, and why it deserves attention.
+- Primary groups are `Agent Behavior`, `Communications`, `Privacy`, and `Views & Navigation`.
+- Secondary groups are `Learning` and `Devices & Notifications`.
+- Change history stores only material operating changes; cosmetic tuning and minor copy edits stay out of the log.
