@@ -68,3 +68,11 @@
 - Deeper sections stay collapsed by default and expand progressively for stakeholders, signals, open loops, history, linked briefings, and success markers.
 - The system is allowed to explicitly say an initiative does not currently need attention.
 - Refined B treatment is reserved for the initiative element that truly carries the current strategic gravity.
+
+## Commitment decisions
+
+- Commitments pages are obligation briefs first rather than task lists.
+- The page order is `what needs attention now`, `what you owe vs what others owe`, `at-risk commitments`, then `recent changes`.
+- Backgrounded commitments mostly stay out of sight, with only a very small quiet section when useful.
+- The detail view leads with `what it is + why it matters`, then status/risk, stakeholder context, suggested next step, linked context, and subtle recent history.
+- Recent history is present but intentionally non-focal.

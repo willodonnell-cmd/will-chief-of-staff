@@ -57,6 +57,34 @@ select {
 }
 
 @layer utilities {
+  .page-title {
+    @apply mt-3 max-w-[31ch] text-[1.78rem] font-medium leading-[1.1] tracking-[-0.03em] text-text md:text-[2rem] lg:max-w-[73%];
+  }
+
+  .brief-title {
+    @apply mt-3 text-[1.14rem] font-medium leading-[1.08] tracking-[-0.032em] text-text md:text-[1.3rem] lg:max-w-[91%] xl:text-[1.34rem];
+  }
+
+  .section-title {
+    @apply mt-3 text-[1.12rem] font-medium leading-[1.16] tracking-[-0.02em] text-text md:text-[1.22rem];
+  }
+
+  .brief-layout {
+    @apply grid gap-5 lg:grid-cols-[minmax(0,1fr)_14.5rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_15.5rem];
+  }
+
+  .brief-main {
+    @apply min-w-0 max-w-none;
+  }
+
+  .brief-side {
+    @apply min-w-0 lg:w-full lg:max-w-[14.5rem] lg:justify-self-end xl:max-w-[15.5rem];
+  }
+
+  .brief-body {
+    @apply mt-4 max-w-[48rem] text-sm leading-6 text-text-muted md:text-base;
+  }
+
   .shell-panel {
     background:
       var(--shell-gradient),

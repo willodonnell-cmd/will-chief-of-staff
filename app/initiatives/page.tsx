@@ -13,20 +13,20 @@ export default function InitiativesPage() {
       />
 
       <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl">
+        <div className="brief-layout gap-4">
+          <div className="brief-main">
             <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">1. Why this matters now</p>
-            <h2 className="mt-3 text-[1.85rem] font-medium tracking-[-0.04em] text-text md:text-[2.45rem]">
+            <h2 className="brief-title">
               Executive operating rhythm matters now because the board offsite is forcing strategy, staffing, and decision
               hygiene into the same conversation window.
             </h2>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-text-muted md:text-base">
+            <p className="brief-body">
               If the operating rhythm is framed clearly, the offsite becomes a converging point. If it stays fuzzy, the
               same work gets rediscovered in three different rooms.
             </p>
           </div>
 
-          <div className="space-y-3 lg:max-w-[18rem]">
+          <div className="brief-side space-y-3">
             <div className="rounded-[1.35rem] border border-line/75 bg-white/66 px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Attention state</p>
               <p className="mt-3 text-sm leading-6 text-text-muted">
@@ -40,7 +40,7 @@ export default function InitiativesPage() {
       <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
         <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">2. Initiative summary / context</p>
         <div className="mt-4 max-w-3xl">
-          <h3 className="text-xl font-medium tracking-[-0.02em] text-text">Create a calmer executive operating system for planning, triage, and follow-through.</h3>
+          <h3 className="section-title mt-0">Create a calmer executive operating system for planning, triage, and follow-through.</h3>
           <p className="mt-3 text-sm leading-6 text-text-muted">
             This initiative is about turning scattered executive work into a quieter operating surface. The immediate scope
             is not more tooling; it is cleaner visibility, better pacing, and fewer duplicated loops across inbox, people,

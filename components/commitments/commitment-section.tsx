@@ -1,23 +1,22 @@
-import { InboxRow } from "@/components/inbox/inbox-row";
+import { CommitmentRow } from "@/components/commitments/commitment-row";
 
-type InboxItem = {
-  sender: string;
-  subject: string;
-  preview: string;
-  received: string;
-  action?: string;
-  elevated?: boolean;
-  protectedThread?: boolean;
-};
-
-type InboxSectionProps = {
+type CommitmentItem = {
   title: string;
-  eyebrow: string;
-  description: string;
-  items: readonly InboxItem[];
+  summary: string;
+  due: string;
+  owner: "you" | "others";
+  action?: string;
+  atRisk?: boolean;
 };
 
-export function InboxSection({ title, eyebrow, description, items }: InboxSectionProps) {
+type CommitmentSectionProps = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  items: readonly CommitmentItem[];
+};
+
+export function CommitmentSection({ eyebrow, title, description, items }: CommitmentSectionProps) {
   return (
     <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -33,7 +32,7 @@ export function InboxSection({ title, eyebrow, description, items }: InboxSectio
 
       <div className="mt-5 space-y-3">
         {items.map((item) => (
-          <InboxRow key={`${item.sender}-${item.subject}`} {...item} />
+          <CommitmentRow key={`${item.title}-${item.due}`} {...item} />
         ))}
       </div>
     </section>

@@ -1,16 +1,16 @@
-type CollapsedInitiativeSectionProps = {
+type CollapsedCommitmentSectionProps = {
   eyebrow: string;
   title: string;
   summary: string;
   children: React.ReactNode;
 };
 
-export function CollapsedInitiativeSection({
+export function CollapsedCommitmentSection({
   eyebrow,
   title,
   summary,
   children
-}: CollapsedInitiativeSectionProps) {
+}: CollapsedCommitmentSectionProps) {
   return (
     <details className="group rounded-[1.75rem] border border-line/75 bg-white/66 p-5 md:p-6">
       <summary className="flex cursor-pointer list-none flex-col gap-3 md:flex-row md:items-end md:justify-between">

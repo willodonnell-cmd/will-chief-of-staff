@@ -6,16 +6,17 @@ type PageIntroProps = {
 
 export function PageIntro({ eyebrow, title, description }: PageIntroProps) {
   return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-      <div className="max-w-3xl">
+    <div className="space-y-4 md:space-y-5">
+      <div className="min-w-0">
         <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">{eyebrow}</p>
-        <h2 className="mt-3 text-3xl font-medium tracking-[-0.03em] text-text md:text-4xl">{title}</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted md:text-base">{description}</p>
+        <h2 className="page-title">{title}</h2>
+        <p className="mt-3 max-w-[58rem] text-sm leading-6 text-text-muted md:text-[0.95rem]">{description}</p>
       </div>
-      <div className="rounded-full border border-line/80 bg-white/70 px-4 py-2 text-sm text-text-muted">
-        One responsive app for iPhone, iPad, and Mac
+      <div className="flex justify-start md:justify-end">
+        <div className="rounded-full border border-line/80 bg-white/70 px-4 py-2 text-sm text-text-muted">
+          One responsive app for iPhone, iPad, and Mac
+        </div>
       </div>
     </div>
   );
 }
-

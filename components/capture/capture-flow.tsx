@@ -151,9 +151,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
                 <CaptureMicrophoneIcon className="h-5 w-5" />
                 <span className="text-sm font-medium">Capture</span>
               </div>
-              <h2 className="mt-4 text-3xl font-medium tracking-[-0.03em] text-text md:text-4xl">
-                Always available, with context already attached.
-              </h2>
+              <h2 className="page-title mt-4">Always available, with context already attached.</h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted md:text-base">
                 Use note and task patterns without leaving the current working surface. Keep sensitive context private
                 when needed, and confirm quietly once the capture lands.
@@ -331,7 +329,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="max-w-2xl">
             <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Patterns</p>
-            <h3 className="mt-3 text-xl font-medium tracking-[-0.02em] text-text">Two capture shapes, one quiet flow.</h3>
+            <h3 className="section-title">Two capture shapes, one quiet flow.</h3>
           </div>
           <Sparkles className="h-5 w-5 text-text-subtle" />
         </div>

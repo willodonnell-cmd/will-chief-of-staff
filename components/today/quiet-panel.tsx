@@ -11,7 +11,7 @@ export function QuietPanel({ title, eyebrow, items }: QuietPanelProps) {
   return (
     <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
       <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">{eyebrow}</p>
-      <h3 className="mt-3 text-xl font-medium tracking-[-0.02em] text-text">{title}</h3>
+      <h3 className="section-title">{title}</h3>
 
       <div className="mt-5 space-y-4">
         {items.map((item) => (
@@ -24,4 +24,3 @@ export function QuietPanel({ title, eyebrow, items }: QuietPanelProps) {
     </section>
   );
 }
-

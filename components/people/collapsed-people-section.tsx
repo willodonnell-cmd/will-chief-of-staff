@@ -16,7 +16,7 @@ export function CollapsedPeopleSection({
       <summary className="flex cursor-pointer list-none flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="max-w-2xl">
           <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">{eyebrow}</p>
-          <h3 className="mt-3 text-xl font-medium tracking-[-0.02em] text-text">{title}</h3>
+          <h3 className="section-title">{title}</h3>
           <p className="mt-2 text-sm leading-6 text-text-muted">{summary}</p>
         </div>
         <span className="text-sm font-medium text-text-muted transition group-open:text-text">Expand</span>
@@ -25,4 +25,3 @@ export function CollapsedPeopleSection({
     </details>
   );
 }
-

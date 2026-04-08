@@ -13,19 +13,19 @@ export default function PeoplePage() {
       />
 
       <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl">
+        <div className="brief-layout gap-4">
+          <div className="brief-main">
             <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">1. Current read</p>
-            <h2 className="mt-3 text-[1.85rem] font-medium tracking-[-0.04em] text-text md:text-[2.45rem]">
+            <h2 className="brief-title">
               Amelia Hart matters now because she is the shortest path to keeping the board narrative coherent.
             </h2>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-text-muted md:text-base">
+            <p className="brief-body">
               She is the trusted translator between recruiting reality and board language. If her framing holds,
               tomorrow&apos;s prep stays tight. If it drifts, the week gets noisier than it needs to be.
             </p>
           </div>
 
-          <div className="space-y-3 lg:max-w-[17rem]">
+          <div className="brief-side space-y-3">
             <div className="rounded-[1.35rem] border border-line/75 bg-white/66 px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Quiet state</p>
               <p className="mt-3 text-sm leading-6 text-text-muted">
@@ -46,7 +46,7 @@ export default function PeoplePage() {
         <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">2. Next interaction</p>
         <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="max-w-2xl">
-            <h3 className="text-xl font-medium tracking-[-0.02em] text-text">Tomorrow, 8:30 AM board-prep pass</h3>
+            <h3 className="section-title mt-0">Tomorrow, 8:30 AM board-prep pass</h3>
             <p className="mt-2 text-sm leading-6 text-text-muted">
               This is worth surfacing because it is soon and it directly affects the company narrative for the week.
             </p>
