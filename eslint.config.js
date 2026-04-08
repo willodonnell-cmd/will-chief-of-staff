@@ -6,9 +6,11 @@ module.exports = tseslint.config(
   {
     ignores: [
       ".next/**",
+      ".next-build/**",
       "node_modules/**",
       "next-env.d.ts",
-      "eslint.config.js"
+      "eslint.config.js",
+      "tsconfig.tsbuildinfo"
     ]
   },
   js.configs.recommended,
@@ -30,4 +32,3 @@ module.exports = tseslint.config(
     }
   }
 );
-

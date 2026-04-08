@@ -7,6 +7,8 @@
 - Supabase is the default backend surface for Postgres, auth, and storage.
 - Trigger.dev is reserved for background automation and asynchronous workflows.
 - Capture is now implemented as a route-level flow inside the shared shell.
+- Dev and production verification use separate Next output directories so local preview does not get corrupted by build checks.
+- Production verification uses its own TypeScript config file and restores dev-facing generated references after each build check so local preview stays stable across implementation steps.
 
 ## Shell decisions
 
@@ -50,3 +52,11 @@
 - Cold outreach is excluded from the surfaced set by default.
 - No explicit clear/done control appears in list rows; triage continues inside the opened thread.
 - Elevated treatment is reserved for the rare inbox item that clearly warrants stronger emphasis.
+
+## People decisions
+
+- People pages are relationship briefs first rather than activity feeds.
+- Top-layer order is `current read`, `next interaction` when it is soon or important, `open loops / commitments`, then `recent interactions`.
+- Deeper relationship context stays collapsed by default so the page can remain glanceable.
+- Explicit `no attention needed` language is allowed when the relationship is in a quiet state.
+- Corvette appears only when protected relationship context exists.
