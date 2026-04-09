@@ -26,6 +26,10 @@ export const mobileNavItems: NavItem[] = [
   { label: "Initiatives", href: "/initiatives", icon: Waypoints, shortLabel: "Plans" }
 ];
 
+export const mobileShellActions: NavItem[] = [
+  { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness }
+];
+
 export const desktopPrimaryNav: NavItem[] = [
   { label: "Today", href: "/", icon: Target },
   { label: "Priority Inbox", href: "/inbox", icon: Inbox },
