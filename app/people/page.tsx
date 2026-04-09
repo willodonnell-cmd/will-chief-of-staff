@@ -1,9 +1,12 @@
 import { CollapsedPeopleSection } from "@/components/people/collapsed-people-section";
 import { OpenLoopRow } from "@/components/people/open-loop-row";
 import { RecentInteractionRow } from "@/components/people/recent-interaction-row";
+import { getPeoplePageData } from "@/lib/people";
 import { PageIntro } from "@/components/shell/page-intro";
 
-export default function PeoplePage() {
+export default async function PeoplePage() {
+  const peopleData = await getPeoplePageData();
+
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageIntro
@@ -17,11 +20,11 @@ export default function PeoplePage() {
           <div className="brief-main">
             <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">1. Current read</p>
             <h2 className="brief-title">
-              Amelia Hart matters now because she is the shortest path to keeping the board narrative coherent.
+              {peopleData?.currentReadTitle ?? "No relationship brief is available yet."}
             </h2>
             <p className="brief-body">
-              She is the trusted translator between recruiting reality and board language. If her framing holds,
-              tomorrow&apos;s prep stays tight. If it drifts, the week gets noisier than it needs to be.
+              {peopleData?.currentReadBody ??
+                "Seed the bootstrap user in Supabase to populate the first People brief without requiring auth wiring."}
             </p>
           </div>
 
@@ -29,13 +32,13 @@ export default function PeoplePage() {
             <div className="rounded-[1.35rem] border border-line/75 bg-white/66 px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Quiet state</p>
               <p className="mt-3 text-sm leading-6 text-text-muted">
-                No attention needed after tomorrow&apos;s prep unless the role framing changes again.
+                {peopleData?.quietStateNote ?? "No attention needs to be surfaced right now."}
               </p>
             </div>
             <div className="rounded-[1.35rem] border border-accent-red/22 bg-[rgba(125,35,31,0.08)] px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Protected context</p>
               <p className="mt-3 text-sm leading-6 text-text-muted">
-                Personal family constraints are shaping her travel window this week.
+                {peopleData?.protectedContext ?? "No protected context is attached to this brief right now."}
               </p>
             </div>
           </div>
@@ -46,13 +49,16 @@ export default function PeoplePage() {
         <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">2. Next interaction</p>
         <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="max-w-2xl">
-            <h3 className="section-title mt-0">Tomorrow, 8:30 AM board-prep pass</h3>
+            <h3 className="section-title mt-0">
+              {peopleData?.nextInteractionTitle ?? "No next interaction needs foreground placement."}
+            </h3>
             <p className="mt-2 text-sm leading-6 text-text-muted">
-              This is worth surfacing because it is soon and it directly affects the company narrative for the week.
+              {peopleData?.nextInteractionNote ??
+                "This relationship can stay quiet until a next interaction earns foreground placement."}
             </p>
           </div>
           <div className="rounded-full border border-line/75 bg-white/68 px-4 py-2 text-sm text-text-muted">
-            Keep the conversation to role framing and board language
+            {peopleData?.nextInteractionGuidance ?? "No special guidance is needed"}
           </div>
         </div>
       </section>
@@ -60,40 +66,30 @@ export default function PeoplePage() {
       <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
         <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">3. Open loops / commitments</p>
         <div className="mt-5 space-y-3">
-          <OpenLoopRow
-            title="Confirm the narrowed hiring brief language"
-            owner="Will"
-            due="Before board prep"
-            note="She needs one crisp answer, not a long thread."
-          />
-          <OpenLoopRow
-            title="Send the revised candidate framing after the meeting"
-            owner="Chief of staff"
-            due="Tomorrow"
-            note="This is queued but does not need active attention until the prep conversation ends."
-            quiet
-          />
+          {(peopleData?.openLoops ?? []).map((loop) => (
+            <OpenLoopRow
+              key={`${loop.title}-${loop.due}`}
+              title={loop.title}
+              owner={loop.owner}
+              due={loop.due}
+              note={loop.note}
+              quiet={loop.quiet}
+            />
+          ))}
         </div>
       </section>
 
       <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
         <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">4. Recent interactions</p>
         <div className="mt-5 space-y-3">
-          <RecentInteractionRow
-            date="Yesterday"
-            title="Quick scope check over text"
-            note="She flagged that the board draft was still assuming the broader version of the role."
-          />
-          <RecentInteractionRow
-            date="Monday"
-            title="Twenty-minute recruiting sync"
-            note="Strong signal that she still wants a narrower, cleaner role narrative before externalizing anything."
-          />
-          <RecentInteractionRow
-            date="Last week"
-            title="Dinner follow-up"
-            note="Personal tone was warm. Nothing from that exchange needs foreground attention right now."
-          />
+          {(peopleData?.recentInteractions ?? []).map((interaction) => (
+            <RecentInteractionRow
+              key={`${interaction.date}-${interaction.title}`}
+              date={interaction.date}
+              title={interaction.title}
+              note={interaction.note}
+            />
+          ))}
         </div>
       </section>
 
@@ -103,18 +99,12 @@ export default function PeoplePage() {
         summary="Collapsed by default so the page stays a brief first. Open only when more context is actually useful."
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.62)] p-4">
-            <p className="text-sm font-medium text-text">Relationship cadence</p>
-            <p className="mt-2 text-sm leading-6 text-text-muted">
-              Best in small, high-context conversations. Over-briefing by email tends to dilute clarity rather than improve it.
-            </p>
-          </div>
-          <div className="rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.62)] p-4">
-            <p className="text-sm font-medium text-text">Longer horizon</p>
-            <p className="mt-2 text-sm leading-6 text-text-muted">
-              If the hiring loop stabilizes this month, her attention should fall back into a quiet state with no special handling.
-            </p>
-          </div>
+          {(peopleData?.deeperLayer ?? []).map((item) => (
+            <div key={item.title} className="rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.62)] p-4">
+              <p className="text-sm font-medium text-text">{item.title}</p>
+              <p className="mt-2 text-sm leading-6 text-text-muted">{item.body}</p>
+            </div>
+          ))}
         </div>
       </CollapsedPeopleSection>
     </div>

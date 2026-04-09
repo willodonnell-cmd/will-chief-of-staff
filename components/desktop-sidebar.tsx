@@ -1,6 +1,7 @@
 "use client";
 
 import type { Route } from "next";
+import type { CSSProperties } from "react";
 import type { ComponentType } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -36,6 +37,35 @@ function SidebarLink({
     >
       <Icon className={cn("h-5 w-5", capture ? "" : active ? "text-white" : "text-white/70")} />
       <span className={cn("font-medium", capture ? "text-[rgb(var(--color-shell))]" : "")}>{label}</span>
+    </Link>
+  );
+}
+
+function ShellRailControl({
+  href,
+  icon: Icon,
+  label,
+  active,
+  style
+}: {
+  href: Route | { pathname: Route; query: { from: string } };
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  active: boolean;
+  style?: CSSProperties;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      title={label}
+      style={style}
+      className={cn(
+        "shell-control relative inline-flex h-[3.43rem] w-[3.43rem] shrink-0 items-center justify-center rounded-[1.4rem] justify-self-center text-[rgb(var(--color-shell-muted))]",
+        active && "shell-control-active text-white"
+      )}
+    >
+      <Icon className={cn("h-[1.43rem] w-[1.43rem]", active ? "text-white" : "text-white/88")} />
     </Link>
   );
 }
@@ -83,13 +113,24 @@ export function DesktopSidebar() {
           style={{ gridTemplateColumns: `repeat(${railColumnCount}, minmax(0, 1fr))` }}
         >
           {visibleControls.map((item, index) => (
-            <CaptureShellControl
-              key={item.href}
-              href={hrefForItem(item.href, item.isCapture)}
-              active={pathname === item.href}
-              className="justify-self-center"
-              style={{ gridColumn: `${index + 2} / span 1` }}
-            />
+            item.isCapture ? (
+              <CaptureShellControl
+                key={item.href}
+                href={hrefForItem(item.href, item.isCapture)}
+                active={pathname === item.href}
+                className="justify-self-center"
+                style={{ gridColumn: `${index + 2} / span 1` }}
+              />
+            ) : (
+              <ShellRailControl
+                key={item.href}
+                href={hrefForItem(item.href, item.isCapture)}
+                icon={item.icon}
+                label={item.label}
+                active={pathname === item.href}
+                style={{ gridColumn: `${index + 2} / span 1` }}
+              />
+            )
           ))}
         </div>
       </div>
