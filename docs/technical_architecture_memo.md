@@ -14,6 +14,9 @@
 
 - The shell follows the product rules: dark, architectural navigation around a light mineral content plane.
 - Mobile uses a 5-slot bottom navigation with Capture centered and elevated.
+- Admin is directly reachable from shell navigation rather than only through secondary or indirect paths.
+- Desktop notifications are exposed as a light tray from the existing shell header rather than as a separate full notifications page.
+- The desktop notifications bell uses the same shell-object design principles as Capture and Corvette, but stays quieter than Capture and uses Corvette red only for the new-notification indicator.
 - iPad and Mac expand into a persistent sidebar shell instead of becoming separate native apps.
 - The shell owns the viewport height and keeps page content scrolling independently inside the main content region.
 - Capture stays anchored to the visible shell on every device rather than moving with page length.

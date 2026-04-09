@@ -142,6 +142,99 @@ select {
       inset 0 -1px 0 rgba(0, 0, 0, 0.3);
   }
 
+  .shell-control {
+    background:
+      radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.06), transparent 52%),
+      linear-gradient(180deg, rgba(44, 51, 60, 0.92), rgba(24, 30, 38, 0.96));
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow:
+      0 12px 26px -24px rgba(0, 0, 0, 0.7),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transition:
+      transform 160ms ease-out,
+      filter 160ms ease-out,
+      background 160ms ease-out,
+      border-color 160ms ease-out,
+      box-shadow 160ms ease-out;
+  }
+
+  .shell-control:hover,
+  .shell-control:focus-visible {
+    transform: translateY(-1px);
+    filter: brightness(1.03);
+    border-color: rgba(255, 255, 255, 0.11);
+    box-shadow:
+      0 16px 28px -24px rgba(0, 0, 0, 0.74),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .shell-control-active {
+    filter: brightness(1.04);
+    border-color: rgba(255, 255, 255, 0.12);
+    background:
+      radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.08), transparent 52%),
+      linear-gradient(180deg, rgba(50, 58, 68, 0.95), rgba(27, 33, 41, 0.98));
+  }
+
+  .shell-control-notification {
+    background:
+      radial-gradient(circle at 34% 22%, rgba(255, 255, 255, 0.1), transparent 46%),
+      linear-gradient(180deg, rgba(48, 56, 66, 0.94), rgba(26, 31, 39, 0.97));
+    border: 1px solid rgba(255, 255, 255, 0.095);
+    box-shadow:
+      0 16px 28px -24px rgba(0, 0, 0, 0.7),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.22);
+  }
+
+  .shell-control-notification:hover,
+  .shell-control-notification:focus-visible {
+    filter: brightness(1.04);
+    border-color: rgba(255, 255, 255, 0.115);
+    box-shadow:
+      0 18px 30px -24px rgba(0, 0, 0, 0.74),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+  }
+
+  .shell-control-notification-active {
+    filter: brightness(1.06);
+    border-color: rgba(255, 255, 255, 0.13);
+    background:
+      radial-gradient(circle at 34% 22%, rgba(255, 255, 255, 0.13), transparent 48%),
+      linear-gradient(180deg, rgba(54, 63, 74, 0.96), rgba(29, 35, 43, 0.99));
+    box-shadow:
+      0 20px 32px -24px rgba(0, 0, 0, 0.76),
+      inset 0 1px 0 rgba(255, 255, 255, 0.11),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+  }
+
+  .shell-tray {
+    background:
+      radial-gradient(circle at top right, rgba(255, 255, 255, 0.09), transparent 34%),
+      linear-gradient(180deg, rgba(39, 46, 55, 0.98), rgba(23, 29, 36, 0.99));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 32px 56px -34px rgba(0, 0, 0, 0.72),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px);
+  }
+
+  .shell-tray-row {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition:
+      background 160ms ease-out,
+      border-color 160ms ease-out,
+      transform 160ms ease-out;
+  }
+
+  .shell-tray-row:hover {
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.045);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
   .refined-b {
     background:
       radial-gradient(circle at top right, rgba(255, 255, 255, 0.58), transparent 38%),

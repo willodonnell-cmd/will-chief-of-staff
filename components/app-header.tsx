@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { NotificationsTray } from "@/components/notifications/notifications-tray";
 import { mobileShellActions } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,7 @@ export function AppHeader() {
         })}
 
         <div className="hidden items-center gap-3 md:flex">
+          <NotificationsTray />
           <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-[rgb(var(--color-shell-muted))]">
             Shell foundation
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import type { Route } from "next";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 
 import { CaptureMicrophoneIcon } from "@/components/icons/capture-microphone-icon";
@@ -10,17 +11,27 @@ type CaptureShellControlProps = {
   href: Route | { pathname: Route; query: { from: string } };
   active: boolean;
   mobile?: boolean;
+  className?: string;
+  style?: CSSProperties;
 };
 
-export function CaptureShellControl({ href, active, mobile = false }: CaptureShellControlProps) {
+export function CaptureShellControl({
+  href,
+  active,
+  mobile = false,
+  className,
+  style
+}: CaptureShellControlProps) {
   return (
     <Link
       href={href}
       aria-label="Capture"
+      style={style}
       className={cn(
         "capture-control group relative inline-flex shrink-0 items-center justify-center text-[rgb(var(--color-shell-text))]",
         mobile ? "h-[3.71rem] w-[3.71rem] rounded-[1.48rem]" : "h-[3.43rem] w-[3.43rem] rounded-[1.4rem]",
-        active && "capture-control-active"
+        active && "capture-control-active",
+        className
       )}
     >
       <CaptureMicrophoneIcon

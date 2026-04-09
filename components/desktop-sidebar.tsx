@@ -42,6 +42,8 @@ function SidebarLink({
 
 export function DesktopSidebar() {
   const pathname = usePathname();
+  const visibleControls = desktopSecondaryNav;
+  const railColumnCount = Math.max(3, visibleControls.length + 1);
 
   function hrefForItem(href: Route, isCapture?: boolean) {
     if (!isCapture || pathname === href) {
@@ -76,12 +78,17 @@ export function DesktopSidebar() {
       </nav>
 
       <div className="mt-6 shrink-0 border-t border-white/8 pt-5">
-        <div className="flex items-center px-4">
-          {desktopSecondaryNav.map((item) => (
+        <div
+          className="grid items-center px-4"
+          style={{ gridTemplateColumns: `repeat(${railColumnCount}, minmax(0, 1fr))` }}
+        >
+          {visibleControls.map((item, index) => (
             <CaptureShellControl
               key={item.href}
               href={hrefForItem(item.href, item.isCapture)}
               active={pathname === item.href}
+              className="justify-self-center"
+              style={{ gridColumn: `${index + 2} / span 1` }}
             />
           ))}
         </div>

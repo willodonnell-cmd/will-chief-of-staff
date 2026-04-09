@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import {
   BriefcaseBusiness,
   Inbox,
+  SlidersHorizontal,
   Target,
   Users,
   Waypoints
@@ -27,7 +28,8 @@ export const mobileNavItems: NavItem[] = [
 ];
 
 export const mobileShellActions: NavItem[] = [
-  { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness }
+  { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness },
+  { label: "Admin", href: "/admin", icon: SlidersHorizontal }
 ];
 
 export const desktopPrimaryNav: NavItem[] = [
@@ -35,7 +37,8 @@ export const desktopPrimaryNav: NavItem[] = [
   { label: "Priority Inbox", href: "/inbox", icon: Inbox },
   { label: "People", href: "/people", icon: Users },
   { label: "Initiatives", href: "/initiatives", icon: Waypoints },
-  { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness }
+  { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness },
+  { label: "Admin", href: "/admin", icon: SlidersHorizontal }
 ];
 
 export const desktopSecondaryNav: NavItem[] = [
