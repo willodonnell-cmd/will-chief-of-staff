@@ -2,6 +2,7 @@ import { CollapsedCommitmentSection } from "@/components/commitments/collapsed-c
 import { CommitmentDetailCard } from "@/components/commitments/commitment-detail-card";
 import { CommitmentSection } from "@/components/commitments/commitment-section";
 import { PageIntro } from "@/components/shell/page-intro";
+import { getCommitmentsPageData } from "@/lib/commitments";
 
 const needsAttention = [
   {
@@ -69,7 +70,9 @@ const quietBackground = [
   }
 ];
 
-export default function CommitmentsPage() {
+export default async function CommitmentsPage() {
+  const commitmentsData = await getCommitmentsPageData();
+
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageIntro
@@ -79,43 +82,58 @@ export default function CommitmentsPage() {
       />
 
       <CommitmentDetailCard
-        title="Board packet narrative revision"
-        whyItMatters="This commitment matters because it is the clearest obligation tying hiring, finance, and board prep together. If it lands cleanly, several smaller follow-ups stay quiet."
-        status="Open and active. Moderate risk if it slips past the morning prep window."
-        risk="The risk is timing, not uncertainty. The work is understood; the obligation just needs a short, clean close."
-        stakeholders="Amelia Hart, finance, and recruiting all depend on the updated framing staying consistent across their materials."
-        nextStep="Send the revised narrative language immediately after tomorrow's prep pass."
-        linkedContext="Linked to the board-prep meeting, the recruiting thread, and the executive operating rhythm initiative."
-        recentHistory="Yesterday the commitment narrowed from a broader hiring brief rewrite to one focused narrative correction. That lowered scope but increased immediacy."
-        protectedContext
+        title={commitmentsData?.detail?.title ?? "Board packet narrative revision"}
+        whyItMatters={
+          commitmentsData?.detail?.whyItMatters ??
+          "This commitment matters because it is the clearest obligation tying hiring, finance, and board prep together. If it lands cleanly, several smaller follow-ups stay quiet."
+        }
+        status={commitmentsData?.detail?.status ?? "Open and active. Moderate risk if it slips past the morning prep window."}
+        risk={
+          commitmentsData?.detail?.risk ??
+          "The risk is timing, not uncertainty. The work is understood; the obligation just needs a short, clean close."
+        }
+        stakeholders={
+          commitmentsData?.detail?.stakeholders ??
+          "Amelia Hart, finance, and recruiting all depend on the updated framing staying consistent across their materials."
+        }
+        nextStep={commitmentsData?.detail?.nextStep ?? "Send the revised narrative language immediately after tomorrow's prep pass."}
+        linkedContext={
+          commitmentsData?.detail?.linkedContext ??
+          "Linked to the board-prep meeting, the recruiting thread, and the executive operating rhythm initiative."
+        }
+        recentHistory={
+          commitmentsData?.detail?.recentHistory ??
+          "Yesterday the commitment narrowed from a broader hiring brief rewrite to one focused narrative correction. That lowered scope but increased immediacy."
+        }
+        protectedContext={commitmentsData?.detail?.protectedContext ?? true}
       />
 
       <CommitmentSection
         eyebrow="1"
         title="What needs attention now"
         description="Only the obligations that seem active enough to deserve foreground attention right now."
-        items={needsAttention}
+        items={commitmentsData?.needsAttention ?? needsAttention}
       />
 
       <CommitmentSection
         eyebrow="2"
         title="What you owe vs what others owe"
         description="A split view of obligations so the page clarifies ownership before it amplifies urgency."
-        items={whatIsOwed}
+        items={commitmentsData?.whatIsOwed ?? whatIsOwed}
       />
 
       <CommitmentSection
         eyebrow="3"
         title="At-risk commitments"
         description="A very small list of commitments whose timing or dependency chain may be slipping."
-        items={atRisk}
+        items={commitmentsData?.atRisk ?? atRisk}
       />
 
       <CommitmentSection
         eyebrow="4"
         title="Recent changes"
         description="Recent shifts in commitment shape or timing, kept brief and non-focal."
-        items={recentChanges}
+        items={commitmentsData?.recentChanges ?? recentChanges}
       />
 
       <CollapsedCommitmentSection
@@ -124,7 +142,7 @@ export default function CommitmentsPage() {
         summary="Expanded only when useful. Most lower-priority obligations should stay out of sight."
       >
         <div className="space-y-3">
-          {quietBackground.map((item) => (
+          {(commitmentsData?.quietBackground ?? quietBackground).map((item) => (
             <div
               key={`${item.title}-${item.due}`}
               className="rounded-[1.35rem] border border-accent-moss/18 bg-[rgba(104,118,86,0.08)] px-4 py-4"

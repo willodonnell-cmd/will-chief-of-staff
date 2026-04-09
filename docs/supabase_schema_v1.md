@@ -26,3 +26,22 @@ This project now has a first-pass People-focused Supabase/Postgres schema under 
 - Status fields stay simple text + check constraints instead of a large enum graph.
 - Foreign keys are used where they are concrete and useful.
 - The schema is narrow enough to ship now, but it keeps the right hooks for auth later and more than one user later.
+
+## Commitments slice note
+
+- The Commitments slice does not introduce a second obligation table.
+- Instead, [supabase/migrations/20260409195500_commitments_slice.sql](/Users/willodonnell/Documents/will-chief-of-staff/supabase/migrations/20260409195500_commitments_slice.sql) extends `public.commitments` so it can support both:
+  - person-linked open loops for the People page
+  - general obligation-brief records for the Commitments page
+- The additive fields are:
+  - `scope`
+  - `page_section`
+  - `why_it_matters`
+  - `risk_note`
+  - `stakeholders_note`
+  - `next_step`
+  - `linked_context`
+  - `recent_history`
+  - `protected_context`
+  - `action_label`
+- `person_id` is now nullable so a commitment can either attach to a specific person or stand on its own as a broader operating commitment.
