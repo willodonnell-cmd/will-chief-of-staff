@@ -1,7 +1,4 @@
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-const BOOTSTRAP_USER_EMAIL = "local@chief-of-staff.app";
+import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 
 type InitiativeRecord = {
   id: string;
@@ -45,35 +42,17 @@ export type InitiativesPageData = {
   goalMarkers: string[];
 };
 
-async function createInitiativesReadClient() {
-  const adminClient = createSupabaseAdminClient();
-  if (adminClient) {
-    return adminClient;
-  }
-
-  return createSupabaseServerClient();
-}
-
 export async function getInitiativesPageData(): Promise<InitiativesPageData | null> {
-  const client = await createInitiativesReadClient();
-  if (!client) {
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
     return null;
   }
-
-  const { data: bootstrapUser, error: userError } = await client
-    .from("users")
-    .select("id")
-    .eq("email", BOOTSTRAP_USER_EMAIL)
-    .maybeSingle();
-
-  if (userError || !bootstrapUser) {
-    return null;
-  }
+  const { client, user } = resolved;
 
   const { data: initiative, error: initiativeError } = await client
     .from("initiatives")
     .select("id, why_now_title, why_now_summary, attention_state_note, summary_title, summary_body, risk_framing")
-    .eq("user_id", bootstrapUser.id)
+    .eq("user_id", user.id)
     .in("status", ["active", "quiet", "at_risk"])
     .order("sort_order", { ascending: true })
     .limit(1)
@@ -86,7 +65,7 @@ export async function getInitiativesPageData(): Promise<InitiativesPageData | nu
   const { data: items } = await client
     .from("initiative_items")
     .select("section, label, title, body")
-    .eq("user_id", bootstrapUser.id)
+    .eq("user_id", user.id)
     .eq("initiative_id", initiative.id)
     .eq("status", "active")
     .order("sort_order", { ascending: true })

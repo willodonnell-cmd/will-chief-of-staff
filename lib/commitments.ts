@@ -1,7 +1,4 @@
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-const BOOTSTRAP_USER_EMAIL = "local@chief-of-staff.app";
+import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 
 type CommitmentRecord = {
   page_section: "detail" | "needs_attention" | "owed" | "at_risk" | "recent_changes" | "background" | null;
@@ -48,15 +45,6 @@ export type CommitmentsPageData = {
   quietBackground: CommitmentListItem[];
 };
 
-async function createCommitmentsReadClient() {
-  const adminClient = createSupabaseAdminClient();
-  if (adminClient) {
-    return adminClient;
-  }
-
-  return createSupabaseServerClient();
-}
-
 function mapOwner(ownerType: CommitmentRecord["owner_type"]) {
   return ownerType === "self" ? "you" : "others";
 }
@@ -73,27 +61,18 @@ function mapListItem(item: CommitmentRecord): CommitmentListItem {
 }
 
 export async function getCommitmentsPageData(): Promise<CommitmentsPageData | null> {
-  const client = await createCommitmentsReadClient();
-  if (!client) {
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
     return null;
   }
-
-  const { data: bootstrapUser, error: userError } = await client
-    .from("users")
-    .select("id")
-    .eq("email", BOOTSTRAP_USER_EMAIL)
-    .maybeSingle();
-
-  if (userError || !bootstrapUser) {
-    return null;
-  }
+  const { client, user } = resolved;
 
   const { data: commitments, error: commitmentsError } = await client
     .from("commitments")
     .select(
       "page_section, title, summary, owner_type, due_label, action_label, status, why_it_matters, risk_note, stakeholders_note, next_step, linked_context, recent_history, protected_context"
     )
-    .eq("user_id", bootstrapUser.id)
+    .eq("user_id", user.id)
     .eq("scope", "general")
     .in("status", ["open", "quiet", "at_risk"])
     .order("sort_order", { ascending: true })

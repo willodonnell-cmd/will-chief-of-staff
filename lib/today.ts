@@ -1,7 +1,4 @@
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-const BOOTSTRAP_USER_EMAIL = "local@chief-of-staff.app";
+import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 
 type TodayBriefRecord = {
   id: string;
@@ -59,37 +56,19 @@ export type TodayPageData = {
   }>;
 };
 
-async function createTodayReadClient() {
-  const adminClient = createSupabaseAdminClient();
-  if (adminClient) {
-    return adminClient;
-  }
-
-  return createSupabaseServerClient();
-}
-
 export async function getTodayPageData(): Promise<TodayPageData | null> {
-  const client = await createTodayReadClient();
-  if (!client) {
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
     return null;
   }
-
-  const { data: bootstrapUser, error: userError } = await client
-    .from("users")
-    .select("id")
-    .eq("email", BOOTSTRAP_USER_EMAIL)
-    .maybeSingle();
-
-  if (userError || !bootstrapUser) {
-    return null;
-  }
+  const { client, user } = resolved;
 
   const { data: brief, error: briefError } = await client
     .from("today_briefs")
     .select(
       "id, high_focus_title, high_focus_summary, high_focus_owner, high_focus_timing, high_focus_decision, quiet_panel_eyebrow, quiet_panel_title"
     )
-    .eq("user_id", bootstrapUser.id)
+    .eq("user_id", user.id)
     .eq("status", "active")
     .order("sort_order", { ascending: true })
     .limit(1)
@@ -103,7 +82,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     client
       .from("today_glance_items")
       .select("label, value, tone")
-      .eq("user_id", bootstrapUser.id)
+      .eq("user_id", user.id)
       .eq("today_brief_id", brief.id)
       .eq("status", "active")
       .order("sort_order", { ascending: true })
@@ -111,7 +90,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     client
       .from("today_quiet_items")
       .select("label, detail")
-      .eq("user_id", bootstrapUser.id)
+      .eq("user_id", user.id)
       .eq("today_brief_id", brief.id)
       .eq("status", "active")
       .order("sort_order", { ascending: true })
@@ -119,7 +98,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     client
       .from("today_support_notes")
       .select("eyebrow, title, body")
-      .eq("user_id", bootstrapUser.id)
+      .eq("user_id", user.id)
       .eq("today_brief_id", brief.id)
       .eq("status", "active")
       .order("sort_order", { ascending: true })

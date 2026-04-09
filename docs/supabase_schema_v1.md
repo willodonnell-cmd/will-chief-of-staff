@@ -56,3 +56,11 @@ This project now has a first-pass People-focused Supabase/Postgres schema under 
 - `today_quiet_items` stores the quiet background rows for the right-side panel.
 - `today_support_notes` stores the lower supporting notes for the current day view.
 - This keeps the Today screen data-backed without forcing unrelated screens onto a broader dashboard-style schema.
+
+## Admin slice note
+
+- The Admin slice adds a small settings-oriented set of tables in [supabase/migrations/20260409210000_admin_slice.sql](/Users/willodonnell/Documents/will-chief-of-staff/supabase/migrations/20260409210000_admin_slice.sql).
+- `admin_setting_groups` stores the current landing-page settings groups for the bootstrap user, including tier, summary, current state, and note copy.
+- `admin_recommendations` stores the visible recommended changes module entries.
+- `admin_material_changes` stores the material-only history rows that appear on the landing page.
+- This keeps the current Admin surface data-backed without inventing deeper settings routes or a more complex policy graph before auth exists.
