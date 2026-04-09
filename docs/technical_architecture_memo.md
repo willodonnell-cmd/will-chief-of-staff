@@ -6,6 +6,7 @@
 - Deployment target is Vercel.
 - Supabase is the default backend surface for Postgres, auth, and storage.
 - The first real data slice uses a single-user bootstrap mode in Supabase so data-backed screens can land before auth/session wiring is complete.
+- The Initiatives page can now follow the same single-user bootstrap pattern as People, adding initiative-specific tables without requiring auth/session work first.
 - Trigger.dev is reserved for background automation and asynchronous workflows.
 - Capture is now implemented as a route-level flow inside the shared shell.
 - Dev and production verification use separate Next output directories so local preview does not get corrupted by build checks.
