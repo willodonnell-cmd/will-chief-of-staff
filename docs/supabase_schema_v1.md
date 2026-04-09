@@ -45,3 +45,14 @@ This project now has a first-pass People-focused Supabase/Postgres schema under 
   - `protected_context`
   - `action_label`
 - `person_id` is now nullable so a commitment can either attach to a specific person or stand on its own as a broader operating commitment.
+
+## Today slice note
+
+- The Today slice adds a small brief-oriented set of tables in [supabase/migrations/20260409203000_today_slice.sql](/Users/willodonnell/Documents/will-chief-of-staff/supabase/migrations/20260409203000_today_slice.sql).
+- `today_briefs` stores the current top-layer operating brief for the bootstrap user:
+  - high-focus item title, summary, owner, timing, and next decision
+  - quiet-panel eyebrow and title
+- `today_glance_items` stores the top metrics/chips in their current display order and tone.
+- `today_quiet_items` stores the quiet background rows for the right-side panel.
+- `today_support_notes` stores the lower supporting notes for the current day view.
+- This keeps the Today screen data-backed without forcing unrelated screens onto a broader dashboard-style schema.

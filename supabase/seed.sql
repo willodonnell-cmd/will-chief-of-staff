@@ -711,3 +711,157 @@ set scope = excluded.scope,
     protected_context = excluded.protected_context,
     action_label = excluded.action_label,
     sort_order = excluded.sort_order;
+
+insert into public.today_briefs (
+  id,
+  user_id,
+  slug,
+  status,
+  high_focus_title,
+  high_focus_summary,
+  high_focus_owner,
+  high_focus_timing,
+  high_focus_decision,
+  quiet_panel_eyebrow,
+  quiet_panel_title,
+  sort_order
+)
+values (
+  '99999999-9999-9999-9999-999999999991',
+  '11111111-1111-1111-1111-111111111111',
+  'today',
+  'active',
+  'Approve the narrowed hiring brief before board prep hardens around the wrong scope.',
+  'The search is converging, but the role framing shifted late. Confirming the narrower brief today keeps recruiting, board materials, and internal expectations aligned without creating a second loop.',
+  'Chief of staff',
+  'Decision window closes by 2:30 PM',
+  'Confirm the revised role framing',
+  'No attention needed now',
+  'Stable background',
+  0
+)
+on conflict (user_id, slug) do update
+set status = excluded.status,
+    high_focus_title = excluded.high_focus_title,
+    high_focus_summary = excluded.high_focus_summary,
+    high_focus_owner = excluded.high_focus_owner,
+    high_focus_timing = excluded.high_focus_timing,
+    high_focus_decision = excluded.high_focus_decision,
+    quiet_panel_eyebrow = excluded.quiet_panel_eyebrow,
+    quiet_panel_title = excluded.quiet_panel_title,
+    sort_order = excluded.sort_order;
+
+insert into public.today_glance_items (
+  id,
+  user_id,
+  today_brief_id,
+  label,
+  value,
+  tone,
+  sort_order
+)
+values
+(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
+  '11111111-1111-1111-1111-111111111111',
+  '99999999-9999-9999-9999-999999999991',
+  'Needs decision',
+  '1',
+  'default',
+  0
+),
+(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
+  '11111111-1111-1111-1111-111111111111',
+  '99999999-9999-9999-9999-999999999991',
+  'Quietly on track',
+  '4',
+  'quiet',
+  1
+),
+(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3',
+  '11111111-1111-1111-1111-111111111111',
+  '99999999-9999-9999-9999-999999999991',
+  'Protected',
+  '1 thread',
+  'protected',
+  2
+)
+on conflict (id) do update
+set label = excluded.label,
+    value = excluded.value,
+    tone = excluded.tone,
+    sort_order = excluded.sort_order;
+
+insert into public.today_quiet_items (
+  id,
+  user_id,
+  today_brief_id,
+  label,
+  detail,
+  sort_order
+)
+values
+(
+  'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1',
+  '11111111-1111-1111-1111-111111111111',
+  '99999999-9999-9999-9999-999999999991',
+  'Board prep',
+  'Narrative is aligned and waiting only on the hiring brief.',
+  0
+),
+(
+  'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2',
+  '11111111-1111-1111-1111-111111111111',
+  '99999999-9999-9999-9999-999999999991',
+  'Investor follow-ups',
+  'Drafted and ready to send after tomorrow''s conversation.',
+  1
+),
+(
+  'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3',
+  '11111111-1111-1111-1111-111111111111',
+  '99999999-9999-9999-9999-999999999991',
+  'Ops review',
+  'No new blockers surfaced since yesterday.',
+  2
+)
+on conflict (id) do update
+set label = excluded.label,
+    detail = excluded.detail,
+    sort_order = excluded.sort_order;
+
+insert into public.today_support_notes (
+  id,
+  user_id,
+  today_brief_id,
+  eyebrow,
+  title,
+  body,
+  sort_order
+)
+values
+(
+  'cccccccc-cccc-cccc-cccc-ccccccccccc1',
+  '11111111-1111-1111-1111-111111111111',
+  '99999999-9999-9999-9999-999999999991',
+  'Priority inbox',
+  'Three threads have earned foreground attention.',
+  'Two external requests need disposition and one internal thread needs a short answer. Everything else can stay suppressed until the high-focus item is cleared.',
+  0
+),
+(
+  'cccccccc-cccc-cccc-cccc-ccccccccccc2',
+  '11111111-1111-1111-1111-111111111111',
+  '99999999-9999-9999-9999-999999999991',
+  'Pacing',
+  'Flow over contrast.',
+  'The screen avoids alert styling, stacked urgency, and dashboard density. The refined B card carries the primary gravity, while supporting context stays typographic and calm.',
+  1
+)
+on conflict (id) do update
+set eyebrow = excluded.eyebrow,
+    title = excluded.title,
+    body = excluded.body,
+    sort_order = excluded.sort_order;

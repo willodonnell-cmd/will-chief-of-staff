@@ -3,8 +3,11 @@ import { GlanceChip } from "@/components/today/glance-chip";
 import { HighFocusItem } from "@/components/today/high-focus-item";
 import { QuietPanel } from "@/components/today/quiet-panel";
 import { SupportNote } from "@/components/today/support-note";
+import { getTodayPageData } from "@/lib/today";
 
-export default function TodayPage() {
+export default async function TodayPage() {
+  const todayData = await getTodayPageData();
+
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageIntro
@@ -14,51 +17,66 @@ export default function TodayPage() {
       />
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <GlanceChip label="Needs decision" value="1" />
-        <GlanceChip label="Quietly on track" value="4" tone="quiet" />
-        <GlanceChip label="Protected" value="1 thread" tone="protected" />
+        {(todayData?.glanceItems ?? [
+          { label: "Needs decision", value: "1", tone: "default" as const },
+          { label: "Quietly on track", value: "4", tone: "quiet" as const },
+          { label: "Protected", value: "1 thread", tone: "protected" as const }
+        ]).map((item) => (
+          <GlanceChip key={item.label} label={item.label} value={item.value} tone={item.tone} />
+        ))}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.35fr_0.88fr]">
         <HighFocusItem
-          title="Approve the narrowed hiring brief before board prep hardens around the wrong scope."
-          summary="The search is converging, but the role framing shifted late. Confirming the narrower brief today keeps recruiting, board materials, and internal expectations aligned without creating a second loop."
-          owner="Chief of staff"
-          timing="Decision window closes by 2:30 PM"
-          decision="Confirm the revised role framing"
+          title={
+            todayData?.highFocus?.title ?? "Approve the narrowed hiring brief before board prep hardens around the wrong scope."
+          }
+          summary={
+            todayData?.highFocus?.summary ??
+            "The search is converging, but the role framing shifted late. Confirming the narrower brief today keeps recruiting, board materials, and internal expectations aligned without creating a second loop."
+          }
+          owner={todayData?.highFocus?.owner ?? "Chief of staff"}
+          timing={todayData?.highFocus?.timing ?? "Decision window closes by 2:30 PM"}
+          decision={todayData?.highFocus?.decision ?? "Confirm the revised role framing"}
         />
 
         <QuietPanel
-          eyebrow="No attention needed now"
-          title="Stable background"
-          items={[
-            {
-              label: "Board prep",
-              detail: "Narrative is aligned and waiting only on the hiring brief."
-            },
-            {
-              label: "Investor follow-ups",
-              detail: "Drafted and ready to send after tomorrow's conversation."
-            },
-            {
-              label: "Ops review",
-              detail: "No new blockers surfaced since yesterday."
-            }
-          ]}
+          eyebrow={todayData?.quietPanel?.eyebrow ?? "No attention needed now"}
+          title={todayData?.quietPanel?.title ?? "Stable background"}
+          items={
+            todayData?.quietPanel?.items ?? [
+              {
+                label: "Board prep",
+                detail: "Narrative is aligned and waiting only on the hiring brief."
+              },
+              {
+                label: "Investor follow-ups",
+                detail: "Drafted and ready to send after tomorrow's conversation."
+              },
+              {
+                label: "Ops review",
+                detail: "No new blockers surfaced since yesterday."
+              }
+            ]
+          }
         />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[0.96fr_1.04fr]">
-        <SupportNote
-          eyebrow="Priority inbox"
-          title="Three threads have earned foreground attention."
-          body="Two external requests need disposition and one internal thread needs a short answer. Everything else can stay suppressed until the high-focus item is cleared."
-        />
-        <SupportNote
-          eyebrow="Pacing"
-          title="Flow over contrast."
-          body="The screen avoids alert styling, stacked urgency, and dashboard density. The refined B card carries the primary gravity, while supporting context stays typographic and calm."
-        />
+        {(todayData?.supportNotes ?? [
+          {
+            eyebrow: "Priority inbox",
+            title: "Three threads have earned foreground attention.",
+            body: "Two external requests need disposition and one internal thread needs a short answer. Everything else can stay suppressed until the high-focus item is cleared."
+          },
+          {
+            eyebrow: "Pacing",
+            title: "Flow over contrast.",
+            body: "The screen avoids alert styling, stacked urgency, and dashboard density. The refined B card carries the primary gravity, while supporting context stays typographic and calm."
+          }
+        ]).map((note) => (
+          <SupportNote key={`${note.eyebrow}-${note.title}`} eyebrow={note.eyebrow} title={note.title} body={note.body} />
+        ))}
       </section>
     </div>
   );
