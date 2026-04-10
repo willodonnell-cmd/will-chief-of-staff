@@ -65,10 +65,22 @@ This project now has a first-pass People-focused Supabase/Postgres schema under 
 - `admin_material_changes` stores the material-only history rows that appear on the landing page.
 - This keeps the current Admin surface data-backed without inventing deeper settings routes or a more complex policy graph before auth exists.
 
+## Capture slice note
+
+- The Capture slice adds one narrow persistence table in [supabase/migrations/20260410091500_capture_slice.sql](/Users/willodonnell/Documents/will-chief-of-staff/supabase/migrations/20260410091500_capture_slice.sql).
+- `captures` stores route-level Capture submissions for the resolved app user:
+  - `source_path` for inherited route context
+  - `pattern` for `note` vs `task`
+  - `privacy` for `open`, `protected`, and `hybrid`
+  - `summary`, optional `follow_up`, and optional `private_context`
+- In bootstrap mode, Capture writes against the same seeded default user that powers the other data-backed screens when no auth session exists yet.
+- No initial capture rows are seeded; persistence starts empty and fills with real submissions.
+
 ## Wiring status
 
 - Fully data-backed today:
   - [app/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/page.tsx)
+  - [app/capture/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/capture/page.tsx)
   - [app/people/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/people/page.tsx)
   - [app/initiatives/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/initiatives/page.tsx)
   - [app/commitments/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/commitments/page.tsx)
@@ -77,4 +89,3 @@ This project now has a first-pass People-focused Supabase/Postgres schema under 
 - Remaining static copy inside those files is fallback-only null-state text, not the primary data source when Supabase is configured and seeded.
 - Still needing backend wiring:
   - [app/inbox/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/inbox/page.tsx)
-  - [app/capture/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/capture/page.tsx) and the route-level capture persistence flow behind it

@@ -1,17 +1,16 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { Shield, Sparkles } from "lucide-react";
 
+import { persistCaptureAction } from "@/app/capture/actions";
 import { CaptureMicrophoneIcon } from "@/components/icons/capture-microphone-icon";
+import type { CapturePattern, CapturePrivacy } from "@/lib/captures";
 import { cn } from "@/lib/utils";
-
-type CapturePattern = "note" | "task";
-type PrivacyMode = "open" | "protected" | "hybrid";
 
 type CaptureDraft = {
   pattern: CapturePattern;
-  privacy: PrivacyMode;
+  privacy: CapturePrivacy;
   summary: string;
   followUp: string;
   privateContext: string;
@@ -72,7 +71,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
   const inheritedContext = labelForContext(initialFrom ?? null);
   const [draft, setDraft] = useState<CaptureDraft>(defaultDraft);
   const [confirmation, setConfirmation] = useState<ConfirmationState>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
   const summaryRef = useRef<HTMLTextAreaElement>(null);
 
   function updateDraft<K extends keyof CaptureDraft>(key: K, value: CaptureDraft[K]) {
@@ -89,7 +88,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
     });
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const trimmedSummary = draft.summary.trim();
@@ -105,7 +104,26 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
       privateContext: draft.privateContext.trim()
     };
 
-    startTransition(() => {
+    setIsPending(true);
+
+    try {
+      const result = await persistCaptureAction({
+        sourcePath: initialFrom ?? null,
+        pattern: savedDraft.pattern,
+        privacy: savedDraft.privacy,
+        summary: savedDraft.summary,
+        followUp: savedDraft.followUp,
+        privateContext: savedDraft.privateContext
+      });
+
+      if (!result.ok) {
+        setConfirmation({
+          message: result.message,
+          draft: savedDraft
+        });
+        return;
+      }
+
       setConfirmation({
         message: `Captured ${savedDraft.pattern} in ${inheritedContext.name}.`,
         draft: savedDraft
@@ -114,7 +132,9 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
         ...defaultDraft,
         pattern: savedDraft.pattern
       });
-    });
+    } finally {
+      setIsPending(false);
+    }
   }
 
   function handleUndo() {
@@ -241,7 +261,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
                 ["open", "Open"],
                 ["protected", "Protected"],
                 ["hybrid", "Hybrid"]
-              ] as Array<[PrivacyMode, string]>).map(([privacy, label]) => (
+              ] as Array<[CapturePrivacy, string]>).map(([privacy, label]) => (
                 <button
                   key={privacy}
                   type="button"
