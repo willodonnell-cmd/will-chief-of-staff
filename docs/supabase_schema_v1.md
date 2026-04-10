@@ -64,3 +64,17 @@ This project now has a first-pass People-focused Supabase/Postgres schema under 
 - `admin_recommendations` stores the visible recommended changes module entries.
 - `admin_material_changes` stores the material-only history rows that appear on the landing page.
 - This keeps the current Admin surface data-backed without inventing deeper settings routes or a more complex policy graph before auth exists.
+
+## Wiring status
+
+- Fully data-backed today:
+  - [app/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/page.tsx)
+  - [app/people/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/people/page.tsx)
+  - [app/initiatives/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/initiatives/page.tsx)
+  - [app/commitments/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/commitments/page.tsx)
+  - [app/admin/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/admin/page.tsx)
+- These screens read seeded Supabase data through their server-side data access layers and the shared auth-or-bootstrap user resolver.
+- Remaining static copy inside those files is fallback-only null-state text, not the primary data source when Supabase is configured and seeded.
+- Still needing backend wiring:
+  - [app/inbox/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/inbox/page.tsx)
+  - [app/capture/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/capture/page.tsx) and the route-level capture persistence flow behind it
