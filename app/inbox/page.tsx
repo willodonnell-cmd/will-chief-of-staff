@@ -1,4 +1,5 @@
 import { InboxSection } from "@/components/inbox/inbox-section";
+import { getInboxPageData } from "@/lib/inbox";
 import { PageIntro } from "@/components/shell/page-intro";
 
 const needsAttention = [
@@ -61,7 +62,9 @@ const priorityThreads = [
   }
 ];
 
-export default function InboxPage() {
+export default async function InboxPage() {
+  const inboxData = await getInboxPageData();
+
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageIntro
@@ -75,21 +78,21 @@ export default function InboxPage() {
           eyebrow="1"
           title="Needs Attention"
           description="The narrowest set of threads that appear to need action now. One elevated item is used only where the current signal is clearly stronger."
-          items={needsAttention}
+          items={inboxData?.needsAttention ?? needsAttention}
         />
 
         <InboxSection
           eyebrow="2"
           title="Possible Misses"
           description="A small catch-up section for threads that may be drifting, without forcing them into the top tier."
-          items={possibleMisses}
+          items={inboxData?.possibleMisses ?? possibleMisses}
         />
 
         <InboxSection
           eyebrow="3"
           title="Priority Threads"
           description="Important working threads kept within reach, including protected threads when context warrants it."
-          items={priorityThreads}
+          items={inboxData?.priorityThreads ?? priorityThreads}
         />
       </div>
     </div>

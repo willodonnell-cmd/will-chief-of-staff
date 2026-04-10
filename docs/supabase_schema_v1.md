@@ -65,16 +65,27 @@ This project now has a first-pass People-focused Supabase/Postgres schema under 
 - `admin_material_changes` stores the material-only history rows that appear on the landing page.
 - This keeps the current Admin surface data-backed without inventing deeper settings routes or a more complex policy graph before auth exists.
 
+## Inbox slice note
+
+- The Inbox slice adds one narrow table in [supabase/migrations/20260409224500_inbox_slice.sql](/Users/willodonnell/Documents/will-chief-of-staff/supabase/migrations/20260409224500_inbox_slice.sql).
+- `inbox_threads` stores the currently surfaced inbox rows for the bootstrap user, including:
+  - section placement (`needs_attention`, `possible_misses`, `priority_threads`)
+  - sender, subject, preview, and received label
+  - row flags for elevated and protected treatment
+  - the row action label
+- This keeps the current triage-first Inbox surface data-backed without introducing a full mail model, message body system, or thread-detail schema yet.
+
 ## Wiring status
 
 - Fully data-backed today:
   - [app/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/page.tsx)
+  - [app/inbox/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/inbox/page.tsx)
   - [app/people/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/people/page.tsx)
   - [app/initiatives/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/initiatives/page.tsx)
   - [app/commitments/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/commitments/page.tsx)
   - [app/admin/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/admin/page.tsx)
 - These screens read seeded Supabase data through their server-side data access layers and the shared auth-or-bootstrap user resolver.
 - Remaining static copy inside those files is fallback-only null-state text, not the primary data source when Supabase is configured and seeded.
+- Missing migrations or seed data for those wired screens: none. The current migration set and [supabase/seed.sql](/Users/willodonnell/Documents/will-chief-of-staff/supabase/seed.sql) cover their live data dependencies.
 - Still needing backend wiring:
-  - [app/inbox/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/inbox/page.tsx)
   - [app/capture/page.tsx](/Users/willodonnell/Documents/will-chief-of-staff/app/capture/page.tsx) and the route-level capture persistence flow behind it
