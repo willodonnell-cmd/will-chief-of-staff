@@ -34,6 +34,16 @@ export type SavedCapture = {
   capturedAt: string;
 };
 
+export type SaveCaptureResult =
+  | {
+      ok: true;
+      capture: SavedCapture;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
 function mapCapture(record: CaptureRecord): SavedCapture {
   return {
     id: record.id,
@@ -47,10 +57,30 @@ function mapCapture(record: CaptureRecord): SavedCapture {
   };
 }
 
-export async function saveCapture(input: CaptureInput): Promise<SavedCapture | null> {
+function describeCaptureWriteFailure(message: string | undefined) {
+  if (!message) {
+    return "Capture could not be saved.";
+  }
+
+  if (message.includes('relation "captures" does not exist')) {
+    return "Capture storage is not ready yet. Run the latest Supabase migration.";
+  }
+
+  const lowered = message.toLowerCase();
+  if (lowered.includes("permission denied") || lowered.includes("row-level security")) {
+    return "Capture storage is unavailable for the current session.";
+  }
+
+  return "Capture could not be saved to Supabase right now.";
+}
+
+export async function saveCapture(input: CaptureInput): Promise<SaveCaptureResult> {
   const resolved = await resolveCurrentAppUser();
   if (!resolved) {
-    return null;
+    return {
+      ok: false,
+      error: "No active app user could be resolved for capture."
+    };
   }
 
   const { client, user } = resolved;
@@ -69,10 +99,16 @@ export async function saveCapture(input: CaptureInput): Promise<SavedCapture | n
     .single<CaptureRecord>();
 
   if (error || !data) {
-    return null;
+    return {
+      ok: false,
+      error: describeCaptureWriteFailure(error?.message)
+    };
   }
 
-  return mapCapture(data);
+  return {
+    ok: true,
+    capture: mapCapture(data)
+  };
 }
 
 export async function getRecentCaptures(limit = 10): Promise<SavedCapture[]> {

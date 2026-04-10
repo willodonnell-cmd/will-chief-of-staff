@@ -36,6 +36,9 @@
 - Privacy supports `open`, `protected`, and `hybrid` modes.
 - Hybrid capture keeps the main note attached to working context while sensitive detail stays in a protected field.
 - Confirmation is intentionally subtle: one line of feedback with adjacent `Undo` and `Edit` actions.
+- Typed capture now writes through a server action to Supabase and only clears the form after the submission is safely stored or queued.
+- If Supabase is temporarily unavailable, Capture stores the submission in a local queue and retries sync later so typed capture never blocks.
+- Microphone capture now uses browser speech recognition when supported; denied or unsupported microphone access falls back quietly to typed capture without breaking the page.
 - Corvette red appears only inside protected and hybrid privacy states.
 - The Capture control is icon-only in shell navigation and uses a custom old-school microphone so it stays in the same symbolic family as Corvette rather than reading as a generic utility action.
 

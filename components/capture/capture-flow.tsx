@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Shield, Sparkles } from "lucide-react";
 
 import { persistCaptureAction } from "@/app/capture/actions";
@@ -16,6 +16,44 @@ type CaptureDraft = {
   privateContext: string;
 };
 
+type FeedbackState =
+  | {
+      kind: "saved" | "queued" | "status";
+      message: string;
+      draft?: CaptureDraft;
+      queueId?: string;
+    }
+  | null;
+
+type QueuedCapture = CaptureDraft & {
+  id: string;
+  sourcePath: string | null;
+  queuedAt: string;
+};
+
+type SpeechRecognitionResultLike = {
+  0?: {
+    transcript?: string;
+  };
+};
+
+type SpeechRecognitionEventLike = {
+  results: ArrayLike<SpeechRecognitionResultLike>;
+};
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
 const defaultDraft: CaptureDraft = {
   pattern: "note",
   privacy: "open",
@@ -23,6 +61,8 @@ const defaultDraft: CaptureDraft = {
   followUp: "",
   privateContext: ""
 };
+
+const LOCAL_CAPTURE_QUEUE_KEY = "chief-of-staff.capture-queue";
 
 function labelForContext(from: string | null) {
   if (!from || from === "/capture") {
@@ -58,10 +98,84 @@ function submitLabelForPattern(pattern: CapturePattern) {
   return pattern === "note" ? "Capture note" : "Capture task";
 }
 
-type ConfirmationState = {
-  message: string;
-  draft: CaptureDraft;
-} | null;
+function joinCaptureText(base: string, transcript: string) {
+  if (!base) {
+    return transcript;
+  }
+
+  if (!transcript) {
+    return base;
+  }
+
+  return `${base}${base.endsWith(" ") ? "" : " "}${transcript}`;
+}
+
+function readQueuedCaptures() {
+  if (typeof window === "undefined") {
+    return [] as QueuedCapture[];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(LOCAL_CAPTURE_QUEUE_KEY);
+    if (!raw) {
+      return [] as QueuedCapture[];
+    }
+
+    const parsed = JSON.parse(raw) as QueuedCapture[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [] as QueuedCapture[];
+  }
+}
+
+function writeQueuedCaptures(captures: QueuedCapture[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (captures.length === 0) {
+    window.localStorage.removeItem(LOCAL_CAPTURE_QUEUE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(LOCAL_CAPTURE_QUEUE_KEY, JSON.stringify(captures));
+}
+
+function queueCaptureLocally(sourcePath: string | null, draft: CaptureDraft) {
+  const queuedCapture: QueuedCapture = {
+    id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`,
+    sourcePath,
+    queuedAt: new Date().toISOString(),
+    ...draft
+  };
+
+  const nextQueue = [...readQueuedCaptures(), queuedCapture];
+  writeQueuedCaptures(nextQueue);
+  return queuedCapture;
+}
+
+function removeQueuedCapture(queueId: string | undefined) {
+  if (!queueId) {
+    return;
+  }
+
+  const nextQueue = readQueuedCaptures().filter((item) => item.id !== queueId);
+  writeQueuedCaptures(nextQueue);
+}
+
+function microphoneSupportMessage(error?: string) {
+  switch (error) {
+    case "not-allowed":
+    case "service-not-allowed":
+      return "Microphone access was denied. Typed capture still works.";
+    case "audio-capture":
+      return "No microphone was available. Typed capture still works.";
+    case "network":
+      return "Microphone transcription was interrupted. Typed capture still works.";
+    default:
+      return "Microphone capture is unavailable here. Typed capture still works.";
+  }
+}
 
 type CaptureFlowProps = {
   initialFrom?: string | null;
@@ -70,9 +184,13 @@ type CaptureFlowProps = {
 export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
   const inheritedContext = labelForContext(initialFrom ?? null);
   const [draft, setDraft] = useState<CaptureDraft>(defaultDraft);
-  const [confirmation, setConfirmation] = useState<ConfirmationState>(null);
+  const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [isPending, setIsPending] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const summaryRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recognitionBaseSummaryRef = useRef("");
+  const syncInProgressRef = useRef(false);
 
   function updateDraft<K extends keyof CaptureDraft>(key: K, value: CaptureDraft[K]) {
     setDraft((current) => ({
@@ -86,6 +204,141 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
     window.requestAnimationFrame(() => {
       summaryRef.current?.focus();
     });
+  }
+
+  async function syncQueuedCaptures() {
+    if (syncInProgressRef.current) {
+      return;
+    }
+
+    const queuedCaptures = readQueuedCaptures();
+    if (queuedCaptures.length === 0) {
+      return;
+    }
+
+    syncInProgressRef.current = true;
+
+    try {
+      const remaining: QueuedCapture[] = [];
+      let syncedCount = 0;
+
+      for (const queuedCapture of queuedCaptures) {
+        const result = await persistCaptureAction({
+          sourcePath: queuedCapture.sourcePath,
+          pattern: queuedCapture.pattern,
+          privacy: queuedCapture.privacy,
+          summary: queuedCapture.summary,
+          followUp: queuedCapture.followUp,
+          privateContext: queuedCapture.privateContext
+        });
+
+        if (!result.ok) {
+          remaining.push(queuedCapture);
+          continue;
+        }
+
+        syncedCount += 1;
+      }
+
+      writeQueuedCaptures(remaining);
+
+      if (syncedCount > 0) {
+        setFeedback({
+          kind: "status",
+          message: `Synced ${syncedCount} queued capture${syncedCount === 1 ? "" : "s"}.`
+        });
+      }
+    } finally {
+      syncInProgressRef.current = false;
+    }
+  }
+
+  useEffect(() => {
+    void syncQueuedCaptures();
+
+    function handleOnline() {
+      void syncQueuedCaptures();
+    }
+
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      recognitionRef.current?.stop();
+    };
+  }, []);
+
+  function handleMicrophoneToggle() {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const browserWindow = window as Window & {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+
+    const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      setFeedback({
+        kind: "status",
+        message: microphoneSupportMessage()
+      });
+      summaryRef.current?.focus();
+      return;
+    }
+
+    const recognition = new Recognition();
+    recognitionBaseSummaryRef.current = draft.summary.trim();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results ?? [])
+        .map((result) => result?.[0]?.transcript ?? "")
+        .join(" ")
+        .trim();
+
+      setDraft((current) => ({
+        ...current,
+        summary: joinCaptureText(recognitionBaseSummaryRef.current, transcript)
+      }));
+    };
+
+    recognition.onerror = (event) => {
+      recognitionRef.current = null;
+      setIsListening(false);
+      setFeedback({
+        kind: "status",
+        message: microphoneSupportMessage(event.error)
+      });
+      summaryRef.current?.focus();
+    };
+
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      setIsListening(false);
+      summaryRef.current?.focus();
+    };
+
+    try {
+      recognitionRef.current = recognition;
+      recognition.start();
+      setIsListening(true);
+      setFeedback({
+        kind: "status",
+        message: "Listening… speak the capture, then pause."
+      });
+    } catch {
+      recognitionRef.current = null;
+      setIsListening(false);
+      setFeedback({
+        kind: "status",
+        message: microphoneSupportMessage()
+      });
+      summaryRef.current?.focus();
+    }
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -117,14 +370,22 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
       });
 
       if (!result.ok) {
-        setConfirmation({
-          message: result.message,
-          draft: savedDraft
+        const queuedCapture = queueCaptureLocally(initialFrom ?? null, savedDraft);
+        setDraft({
+          ...defaultDraft,
+          pattern: savedDraft.pattern
+        });
+        setFeedback({
+          kind: "queued",
+          message: "Saved locally. Supabase sync is unavailable right now.",
+          draft: savedDraft,
+          queueId: queuedCapture.id
         });
         return;
       }
 
-      setConfirmation({
+      setFeedback({
+        kind: "saved",
         message: `Captured ${savedDraft.pattern} in ${inheritedContext.name}.`,
         draft: savedDraft
       });
@@ -132,26 +393,35 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
         ...defaultDraft,
         pattern: savedDraft.pattern
       });
+      void syncQueuedCaptures();
     } finally {
       setIsPending(false);
     }
   }
 
   function handleUndo() {
-    if (!confirmation) {
+    if (!feedback?.draft) {
       return;
     }
 
-    restoreDraft(confirmation.draft);
-    setConfirmation(null);
+    if (feedback.kind === "queued") {
+      removeQueuedCapture(feedback.queueId);
+    }
+
+    restoreDraft(feedback.draft);
+    setFeedback(null);
   }
 
   function handleEdit() {
-    if (!confirmation) {
+    if (!feedback?.draft) {
       return;
     }
 
-    restoreDraft(confirmation.draft);
+    if (feedback.kind === "queued") {
+      removeQueuedCapture(feedback.queueId);
+    }
+
+    restoreDraft(feedback.draft);
   }
 
   const hybridHelper =
@@ -167,10 +437,16 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
         <div className="rounded-[1.85rem] border border-line/75 bg-white/78 p-5 focus-elevation md:p-6 lg:p-7">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="max-w-2xl">
-              <div className="inline-flex items-center gap-3 rounded-full border border-line/70 bg-white/70 px-3 py-2 text-text">
+              <button
+                type="button"
+                onClick={handleMicrophoneToggle}
+                aria-pressed={isListening}
+                disabled={isPending}
+                className="inline-flex items-center gap-3 rounded-full border border-line/70 bg-white/70 px-3 py-2 text-text disabled:opacity-60"
+              >
                 <CaptureMicrophoneIcon className="h-5 w-5" />
                 <span className="text-sm font-medium">Capture</span>
-              </div>
+              </button>
               <h2 className="page-title mt-4">Always available, with context already attached.</h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted md:text-base">
                 Use note and task patterns without leaving the current working surface. Keep sensitive context private
@@ -324,19 +600,23 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
           <div
             className={cn(
               "mt-4 min-h-6 text-sm transition-all duration-200",
-              confirmation ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"
+              feedback ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"
             )}
             aria-live="polite"
           >
-            {confirmation ? (
+            {feedback ? (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-text-muted">
-                <span>{confirmation.message}</span>
-                <button type="button" onClick={handleUndo} className="font-medium text-text">
-                  Undo
-                </button>
-                <button type="button" onClick={handleEdit} className="font-medium text-text">
-                  Edit
-                </button>
+                <span>{feedback.message}</span>
+                {feedback.draft ? (
+                  <>
+                    <button type="button" onClick={handleUndo} className="font-medium text-text">
+                      Undo
+                    </button>
+                    <button type="button" onClick={handleEdit} className="font-medium text-text">
+                      Edit
+                    </button>
+                  </>
+                ) : null}
               </div>
             ) : (
               <span>&nbsp;</span>
