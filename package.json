@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "clean": "rm -rf .next node_modules/.cache",
+    "reset:dev": "npm run clean && next dev",
+    "dev:reset": "npm run reset:dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --ext .ts,.tsx",

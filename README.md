@@ -20,3 +20,11 @@ Will O'Donnell's Agentic Chief of Staff.
   - stop using the bootstrap branch in `resolveCurrentAppUser`
   - require an auth-mapped `users` row
   - remove the bootstrap seed user if it is no longer needed
+
+## Local dev reset
+
+- If local development starts showing stale Next/Webpack behavior after a branch switch, generated-code update, or structural file change, run `npm run reset:dev`.
+- `npm run clean` clears `.next` and the local Webpack cache without starting the app.
+- `npm run reset:dev` runs that clean step and then starts a fresh dev server.
+- If you normally run the app on a custom port, you can still pass flags through, for example: `npm run reset:dev -- --hostname 0.0.0.0 --port 3001`.
+- A full reinstall is only necessary when dependency state itself is broken, for example after lockfile changes, failed installs, native module issues, or missing packages. In those cases, remove `node_modules` and reinstall dependencies before starting dev again.
