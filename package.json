@@ -2,14 +2,12 @@
   "name": "will-chief-of-staff",
   "version": "0.1.0",
   "private": true,
-
   "scripts": {
-  "dev": "next dev",
-  "build": "next build",
-  "start": "next start",
-  "lint": "eslint . --ext .ts,.tsx",
-  "typecheck": "tsc --noEmit"
-}
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
