@@ -1,7 +1,4 @@
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-const BOOTSTRAP_USER_EMAIL = "local@chief-of-staff.app";
+import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 
 type PersonRecord = {
   id: string;
@@ -62,37 +59,19 @@ export type PeoplePageData = {
   }>;
 };
 
-async function createPeopleReadClient() {
-  const adminClient = createSupabaseAdminClient();
-  if (adminClient) {
-    return adminClient;
-  }
-
-  return createSupabaseServerClient();
-}
-
 export async function getPeoplePageData(): Promise<PeoplePageData | null> {
-  const client = await createPeopleReadClient();
-  if (!client) {
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
     return null;
   }
-
-  const { data: bootstrapUser, error: userError } = await client
-    .from("users")
-    .select("id")
-    .eq("email", BOOTSTRAP_USER_EMAIL)
-    .maybeSingle();
-
-  if (userError || !bootstrapUser) {
-    return null;
-  }
+  const { client, user } = resolved;
 
   const { data: person, error: personError } = await client
     .from("people")
     .select(
       "id, full_name, why_now_title, why_now_summary, quiet_state_note, protected_context, next_interaction_title, next_interaction_note, next_interaction_guidance, cadence_note, horizon_note"
     )
-    .eq("user_id", bootstrapUser.id)
+    .eq("user_id", user.id)
     .in("status", ["active", "quiet"])
     .order("sort_order", { ascending: true })
     .limit(1)
@@ -106,7 +85,7 @@ export async function getPeoplePageData(): Promise<PeoplePageData | null> {
     client
       .from("commitments")
       .select("title, summary, owner_label, due_label, status")
-      .eq("user_id", bootstrapUser.id)
+      .eq("user_id", user.id)
       .eq("person_id", person.id)
       .in("status", ["open", "quiet", "at_risk"])
       .order("sort_order", { ascending: true })
@@ -115,7 +94,7 @@ export async function getPeoplePageData(): Promise<PeoplePageData | null> {
     client
       .from("signals")
       .select("occurred_label, title, note")
-      .eq("user_id", bootstrapUser.id)
+      .eq("user_id", user.id)
       .eq("person_id", person.id)
       .eq("signal_type", "interaction")
       .order("occurred_at", { ascending: false })
@@ -125,7 +104,7 @@ export async function getPeoplePageData(): Promise<PeoplePageData | null> {
     client
       .from("briefings")
       .select("title, body")
-      .eq("user_id", bootstrapUser.id)
+      .eq("user_id", user.id)
       .eq("person_id", person.id)
       .eq("kind", "detail")
       .eq("status", "active")

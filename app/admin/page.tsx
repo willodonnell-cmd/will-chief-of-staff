@@ -12,6 +12,7 @@ import { AdminGroupCard } from "@/components/admin/admin-group-card";
 import { MaterialChangeRow } from "@/components/admin/material-change-row";
 import { RecommendedChangeCard } from "@/components/admin/recommended-change-card";
 import { PageIntro } from "@/components/shell/page-intro";
+import { getAdminSettingsPageData } from "@/lib/admin-settings";
 
 const recommendedChanges = [
   {
@@ -33,6 +34,7 @@ const recommendedChanges = [
 
 const primaryGroups = [
   {
+    slug: "agent-behavior",
     eyebrow: "1",
     title: "Agent Behavior",
     summary: "Controls how aggressively the system surfaces work, escalates protected context, and decides when no attention is needed now.",
@@ -41,6 +43,7 @@ const primaryGroups = [
     icon: UserRoundCog
   },
   {
+    slug: "communications",
     eyebrow: "2",
     title: "Communications",
     summary: "Holds drafting posture, communication rhythm, and how outbound language stays concise across summaries, replies, and follow-ups.",
@@ -49,6 +52,7 @@ const primaryGroups = [
     icon: MessageSquareText
   },
   {
+    slug: "privacy",
     eyebrow: "3",
     title: "Privacy",
     summary: "Defines how open, protected, and hybrid context behaves across capture, summaries, and relationship or obligation views.",
@@ -57,6 +61,7 @@ const primaryGroups = [
     icon: ShieldCheck
   },
   {
+    slug: "views-navigation",
     eyebrow: "4",
     title: "Views & Navigation",
     summary: "Shapes what appears first, what stays folded, and how the shell preserves continuity across iPhone, iPad, and Mac.",
@@ -68,6 +73,7 @@ const primaryGroups = [
 
 const secondaryGroups = [
   {
+    slug: "learning",
     eyebrow: "5",
     title: "Learning",
     summary: "Keeps track of what the system is allowed to retain as durable preference rather than ephemeral session detail.",
@@ -76,6 +82,7 @@ const secondaryGroups = [
     icon: BrainCircuit
   },
   {
+    slug: "devices-notifications",
     eyebrow: "6",
     title: "Devices & Notifications",
     summary: "Controls where attention reaches you and where the product stays deliberately quiet across devices.",
@@ -84,6 +91,15 @@ const secondaryGroups = [
     icon: BellRing
   }
 ];
+
+const adminGroupIcons = {
+  "agent-behavior": UserRoundCog,
+  communications: MessageSquareText,
+  privacy: ShieldCheck,
+  "views-navigation": PanelLeftOpen,
+  learning: BrainCircuit,
+  "devices-notifications": BellRing
+} as const;
 
 const materialHistory = [
   {
@@ -103,7 +119,9 @@ const materialHistory = [
   }
 ];
 
-export default function AdminPage() {
+export default async function AdminPage() {
+  const adminData = await getAdminSettingsPageData();
+
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageIntro
@@ -125,12 +143,12 @@ export default function AdminPage() {
           </div>
           <div className="flex items-center gap-2 rounded-full border border-line/75 bg-white/75 px-4 py-2 text-sm text-text-muted">
             <Sparkles className="h-4 w-4 text-text-subtle" />
-            {recommendedChanges.length} recommended changes
+            {(adminData?.recommendedChanges ?? recommendedChanges).length} recommended changes
           </div>
         </div>
 
         <div className="mt-6 grid gap-4 xl:grid-cols-3">
-          {recommendedChanges.map((change) => (
+          {(adminData?.recommendedChanges ?? recommendedChanges).map((change) => (
             <RecommendedChangeCard
               key={change.summary}
               summary={change.summary}
@@ -151,8 +169,16 @@ export default function AdminPage() {
         </div>
 
         <div className="mt-6 grid gap-4 xl:grid-cols-2">
-          {primaryGroups.map((group) => (
-            <AdminGroupCard key={group.title} {...group} />
+          {(adminData?.primaryGroups ?? primaryGroups).map((group) => (
+            <AdminGroupCard
+              key={group.title}
+              eyebrow={group.eyebrow}
+              title={group.title}
+              summary={group.summary}
+              currentState={group.currentState}
+              note={group.note}
+              icon={adminGroupIcons[group.slug as keyof typeof adminGroupIcons]}
+            />
           ))}
         </div>
       </section>
@@ -167,8 +193,17 @@ export default function AdminPage() {
         </div>
 
         <div className="mt-6 grid gap-4 xl:grid-cols-2">
-          {secondaryGroups.map((group) => (
-            <AdminGroupCard key={group.title} secondary {...group} />
+          {(adminData?.secondaryGroups ?? secondaryGroups).map((group) => (
+            <AdminGroupCard
+              key={group.title}
+              eyebrow={group.eyebrow}
+              title={group.title}
+              summary={group.summary}
+              currentState={group.currentState}
+              note={group.note}
+              icon={adminGroupIcons[group.slug as keyof typeof adminGroupIcons]}
+              secondary
+            />
           ))}
         </div>
       </section>
@@ -183,7 +218,7 @@ export default function AdminPage() {
         </div>
 
         <div className="mt-6 space-y-3">
-          {materialHistory.map((change) => (
+          {(adminData?.materialHistory ?? materialHistory).map((change) => (
             <MaterialChangeRow
               key={`${change.changedAt}-${change.title}`}
               changedAt={change.changedAt}

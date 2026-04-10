@@ -865,3 +865,175 @@ set eyebrow = excluded.eyebrow,
     title = excluded.title,
     body = excluded.body,
     sort_order = excluded.sort_order;
+
+insert into public.admin_recommendations (
+  id,
+  user_id,
+  summary,
+  impacts,
+  why,
+  sort_order
+)
+values
+(
+  'dddddddd-dddd-dddd-dddd-ddddddddddd1',
+  '11111111-1111-1111-1111-111111111111',
+  'Tighten protected-context escalation for agent summaries.',
+  'Agent Behavior, Privacy, and any communication summary that includes hybrid capture detail.',
+  'The current posture is calm, but protected detail should step into escalation one beat earlier than open operational context.',
+  0
+),
+(
+  'dddddddd-dddd-dddd-dddd-ddddddddddd2',
+  '11111111-1111-1111-1111-111111111111',
+  'Move outbound communication defaults toward shorter executive drafts.',
+  'Communications and the draft posture used after opening threads or follow-up notes.',
+  'The system is already quiet enough on surfacing. The next gain is reducing over-written draft suggestions before they become noise.',
+  1
+),
+(
+  'dddddddd-dddd-dddd-dddd-ddddddddddd3',
+  '11111111-1111-1111-1111-111111111111',
+  'Simplify iPad navigation into a steadier default view order.',
+  'Views & Navigation plus the way Admin, Inbox, and People are revisited during longer work sessions.',
+  'The shell is structurally sound, but a calmer return path improves continuity when work moves across several screens.',
+  2
+)
+on conflict (id) do update
+set summary = excluded.summary,
+    impacts = excluded.impacts,
+    why = excluded.why,
+    sort_order = excluded.sort_order;
+
+insert into public.admin_setting_groups (
+  id,
+  user_id,
+  slug,
+  tier,
+  eyebrow,
+  title,
+  summary,
+  current_state,
+  note,
+  sort_order
+)
+values
+(
+  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1',
+  '11111111-1111-1111-1111-111111111111',
+  'agent-behavior',
+  'primary',
+  '1',
+  'Agent Behavior',
+  'Controls how aggressively the system surfaces work, escalates protected context, and decides when no attention is needed now.',
+  'Conservative by default. Suppression stays stronger than surfacing, and protected context remains earned.',
+  'This group should feel like operating posture, not tuning every model knob.',
+  0
+),
+(
+  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee2',
+  '11111111-1111-1111-1111-111111111111',
+  'communications',
+  'primary',
+  '2',
+  'Communications',
+  'Holds drafting posture, communication rhythm, and how outbound language stays concise across summaries, replies, and follow-ups.',
+  'Drafting remains secondary to opening. Responses favor brief executive language over fully developed copy.',
+  'Communication settings stay close to message quality and pacing, not channel analytics.',
+  1
+),
+(
+  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee3',
+  '11111111-1111-1111-1111-111111111111',
+  'privacy',
+  'primary',
+  '3',
+  'Privacy',
+  'Defines how open, protected, and hybrid context behaves across capture, summaries, and relationship or obligation views.',
+  'Hybrid behavior is active. Corvette is reserved for protected moments, and sensitive context remains scoped.',
+  'Privacy is presented as trust posture, not compliance theater or a dense permission matrix.',
+  2
+),
+(
+  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee4',
+  '11111111-1111-1111-1111-111111111111',
+  'views-navigation',
+  'primary',
+  '4',
+  'Views & Navigation',
+  'Shapes what appears first, what stays folded, and how the shell preserves continuity across iPhone, iPad, and Mac.',
+  'The core shell is stable, with a strong bias toward minimal top layers and persistent capture access.',
+  'This group governs calmness and access paths, not visual experimentation.',
+  3
+),
+(
+  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee5',
+  '11111111-1111-1111-1111-111111111111',
+  'learning',
+  'secondary',
+  '5',
+  'Learning',
+  'Keeps track of what the system is allowed to retain as durable preference rather than ephemeral session detail.',
+  'Only repeated, behavior-shaping patterns should graduate into learning. Incidental nudges should stay transient.',
+  'Learning should remain narrow enough to feel helpful, not uncanny.',
+  0
+),
+(
+  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee6',
+  '11111111-1111-1111-1111-111111111111',
+  'devices-notifications',
+  'secondary',
+  '6',
+  'Devices & Notifications',
+  'Controls where attention reaches you and where the product stays deliberately quiet across devices.',
+  'Notifications should remain low-volume and device-aware, with tray behavior used for material changes only.',
+  'This group should feel manageable even on phone, not like a notification control tower.',
+  1
+)
+on conflict (user_id, slug) do update
+set tier = excluded.tier,
+    eyebrow = excluded.eyebrow,
+    title = excluded.title,
+    summary = excluded.summary,
+    current_state = excluded.current_state,
+    note = excluded.note,
+    sort_order = excluded.sort_order;
+
+insert into public.admin_material_changes (
+  id,
+  user_id,
+  changed_at_label,
+  title,
+  summary,
+  sort_order
+)
+values
+(
+  'ffffffff-ffff-ffff-ffff-fffffffffff1',
+  '11111111-1111-1111-1111-111111111111',
+  'Today',
+  'Protected-context handling narrowed for hybrid capture review.',
+  'Material because it changes who can see sensitive supporting detail after capture, not just how the screen describes it.',
+  0
+),
+(
+  'ffffffff-ffff-ffff-ffff-fffffffffff2',
+  '11111111-1111-1111-1111-111111111111',
+  'Yesterday',
+  'Communication drafting defaults shortened.',
+  'Material because it changes the initial draft behavior across executive follow-ups and outbound replies.',
+  1
+),
+(
+  'ffffffff-ffff-ffff-ffff-fffffffffff3',
+  '11111111-1111-1111-1111-111111111111',
+  'Last week',
+  'Navigation posture set to keep backgrounded views folded by default.',
+  'Material because it changes where attention lands first when re-entering the product.',
+  2
+)
+on conflict (id) do update
+set changed_at_label = excluded.changed_at_label,
+    title = excluded.title,
+    summary = excluded.summary,
+    sort_order = excluded.sort_order;
