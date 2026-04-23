@@ -1,4 +1,5 @@
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
+import { listTodayTasks, type LibraryItemSummary } from "@/lib/capture-library";
 
 type TodayBriefRecord = {
   id: string;
@@ -54,7 +55,53 @@ export type TodayPageData = {
     title: string;
     body: string;
   }>;
+  taskSections: {
+    overdue: Array<{
+      id: string;
+      title: string;
+      detail: string;
+      href: string;
+    }>;
+    dueSoon: Array<{
+      id: string;
+      title: string;
+      detail: string;
+      href: string;
+    }>;
+  };
 };
+
+function formatTaskTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown time";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function mapTodayTaskItem(item: LibraryItemSummary, kind: "overdue" | "dueSoon") {
+  const timingLabel = item.dueAt
+    ? kind === "overdue"
+      ? `Overdue since ${formatTaskTimestamp(item.dueAt)}`
+      : `Due ${formatTaskTimestamp(item.dueAt)}`
+    : "No due date";
+  const priorityLabel = item.task?.priority
+    ? `${item.task.priority.slice(0, 1).toUpperCase()}${item.task.priority.slice(1)} priority`
+    : null;
+
+  return {
+    id: item.id,
+    title: item.title,
+    detail: [timingLabel, priorityLabel].filter(Boolean).join(" · "),
+    href: `/library/${item.id}?from=%2F`
+  };
+}
 
 export async function getTodayPageData(): Promise<TodayPageData | null> {
   const resolved = await resolveCurrentAppUser();
@@ -105,6 +152,8 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
       .returns<TodaySupportNoteRecord[]>()
   ]);
 
+  const taskSections = await listTodayTasks();
+
   return {
     glanceItems: glanceItems ?? [],
     highFocus: {
@@ -119,6 +168,10 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
       title: brief.quiet_panel_title,
       items: quietItems ?? []
     },
-    supportNotes: supportNotes ?? []
+    supportNotes: supportNotes ?? [],
+    taskSections: {
+      overdue: taskSections.overdue.map((item) => mapTodayTaskItem(item, "overdue")),
+      dueSoon: taskSections.dueSoon.map((item) => mapTodayTaskItem(item, "dueSoon"))
+    }
   };
 }

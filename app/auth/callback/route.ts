@@ -1,3 +1,4 @@
+import "@/lib/supabase/bootstrap-insecure-dev-tls";
 import { NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";

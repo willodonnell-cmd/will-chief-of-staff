@@ -18,7 +18,7 @@ type CaptureDraft = {
 
 type FeedbackState =
   | {
-      kind: "saved" | "queued" | "status";
+      kind: "saved" | "save-failed" | "queued" | "status";
       message: string;
       draft?: CaptureDraft;
       queueId?: string;
@@ -95,7 +95,7 @@ function placeholderForPattern(pattern: CapturePattern) {
 }
 
 function submitLabelForPattern(pattern: CapturePattern) {
-  return pattern === "note" ? "Capture note" : "Capture task";
+  return pattern === "note" ? "Save Note" : "Save Task";
 }
 
 function joinCaptureText(base: string, transcript: string) {
@@ -167,13 +167,13 @@ function microphoneSupportMessage(error?: string) {
   switch (error) {
     case "not-allowed":
     case "service-not-allowed":
-      return "Microphone access was denied. Typed capture still works.";
+      return "Voice Note access was denied. Type your note below and save it.";
     case "audio-capture":
-      return "No microphone was available. Typed capture still works.";
+      return "No microphone was available. Type your note below and save it.";
     case "network":
-      return "Microphone transcription was interrupted. Typed capture still works.";
+      return "Voice Note was interrupted. Type your note below and save it.";
     default:
-      return "Microphone capture is unavailable here. Typed capture still works.";
+      return "Voice Note is unavailable here. Type your note below and save it.";
   }
 }
 
@@ -211,8 +211,8 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
       return;
     }
 
-    const queuedCaptures = readQueuedCaptures();
-    if (queuedCaptures.length === 0) {
+    const storedQueuedCaptures = readQueuedCaptures();
+    if (storedQueuedCaptures.length === 0) {
       return;
     }
 
@@ -222,7 +222,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
       const remaining: QueuedCapture[] = [];
       let syncedCount = 0;
 
-      for (const queuedCapture of queuedCaptures) {
+      for (const queuedCapture of storedQueuedCaptures) {
         const result = await persistCaptureAction({
           sourcePath: queuedCapture.sourcePath,
           pattern: queuedCapture.pattern,
@@ -245,7 +245,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
       if (syncedCount > 0) {
         setFeedback({
           kind: "status",
-          message: `Synced ${syncedCount} queued capture${syncedCount === 1 ? "" : "s"}.`
+          message: `Synced ${syncedCount} pending capture${syncedCount === 1 ? "" : "s"} to Supabase.`
         });
       }
     } finally {
@@ -328,7 +328,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
       setIsListening(true);
       setFeedback({
         kind: "status",
-        message: "Listening… speak the capture, then pause."
+        message: "Voice Note is listening. Speak now, then Save Note when the text looks right."
       });
     } catch {
       recognitionRef.current = null;
@@ -370,16 +370,10 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
       });
 
       if (!result.ok) {
-        const queuedCapture = queueCaptureLocally(initialFrom ?? null, savedDraft);
-        setDraft({
-          ...defaultDraft,
-          pattern: savedDraft.pattern
-        });
         setFeedback({
-          kind: "queued",
-          message: "Saved locally. Supabase sync is unavailable right now.",
-          draft: savedDraft,
-          queueId: queuedCapture.id
+          kind: "save-failed",
+          message: `${result.message} You can keep editing or save locally pending sync.`,
+          draft: savedDraft
         });
         return;
       }
@@ -397,6 +391,24 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
     } finally {
       setIsPending(false);
     }
+  }
+
+  function handleSaveLocally() {
+    if (!feedback?.draft) {
+      return;
+    }
+
+    const queuedCapture = queueCaptureLocally(initialFrom ?? null, feedback.draft);
+    setDraft({
+      ...defaultDraft,
+      pattern: feedback.draft.pattern
+    });
+    setFeedback({
+      kind: "queued",
+      message: "Saved locally only, not yet synced to Supabase.",
+      draft: feedback.draft,
+      queueId: queuedCapture.id
+    });
   }
 
   function handleUndo() {
@@ -607,7 +619,17 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
             {feedback ? (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-text-muted">
                 <span>{feedback.message}</span>
-                {feedback.draft ? (
+                {feedback.kind === "save-failed" && feedback.draft ? (
+                  <>
+                    <button type="button" onClick={handleSaveLocally} className="font-medium text-text">
+                      Save locally
+                    </button>
+                    <button type="button" onClick={handleEdit} className="font-medium text-text">
+                      Keep editing
+                    </button>
+                  </>
+                ) : null}
+                {feedback.draft && feedback.kind !== "save-failed" ? (
                   <>
                     <button type="button" onClick={handleUndo} className="font-medium text-text">
                       Undo

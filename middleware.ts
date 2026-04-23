@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
+import { withSupabaseTimeout } from "@/lib/supabase/request-timeout";
+
 type CookieToSet = {
   name: string;
   value: string;
@@ -13,7 +15,8 @@ export async function middleware(request: NextRequest) {
   });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
     return response;
@@ -36,7 +39,11 @@ export async function middleware(request: NextRequest) {
     }
   });
 
-  await supabase.auth.getUser();
+  try {
+    await withSupabaseTimeout(supabase.auth.getUser(), 1500);
+  } catch {
+    return response;
+  }
 
   return response;
 }

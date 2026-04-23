@@ -1,3 +1,4 @@
+import "@/lib/supabase/bootstrap-insecure-dev-tls";
 import { createClient } from "@supabase/supabase-js";
 
 export function createSupabaseAdminClient() {

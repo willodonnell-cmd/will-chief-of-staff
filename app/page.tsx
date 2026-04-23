@@ -3,6 +3,7 @@ import { GlanceChip } from "@/components/today/glance-chip";
 import { HighFocusItem } from "@/components/today/high-focus-item";
 import { QuietPanel } from "@/components/today/quiet-panel";
 import { SupportNote } from "@/components/today/support-note";
+import { TaskRadar } from "@/components/today/task-radar";
 import { getTodayPageData } from "@/lib/today";
 
 export default async function TodayPage() {
@@ -40,26 +41,33 @@ export default async function TodayPage() {
           decision={todayData?.highFocus?.decision ?? "Confirm the revised role framing"}
         />
 
-        <QuietPanel
-          eyebrow={todayData?.quietPanel?.eyebrow ?? "No attention needed now"}
-          title={todayData?.quietPanel?.title ?? "Stable background"}
-          items={
-            todayData?.quietPanel?.items ?? [
-              {
-                label: "Board prep",
-                detail: "Narrative is aligned and waiting only on the hiring brief."
-              },
-              {
-                label: "Investor follow-ups",
-                detail: "Drafted and ready to send after tomorrow's conversation."
-              },
-              {
-                label: "Ops review",
-                detail: "No new blockers surfaced since yesterday."
-              }
-            ]
-          }
-        />
+        <div className="space-y-4">
+          <QuietPanel
+            eyebrow={todayData?.quietPanel?.eyebrow ?? "No attention needed now"}
+            title={todayData?.quietPanel?.title ?? "Stable background"}
+            items={
+              todayData?.quietPanel?.items ?? [
+                {
+                  label: "Board prep",
+                  detail: "Narrative is aligned and waiting only on the hiring brief."
+                },
+                {
+                  label: "Investor follow-ups",
+                  detail: "Drafted and ready to send after tomorrow's conversation."
+                },
+                {
+                  label: "Ops review",
+                  detail: "No new blockers surfaced since yesterday."
+                }
+              ]
+            }
+          />
+
+          <TaskRadar
+            overdue={todayData?.taskSections.overdue ?? []}
+            dueSoon={todayData?.taskSections.dueSoon ?? []}
+          />
+        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[0.96fr_1.04fr]">

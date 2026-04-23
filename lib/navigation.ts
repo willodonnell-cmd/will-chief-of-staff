@@ -1,6 +1,7 @@
 import type { Route } from "next";
 import type { ComponentType } from "react";
 import {
+  BookOpen,
   BriefcaseBusiness,
   Inbox,
   SlidersHorizontal,
@@ -29,12 +30,14 @@ export const mobileNavItems: NavItem[] = [
 
 export const mobileShellActions: NavItem[] = [
   { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness },
+  { label: "Library", href: "/library", icon: BookOpen },
   { label: "Admin", href: "/admin", icon: SlidersHorizontal }
 ];
 
 export const desktopPrimaryNav: NavItem[] = [
   { label: "Today", href: "/", icon: Target },
   { label: "Priority Inbox", href: "/inbox", icon: Inbox },
+  { label: "Library", href: "/library", icon: BookOpen },
   { label: "People", href: "/people", icon: Users },
   { label: "Initiatives", href: "/initiatives", icon: Waypoints },
   { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness },

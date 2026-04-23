@@ -1,110 +1,349 @@
-import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
+import { listLibraryItems, type LibraryItemSummary, type LibraryTaskPriority } from "@/lib/capture-library";
 
-type CommitmentRecord = {
-  page_section: "detail" | "needs_attention" | "owed" | "at_risk" | "recent_changes" | "background" | null;
+const COMMITMENTS_DUE_SOON_WINDOW_MS = 1000 * 60 * 60 * 24 * 3;
+const COMPLETED_COMMITMENTS_LIMIT = 6;
+
+type CommitmentTone = "overdue" | "soon" | "active" | "quiet";
+
+export type CommitmentItem = {
+  id: string;
   title: string;
   summary: string;
-  owner_type: "self" | "other";
-  due_label: string | null;
-  action_label: string | null;
-  status: "open" | "quiet" | "at_risk" | "done" | "archived";
-  why_it_matters: string | null;
-  risk_note: string | null;
-  stakeholders_note: string | null;
-  next_step: string | null;
-  linked_context: string | null;
-  recent_history: string | null;
-  protected_context: boolean;
-};
-
-type CommitmentListItem = {
-  title: string;
-  summary: string;
-  due: string;
-  owner: "you" | "others";
-  action?: string;
-  atRisk?: boolean;
+  href: string;
+  stateLabel: string;
+  dueLabel: string;
+  activityLabel: string;
+  priorityLabel: string | null;
+  tone: CommitmentTone;
 };
 
 export type CommitmentsPageData = {
-  detail: {
+  overview: {
     title: string;
-    whyItMatters: string;
-    status: string;
-    risk: string;
-    stakeholders: string;
-    nextStep: string;
-    linkedContext: string;
-    recentHistory: string;
-    protectedContext: boolean;
+    summary: string;
+    href: string;
+    stateLabel: string;
+    timingLabel: string;
+    activityLabel: string;
+    priorityLabel: string;
+    posture: string;
+    sourceNote: string;
+    metrics: Array<{
+      label: string;
+      value: string;
+      tone: "default" | "quiet" | "alert";
+    }>;
   } | null;
-  needsAttention: CommitmentListItem[];
-  whatIsOwed: CommitmentListItem[];
-  atRisk: CommitmentListItem[];
-  recentChanges: CommitmentListItem[];
-  quietBackground: CommitmentListItem[];
+  sections: {
+    overdue: CommitmentItem[];
+    dueSoon: CommitmentItem[];
+    upcomingLater: CommitmentItem[];
+    activeNoDue: CommitmentItem[];
+    completed: CommitmentItem[];
+  };
 };
 
-function mapOwner(ownerType: CommitmentRecord["owner_type"]) {
-  return ownerType === "self" ? "you" : "others";
+function dueAtTimestamp(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
-function mapListItem(item: CommitmentRecord): CommitmentListItem {
+function formatTimestamp(value: string | null, options?: Intl.DateTimeFormatOptions) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    ...options
+  }).format(date);
+}
+
+function priorityRank(priority: LibraryTaskPriority | null | undefined) {
+  if (priority === "high") {
+    return 3;
+  }
+
+  if (priority === "medium") {
+    return 2;
+  }
+
+  if (priority === "low") {
+    return 1;
+  }
+
+  return 0;
+}
+
+function compareByPriority(left: LibraryItemSummary, right: LibraryItemSummary) {
+  return priorityRank(right.task?.priority) - priorityRank(left.task?.priority);
+}
+
+function compareByLastActiveDesc(left: LibraryItemSummary, right: LibraryItemSummary) {
+  return Date.parse(right.lastActiveAt) - Date.parse(left.lastActiveAt);
+}
+
+function compareByDueAtAsc(left: LibraryItemSummary, right: LibraryItemSummary) {
+  const leftDueAt = dueAtTimestamp(left.task?.dueAt ?? left.dueAt) ?? Number.POSITIVE_INFINITY;
+  const rightDueAt = dueAtTimestamp(right.task?.dueAt ?? right.dueAt) ?? Number.POSITIVE_INFINITY;
+
+  if (leftDueAt !== rightDueAt) {
+    return leftDueAt - rightDueAt;
+  }
+
+  const priorityComparison = compareByPriority(left, right);
+  if (priorityComparison !== 0) {
+    return priorityComparison;
+  }
+
+  return compareByLastActiveDesc(left, right);
+}
+
+function compareByCompletedAtDesc(left: LibraryItemSummary, right: LibraryItemSummary) {
+  const leftCompletedAt = Date.parse(left.completedAt ?? left.lastActiveAt);
+  const rightCompletedAt = Date.parse(right.completedAt ?? right.lastActiveAt);
+
+  if (leftCompletedAt !== rightCompletedAt) {
+    return rightCompletedAt - leftCompletedAt;
+  }
+
+  return compareByLastActiveDesc(left, right);
+}
+
+function buildCommitmentHref(id: string) {
+  return `/library/${id}?from=%2Fcommitments`;
+}
+
+function stateLabelForItem(item: LibraryItemSummary, now: number) {
+  if (item.status === "completed") {
+    return "Completed";
+  }
+
+  const dueAt = dueAtTimestamp(item.task?.dueAt ?? item.dueAt);
+  if (dueAt === null) {
+    return "Active";
+  }
+
+  if (dueAt < now) {
+    return "Overdue";
+  }
+
+  if (dueAt <= now + COMMITMENTS_DUE_SOON_WINDOW_MS) {
+    return "Due soon";
+  }
+
+  return "Upcoming";
+}
+
+function toneForItem(item: LibraryItemSummary, now: number): CommitmentTone {
+  const state = stateLabelForItem(item, now);
+
+  if (state === "Overdue") {
+    return "overdue";
+  }
+
+  if (state === "Due soon") {
+    return "soon";
+  }
+
+  if (state === "Completed" || state === "Upcoming") {
+    return "quiet";
+  }
+
+  return "active";
+}
+
+function dueLabelForItem(item: LibraryItemSummary, now: number) {
+  const dueAt = item.task?.dueAt ?? item.dueAt;
+  const formattedDueAt = formatTimestamp(dueAt);
+
+  if (!formattedDueAt) {
+    return item.status === "completed" ? "Completed with no due date" : "No due date";
+  }
+
+  if (item.status === "completed") {
+    return `Was due ${formattedDueAt}`;
+  }
+
+  const dueAtTime = dueAtTimestamp(dueAt);
+  if (dueAtTime !== null && dueAtTime < now) {
+    return `Overdue since ${formattedDueAt}`;
+  }
+
+  return `Due ${formattedDueAt}`;
+}
+
+function activityLabelForItem(item: LibraryItemSummary) {
+  if (item.status === "completed") {
+    const completedAt = formatTimestamp(item.completedAt);
+    if (completedAt) {
+      return `Completed ${completedAt}`;
+    }
+  }
+
+  const lastActiveAt = formatTimestamp(item.lastActiveAt);
+  return lastActiveAt ? `Last active ${lastActiveAt}` : "Recent activity unavailable";
+}
+
+function priorityLabelForItem(item: LibraryItemSummary) {
+  const priority = item.task?.priority;
+
+  if (!priority) {
+    return null;
+  }
+
+  return `${priority.slice(0, 1).toUpperCase()}${priority.slice(1)} priority`;
+}
+
+function mapCommitmentItem(item: LibraryItemSummary, now: number): CommitmentItem {
   return {
+    id: item.id,
     title: item.title,
-    summary: item.summary,
-    due: item.due_label ?? "Soon",
-    owner: mapOwner(item.owner_type),
-    action: item.action_label ?? undefined,
-    atRisk: item.status === "at_risk"
+    summary: item.preview,
+    href: buildCommitmentHref(item.id),
+    stateLabel: stateLabelForItem(item, now),
+    dueLabel: dueLabelForItem(item, now),
+    activityLabel: activityLabelForItem(item),
+    priorityLabel: priorityLabelForItem(item),
+    tone: toneForItem(item, now)
   };
 }
 
-export async function getCommitmentsPageData(): Promise<CommitmentsPageData | null> {
-  const resolved = await resolveCurrentAppUser();
-  if (!resolved) {
-    return null;
-  }
-  const { client, user } = resolved;
-
-  const { data: commitments, error: commitmentsError } = await client
-    .from("commitments")
-    .select(
-      "page_section, title, summary, owner_type, due_label, action_label, status, why_it_matters, risk_note, stakeholders_note, next_step, linked_context, recent_history, protected_context"
-    )
-    .eq("user_id", user.id)
-    .eq("scope", "general")
-    .in("status", ["open", "quiet", "at_risk"])
-    .order("sort_order", { ascending: true })
-    .returns<CommitmentRecord[]>();
-
-  if (commitmentsError || !commitments) {
-    return null;
+function postureForSections(sections: CommitmentsPageData["sections"]) {
+  if (sections.overdue.length > 0) {
+    return sections.overdue.length === 1
+      ? "1 overdue commitment currently needs recovery first."
+      : `${sections.overdue.length} overdue commitments currently need recovery first.`;
   }
 
-  const bySection = (section: NonNullable<CommitmentRecord["page_section"]>) =>
-    commitments.filter((item) => item.page_section === section);
+  if (sections.dueSoon.length > 0) {
+    return sections.dueSoon.length === 1
+      ? "1 commitment is due inside the next 72 hours."
+      : `${sections.dueSoon.length} commitments are due inside the next 72 hours.`;
+  }
 
-  const detail = bySection("detail")[0] ?? null;
+  if (sections.activeNoDue.length > 0) {
+    return sections.activeNoDue.length === 1
+      ? "1 active commitment is moving without a due date yet."
+      : `${sections.activeNoDue.length} active commitments are moving without a due date yet.`;
+  }
+
+  if (sections.upcomingLater.length > 0) {
+    return sections.upcomingLater.length === 1
+      ? "1 commitment is dated, but not near-term."
+      : `${sections.upcomingLater.length} commitments are dated, but not near-term.`;
+  }
+
+  if (sections.completed.length > 0) {
+    return "No active commitments are currently surfaced; only recent completions remain in view.";
+  }
+
+  return "No canonical task commitments are in the library yet.";
+}
+
+export async function getCommitmentsPageData(now = Date.now()): Promise<CommitmentsPageData> {
+  const tasks = await listLibraryItems({
+    scope: "tasks",
+    search: "",
+    type: "task",
+    status: "all",
+    due: "all"
+  });
+
+  const overdue = tasks
+    .filter((item) => item.status !== "completed")
+    .filter((item) => {
+      const dueAt = dueAtTimestamp(item.task?.dueAt ?? item.dueAt);
+      return dueAt !== null && dueAt < now;
+    })
+    .sort(compareByDueAtAsc);
+
+  const dueSoon = tasks
+    .filter((item) => item.status !== "completed")
+    .filter((item) => {
+      const dueAt = dueAtTimestamp(item.task?.dueAt ?? item.dueAt);
+      return dueAt !== null && dueAt >= now && dueAt <= now + COMMITMENTS_DUE_SOON_WINDOW_MS;
+    })
+    .sort(compareByDueAtAsc);
+
+  const upcomingLater = tasks
+    .filter((item) => item.status !== "completed")
+    .filter((item) => {
+      const dueAt = dueAtTimestamp(item.task?.dueAt ?? item.dueAt);
+      return dueAt !== null && dueAt > now + COMMITMENTS_DUE_SOON_WINDOW_MS;
+    })
+    .sort(compareByDueAtAsc);
+
+  const activeNoDue = tasks
+    .filter((item) => item.status !== "completed")
+    .filter((item) => dueAtTimestamp(item.task?.dueAt ?? item.dueAt) === null)
+    .sort((left, right) => {
+      const priorityComparison = compareByPriority(left, right);
+      if (priorityComparison !== 0) {
+        return priorityComparison;
+      }
+
+      return compareByLastActiveDesc(left, right);
+    });
+
+  const completed = tasks
+    .filter((item) => item.status === "completed")
+    .sort(compareByCompletedAtDesc)
+    .slice(0, COMPLETED_COMMITMENTS_LIMIT);
+
+  const sections = {
+    overdue: overdue.map((item) => mapCommitmentItem(item, now)),
+    dueSoon: dueSoon.map((item) => mapCommitmentItem(item, now)),
+    upcomingLater: upcomingLater.map((item) => mapCommitmentItem(item, now)),
+    activeNoDue: activeNoDue.map((item) => mapCommitmentItem(item, now)),
+    completed: completed.map((item) => mapCommitmentItem(item, now))
+  };
+
+  const leadItem = overdue[0] ?? dueSoon[0] ?? activeNoDue[0] ?? upcomingLater[0] ?? completed[0] ?? null;
 
   return {
-    detail: detail
+    overview: leadItem
       ? {
-          title: detail.title,
-          whyItMatters: detail.why_it_matters ?? detail.summary,
-          status: detail.summary,
-          risk: detail.risk_note ?? "No active risk note is available yet.",
-          stakeholders: detail.stakeholders_note ?? "No stakeholder context is available yet.",
-          nextStep: detail.next_step ?? "No next step is available yet.",
-          linkedContext: detail.linked_context ?? "No linked context is available yet.",
-          recentHistory: detail.recent_history ?? "No recent history is available yet.",
-          protectedContext: detail.protected_context
+          title: leadItem.title,
+          summary: leadItem.preview,
+          href: buildCommitmentHref(leadItem.id),
+          stateLabel: stateLabelForItem(leadItem, now),
+          timingLabel: dueLabelForItem(leadItem, now),
+          activityLabel: activityLabelForItem(leadItem),
+          priorityLabel: priorityLabelForItem(leadItem) ?? "No explicit priority",
+          posture: postureForSections(sections),
+          sourceNote: "This page reads directly from canonical Library task objects. Open detail to edit the source item.",
+          metrics: [
+            {
+              label: "Overdue",
+              value: String(sections.overdue.length),
+              tone: sections.overdue.length > 0 ? "alert" : "quiet"
+            },
+            {
+              label: "Due soon",
+              value: String(sections.dueSoon.length),
+              tone: sections.dueSoon.length > 0 ? "default" : "quiet"
+            },
+            {
+              label: "Active, no date",
+              value: String(sections.activeNoDue.length),
+              tone: sections.activeNoDue.length > 0 ? "default" : "quiet"
+            }
+          ]
         }
       : null,
-    needsAttention: bySection("needs_attention").map(mapListItem),
-    whatIsOwed: bySection("owed").map(mapListItem),
-    atRisk: bySection("at_risk").map(mapListItem),
-    recentChanges: bySection("recent_changes").map(mapListItem),
-    quietBackground: bySection("background").map(mapListItem)
+    sections
   };
 }

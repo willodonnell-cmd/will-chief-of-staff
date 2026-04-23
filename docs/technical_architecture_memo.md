@@ -36,9 +36,12 @@
 - Privacy supports `open`, `protected`, and `hybrid` modes.
 - Hybrid capture keeps the main note attached to working context while sensitive detail stays in a protected field.
 - Confirmation is intentionally subtle: one line of feedback with adjacent `Undo` and `Edit` actions.
-- Typed capture now writes through a server action to Supabase and only clears the form after the submission is safely stored or queued.
-- If Supabase is temporarily unavailable, Capture stores the submission in a local queue and retries sync later so typed capture never blocks.
-- Microphone capture now uses browser speech recognition when supported; denied or unsupported microphone access falls back quietly to typed capture without breaking the page.
+- The top Capture CTA is `Voice Note`, which uses browser speech-to-text when supported rather than promising full audio recording.
+- Typed capture writes through a server action to Supabase and clears the form only after a successful server save or an explicit local-only save choice.
+- In local/dev, if Node HTTPS cannot reach Supabase because of the machine certificate chain, Capture retries the same write through a narrow `curl -k` server-side fallback so the app can still persist to Supabase without changing the UI flow.
+- If Supabase is temporarily unavailable, Capture keeps the draft in place and offers an explicit local queueing fallback rather than presenting a local save as a committed server save.
+- Capture shows both recently saved items and locally queued pending items inside the flow so save outcomes remain visible and unambiguous.
+- Voice Note failures or unsupported browsers transition clearly back into the typed note flow without breaking the page.
 - Corvette red appears only inside protected and hybrid privacy states.
 - The Capture control is icon-only in shell navigation and uses a custom old-school microphone so it stays in the same symbolic family as Corvette rather than reading as a generic utility action.
 
@@ -84,11 +87,10 @@
 
 ## Commitment decisions
 
-- Commitments pages are obligation briefs first rather than task lists.
-- The page order is `what needs attention now`, `what you owe vs what others owe`, `at-risk commitments`, then `recent changes`.
-- Backgrounded commitments mostly stay out of sight, with only a very small quiet section when useful.
-- The detail view leads with `what it is + why it matters`, then status/risk, stakeholder context, suggested next step, linked context, and subtle recent history.
-- Recent history is present but intentionally non-focal.
+- Commitments is an obligation surface over canonical Library task objects rather than its own stored model.
+- The page order is `overdue`, `due soon`, `active with no due date`, then backgrounded later-dated and recently completed work.
+- Every commitment row navigates back to the existing canonical Library detail rather than to a commitments-specific editor.
+- Backgrounded and completed commitments stay reachable, but out of the top layer unless they are operationally useful.
 
 ## Admin decisions
 

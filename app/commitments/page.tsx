@@ -1,74 +1,9 @@
 import { CollapsedCommitmentSection } from "@/components/commitments/collapsed-commitment-section";
 import { CommitmentDetailCard } from "@/components/commitments/commitment-detail-card";
+import { CommitmentRow } from "@/components/commitments/commitment-row";
 import { CommitmentSection } from "@/components/commitments/commitment-section";
 import { PageIntro } from "@/components/shell/page-intro";
 import { getCommitmentsPageData } from "@/lib/commitments";
-
-const needsAttention = [
-  {
-    title: "Board packet narrative revision",
-    summary: "A concise framing update is owed before tomorrow morning so the packet stops reflecting the outdated hiring scope.",
-    due: "Before 8:30 AM",
-    owner: "you" as const,
-    action: "Open"
-  },
-  {
-    title: "Confirm candidate-language update from recruiting",
-    summary: "Recruiting owes a final wording check, but it only needs to be surfaced because it blocks your outgoing note.",
-    due: "Today",
-    owner: "others" as const,
-    action: "Open"
-  }
-];
-
-const whatIsOwed = [
-  {
-    title: "You owe the revised board note",
-    summary: "Short written alignment after the prep pass.",
-    due: "Tomorrow",
-    owner: "you" as const
-  },
-  {
-    title: "Legal owes the compensation language review",
-    summary: "Needed before the scenario can be shared more broadly.",
-    due: "This week",
-    owner: "others" as const
-  }
-];
-
-const atRisk = [
-  {
-    title: "Candidate expectation reset",
-    summary: "Timing is tightening. If the message slips again, the tone of the search may shift unnecessarily.",
-    due: "Soon",
-    owner: "you" as const,
-    atRisk: true
-  }
-];
-
-const recentChanges = [
-  {
-    title: "Hiring-brief commitment narrowed",
-    summary: "The obligation is smaller now, but more time-sensitive because it directly feeds the board packet.",
-    due: "Today",
-    owner: "you" as const
-  },
-  {
-    title: "Legal review moved one day",
-    summary: "The slip is manageable and does not need foreground attention unless finance also moves.",
-    due: "Yesterday",
-    owner: "others" as const
-  }
-];
-
-const quietBackground = [
-  {
-    title: "Investor recap follow-up",
-    summary: "Still backgrounded. No additional action is needed until the meeting notes finalize.",
-    due: "Next week",
-    owner: "you" as const
-  }
-];
 
 export default async function CommitmentsPage() {
   const commitmentsData = await getCommitmentsPageData();
@@ -77,80 +12,86 @@ export default async function CommitmentsPage() {
     <div className="space-y-6 lg:space-y-8">
       <PageIntro
         eyebrow="Commitments"
-        title="Obligation brief first, with backgrounded items mostly out of sight."
-        description="This screen keeps the top layer narrow: what actually needs attention, who owes what, what is at risk, and only the most relevant recent movement."
+        title="Canonical obligations, grouped for operational follow-through."
+        description="Commitments is a distinct surface over existing Library task objects: overdue work first, near-term due dates next, active undated obligations after that, and recent completions kept quiet."
       />
 
-      <CommitmentDetailCard
-        title={commitmentsData?.detail?.title ?? "Board packet narrative revision"}
-        whyItMatters={
-          commitmentsData?.detail?.whyItMatters ??
-          "This commitment matters because it is the clearest obligation tying hiring, finance, and board prep together. If it lands cleanly, several smaller follow-ups stay quiet."
-        }
-        status={commitmentsData?.detail?.status ?? "Open and active. Moderate risk if it slips past the morning prep window."}
-        risk={
-          commitmentsData?.detail?.risk ??
-          "The risk is timing, not uncertainty. The work is understood; the obligation just needs a short, clean close."
-        }
-        stakeholders={
-          commitmentsData?.detail?.stakeholders ??
-          "Amelia Hart, finance, and recruiting all depend on the updated framing staying consistent across their materials."
-        }
-        nextStep={commitmentsData?.detail?.nextStep ?? "Send the revised narrative language immediately after tomorrow's prep pass."}
-        linkedContext={
-          commitmentsData?.detail?.linkedContext ??
-          "Linked to the board-prep meeting, the recruiting thread, and the executive operating rhythm initiative."
-        }
-        recentHistory={
-          commitmentsData?.detail?.recentHistory ??
-          "Yesterday the commitment narrowed from a broader hiring brief rewrite to one focused narrative correction. That lowered scope but increased immediacy."
-        }
-        protectedContext={commitmentsData?.detail?.protectedContext ?? true}
-      />
+      {commitmentsData.overview ? (
+        <CommitmentDetailCard
+          title={commitmentsData.overview.title}
+          summary={commitmentsData.overview.summary}
+          href={commitmentsData.overview.href}
+          stateLabel={commitmentsData.overview.stateLabel}
+          timingLabel={commitmentsData.overview.timingLabel}
+          activityLabel={commitmentsData.overview.activityLabel}
+          priorityLabel={commitmentsData.overview.priorityLabel}
+          posture={commitmentsData.overview.posture}
+          sourceNote={commitmentsData.overview.sourceNote}
+          metrics={commitmentsData.overview.metrics}
+        />
+      ) : (
+        <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
+          <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Commitments brief</p>
+          <h2 className="brief-title">No canonical task commitments are surfaced yet.</h2>
+          <p className="brief-body">
+            Once Library tasks exist, this page will group those same canonical objects into an obligation view without copying them into a second store.
+          </p>
+        </section>
+      )}
 
       <CommitmentSection
         eyebrow="1"
-        title="What needs attention now"
-        description="Only the obligations that seem active enough to deserve foreground attention right now."
-        items={commitmentsData?.needsAttention ?? needsAttention}
+        title="Overdue"
+        description="Obligations whose due dates have already slipped. These stay first because recovery order matters more than chronology."
+        items={commitmentsData.sections.overdue}
+        emptyMessage="No overdue commitments are currently surfaced."
       />
 
       <CommitmentSection
         eyebrow="2"
-        title="What you owe vs what others owe"
-        description="A split view of obligations so the page clarifies ownership before it amplifies urgency."
-        items={commitmentsData?.whatIsOwed ?? whatIsOwed}
+        title="Due soon"
+        description="Active commitments due inside the next 72 hours, sorted by due time first and recent activity second."
+        items={commitmentsData.sections.dueSoon}
+        emptyMessage="Nothing is due inside the next 72 hours."
       />
 
       <CommitmentSection
         eyebrow="3"
-        title="At-risk commitments"
-        description="A very small list of commitments whose timing or dependency chain may be slipping."
-        items={commitmentsData?.atRisk ?? atRisk}
-      />
-
-      <CommitmentSection
-        eyebrow="4"
-        title="Recent changes"
-        description="Recent shifts in commitment shape or timing, kept brief and non-focal."
-        items={commitmentsData?.recentChanges ?? recentChanges}
+        title="Active, no due date"
+        description="Live obligations without a date yet, ordered by priority and then by most recent movement."
+        items={commitmentsData.sections.activeNoDue}
+        emptyMessage="No active undated commitments are currently surfaced."
       />
 
       <CollapsedCommitmentSection
-        eyebrow="Quiet background"
-        title="Backgrounded commitments"
-        summary="Expanded only when useful. Most lower-priority obligations should stay out of sight."
+        eyebrow="Background"
+        title="Later-dated commitments"
+        summary="These commitments have dates, but not inside the near-term window, so they stay available without competing for the top layer."
       >
         <div className="space-y-3">
-          {(commitmentsData?.quietBackground ?? quietBackground).map((item) => (
-            <div
-              key={`${item.title}-${item.due}`}
-              className="rounded-[1.35rem] border border-accent-moss/18 bg-[rgba(104,118,86,0.08)] px-4 py-4"
-            >
-              <p className="text-sm font-medium text-text">{item.title}</p>
-              <p className="mt-2 text-sm leading-6 text-text-muted">{item.summary}</p>
+          {commitmentsData.sections.upcomingLater.length > 0 ? (
+            commitmentsData.sections.upcomingLater.map((item) => <CommitmentRow key={item.id} {...item} />)
+          ) : (
+            <div className="rounded-[1.35rem] border border-line/65 bg-[rgba(255,255,255,0.48)] px-4 py-4 text-sm leading-6 text-text-muted">
+              No later-dated commitments are currently surfaced.
             </div>
-          ))}
+          )}
+        </div>
+      </CollapsedCommitmentSection>
+
+      <CollapsedCommitmentSection
+        eyebrow="Completed"
+        title="Recently completed"
+        summary="Closed commitments remain reachable, but they stay deemphasized so active obligations can lead."
+      >
+        <div className="space-y-3">
+          {commitmentsData.sections.completed.length > 0 ? (
+            commitmentsData.sections.completed.map((item) => <CommitmentRow key={item.id} {...item} />)
+          ) : (
+            <div className="rounded-[1.35rem] border border-line/65 bg-[rgba(255,255,255,0.48)] px-4 py-4 text-sm leading-6 text-text-muted">
+              No recent completed commitments are currently surfaced.
+            </div>
+          )}
         </div>
       </CollapsedCommitmentSection>
     </div>

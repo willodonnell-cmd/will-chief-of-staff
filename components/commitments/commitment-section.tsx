@@ -1,12 +1,15 @@
 import { CommitmentRow } from "@/components/commitments/commitment-row";
 
 type CommitmentItem = {
+  id: string;
   title: string;
   summary: string;
-  due: string;
-  owner: "you" | "others";
-  action?: string;
-  atRisk?: boolean;
+  href: string;
+  stateLabel: string;
+  dueLabel: string;
+  activityLabel: string;
+  priorityLabel: string | null;
+  tone: "overdue" | "soon" | "active" | "quiet";
 };
 
 type CommitmentSectionProps = {
@@ -14,9 +17,16 @@ type CommitmentSectionProps = {
   title: string;
   description: string;
   items: readonly CommitmentItem[];
+  emptyMessage?: string;
 };
 
-export function CommitmentSection({ eyebrow, title, description, items }: CommitmentSectionProps) {
+export function CommitmentSection({
+  eyebrow,
+  title,
+  description,
+  items,
+  emptyMessage = "No items are currently surfaced in this section."
+}: CommitmentSectionProps) {
   return (
     <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -31,9 +41,13 @@ export function CommitmentSection({ eyebrow, title, description, items }: Commit
       </div>
 
       <div className="mt-5 space-y-3">
-        {items.map((item) => (
-          <CommitmentRow key={`${item.title}-${item.due}`} {...item} />
-        ))}
+        {items.length > 0 ? (
+          items.map((item) => <CommitmentRow key={item.id} {...item} />)
+        ) : (
+          <div className="rounded-[1.35rem] border border-line/65 bg-[rgba(255,255,255,0.48)] px-4 py-4 text-sm leading-6 text-text-muted">
+            {emptyMessage}
+          </div>
+        )}
       </div>
     </section>
   );
