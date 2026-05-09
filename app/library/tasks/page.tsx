@@ -1,5 +1,6 @@
 import { LibraryShell } from "@/components/library/library-shell";
 import { listLibraryItems, parseLibraryQuery } from "@/lib/capture-library";
+import { getTaskConfig } from "@/lib/task-config";
 
 import { buildPathWithSearch, type LibrarySearchParams } from "../route-utils";
 
@@ -10,7 +11,7 @@ export default async function LibraryTasksPage({
 }) {
   const resolvedSearchParams = await searchParams;
   const query = parseLibraryQuery(resolvedSearchParams, "tasks");
-  const items = await listLibraryItems(query);
+  const [items, taskConfig] = await Promise.all([listLibraryItems(query), getTaskConfig()]);
 
   return (
     <LibraryShell
@@ -24,6 +25,8 @@ export default async function LibraryTasksPage({
       items={items}
       query={query}
       currentPath={buildPathWithSearch("/library/tasks", resolvedSearchParams)}
+      categories={taskConfig.categories}
+      commonCategories={taskConfig.commonCategories}
     />
   );
 }

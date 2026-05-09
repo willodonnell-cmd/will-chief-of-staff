@@ -1,19 +1,38 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Shield, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, Shield, Sparkles } from "lucide-react";
 
 import { persistCaptureAction } from "@/app/capture/actions";
+import type {
+  CapturePattern,
+  CapturePrivacy,
+  InitiativeOption,
+  TaskCaptureSettings,
+  TaskCategoryOption,
+  TaskPriority
+} from "@/lib/blackhawk-capture-model";
+import { formatTaskPriorityLabel } from "@/lib/blackhawk-capture-model";
 import { CaptureMicrophoneIcon } from "@/components/icons/capture-microphone-icon";
-import type { CapturePattern, CapturePrivacy } from "@/lib/captures";
 import { cn } from "@/lib/utils";
 
 type CaptureDraft = {
   pattern: CapturePattern;
   privacy: CapturePrivacy;
-  summary: string;
-  followUp: string;
   privateContext: string;
+  note: {
+    title: string;
+    body: string;
+    linkedInitiativeId: string | null;
+  };
+  task: {
+    description: string;
+    nextStep: string;
+    desiredOutcome: string;
+    priority: TaskPriority;
+    categoryId: string | null;
+    linkedInitiativeId: string | null;
+  };
 };
 
 type FeedbackState =
@@ -57,12 +76,24 @@ type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 const defaultDraft: CaptureDraft = {
   pattern: "note",
   privacy: "open",
-  summary: "",
-  followUp: "",
-  privateContext: ""
+  privateContext: "",
+  note: {
+    title: "",
+    body: "",
+    linkedInitiativeId: null
+  },
+  task: {
+    description: "",
+    nextStep: "",
+    desiredOutcome: "",
+    priority: "medium",
+    categoryId: null,
+    linkedInitiativeId: null
+  }
 };
 
-const LOCAL_CAPTURE_QUEUE_KEY = "chief-of-staff.capture-queue";
+const LOCAL_CAPTURE_QUEUE_KEY = "blackhawk.capture-queue.v2";
+const LAST_PATTERN_KEY = "blackhawk.capture.last-pattern";
 
 function labelForContext(from: string | null) {
   if (!from || from === "/capture") {
@@ -88,26 +119,8 @@ function labelForContext(from: string | null) {
   };
 }
 
-function placeholderForPattern(pattern: CapturePattern) {
-  return pattern === "note"
-    ? "Capture the thought before it turns into work."
-    : "Capture the next concrete task in one sentence.";
-}
-
 function submitLabelForPattern(pattern: CapturePattern) {
   return pattern === "note" ? "Save Note" : "Save Task";
-}
-
-function joinCaptureText(base: string, transcript: string) {
-  if (!base) {
-    return transcript;
-  }
-
-  if (!transcript) {
-    return base;
-  }
-
-  return `${base}${base.endsWith(" ") ? "" : " "}${transcript}`;
 }
 
 function readQueuedCaptures() {
@@ -167,43 +180,190 @@ function microphoneSupportMessage(error?: string) {
   switch (error) {
     case "not-allowed":
     case "service-not-allowed":
-      return "Voice Note access was denied. Type your note below and save it.";
+      return "Voice capture access was denied. Type below and save when ready.";
     case "audio-capture":
-      return "No microphone was available. Type your note below and save it.";
+      return "No microphone was available. Type below and save when ready.";
     case "network":
-      return "Voice Note was interrupted. Type your note below and save it.";
+      return "Voice capture was interrupted. Type below and save when ready.";
     default:
-      return "Voice Note is unavailable here. Type your note below and save it.";
+      return "Voice capture is unavailable here. Type below and save when ready.";
   }
+}
+
+function initiativeLabel(options: InitiativeOption[], id: string | null) {
+  return options.find((option) => option.id === id)?.title ?? "";
+}
+
+function preserveNoteTitleInTaskDescription(title: string, body: string) {
+  const trimmedTitle = title.trim();
+  const trimmedBody = body.trim();
+
+  if (!trimmedTitle) {
+    return trimmedBody;
+  }
+
+  if (!trimmedBody) {
+    return trimmedTitle;
+  }
+
+  if (trimmedBody.toLowerCase().startsWith(trimmedTitle.toLowerCase())) {
+    return trimmedBody;
+  }
+
+  return `${trimmedTitle}\n\n${trimmedBody}`;
+}
+
+function flattenTaskIntoNoteBody(task: CaptureDraft["task"]) {
+  const sections = [
+    task.description.trim(),
+    task.nextStep.trim() ? `Next Step:\n${task.nextStep.trim()}` : null,
+    task.desiredOutcome.trim() ? `Desired Outcome:\n${task.desiredOutcome.trim()}` : null
+  ].filter((value): value is string => Boolean(value));
+
+  return sections.join("\n\n");
 }
 
 type CaptureFlowProps = {
   initialFrom?: string | null;
+  categories: TaskCategoryOption[];
+  commonCategories: TaskCategoryOption[];
+  captureSettings: TaskCaptureSettings;
+  initiatives: InitiativeOption[];
 };
 
-export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
+export function CaptureFlow({
+  initialFrom,
+  categories,
+  commonCategories,
+  captureSettings,
+  initiatives
+}: CaptureFlowProps) {
   const inheritedContext = labelForContext(initialFrom ?? null);
   const [draft, setDraft] = useState<CaptureDraft>(defaultDraft);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
+  const [switchNotice, setSwitchNotice] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [showMoreCategories, setShowMoreCategories] = useState(false);
+  const [showNextStep, setShowNextStep] = useState(captureSettings.expandNextStepByDefault);
+  const [showDesiredOutcome, setShowDesiredOutcome] = useState(captureSettings.expandDesiredOutcomeByDefault);
+  const [noteInitiativeQuery, setNoteInitiativeQuery] = useState("");
+  const [taskInitiativeQuery, setTaskInitiativeQuery] = useState("");
   const summaryRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const recognitionBaseSummaryRef = useRef("");
+  const recognitionBaseValueRef = useRef("");
   const syncInProgressRef = useRef(false);
 
-  function updateDraft<K extends keyof CaptureDraft>(key: K, value: CaptureDraft[K]) {
-    setDraft((current) => ({
+  useEffect(() => {
+    const rememberedPattern =
+      typeof window !== "undefined" ? (window.localStorage.getItem(LAST_PATTERN_KEY) as CapturePattern | null) : null;
+
+    if (rememberedPattern === "task" || rememberedPattern === "note") {
+      setDraft((current) => ({
+        ...current,
+        pattern: rememberedPattern
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    setShowNextStep(captureSettings.expandNextStepByDefault);
+    setShowDesiredOutcome(captureSettings.expandDesiredOutcomeByDefault);
+  }, [captureSettings.expandDesiredOutcomeByDefault, captureSettings.expandNextStepByDefault]);
+
+  useEffect(() => {
+    setNoteInitiativeQuery(initiativeLabel(initiatives, draft.note.linkedInitiativeId));
+  }, [draft.note.linkedInitiativeId, initiatives]);
+
+  useEffect(() => {
+    setTaskInitiativeQuery(initiativeLabel(initiatives, draft.task.linkedInitiativeId));
+  }, [draft.task.linkedInitiativeId, initiatives]);
+
+  function rememberPattern(pattern: CapturePattern) {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(LAST_PATTERN_KEY, pattern);
+    }
+  }
+
+  function updateDraft(next: CaptureDraft | ((current: CaptureDraft) => CaptureDraft)) {
+    setDraft(next);
+  }
+
+  function updateNote<K extends keyof CaptureDraft["note"]>(key: K, value: CaptureDraft["note"][K]) {
+    updateDraft((current) => ({
       ...current,
-      [key]: value
+      note: {
+        ...current.note,
+        [key]: value
+      }
+    }));
+  }
+
+  function updateTask<K extends keyof CaptureDraft["task"]>(key: K, value: CaptureDraft["task"][K]) {
+    updateDraft((current) => ({
+      ...current,
+      task: {
+        ...current.task,
+        [key]: value
+      }
+    }));
+  }
+
+  function updatePrivacy(privacy: CapturePrivacy) {
+    updateDraft((current) => ({
+      ...current,
+      privacy
     }));
   }
 
   function restoreDraft(nextDraft: CaptureDraft) {
     setDraft(nextDraft);
+    setNoteInitiativeQuery(initiativeLabel(initiatives, nextDraft.note.linkedInitiativeId));
+    setTaskInitiativeQuery(initiativeLabel(initiatives, nextDraft.task.linkedInitiativeId));
     window.requestAnimationFrame(() => {
       summaryRef.current?.focus();
     });
+  }
+
+  function switchPattern(nextPattern: CapturePattern) {
+    if (nextPattern === draft.pattern) {
+      return;
+    }
+
+    setSwitchNotice(null);
+
+    if (nextPattern === "task") {
+      const mappedDescription = preserveNoteTitleInTaskDescription(draft.note.title, draft.note.body);
+      updateDraft((current) => ({
+        ...current,
+        pattern: "task",
+        task: {
+          ...current.task,
+          description: mappedDescription || current.task.description,
+          priority: current.task.priority ?? "medium",
+          linkedInitiativeId: current.note.linkedInitiativeId ?? current.task.linkedInitiativeId
+        }
+      }));
+      rememberPattern("task");
+      return;
+    }
+
+    const hasStructuredTaskFields = Boolean(draft.task.nextStep.trim() || draft.task.desiredOutcome.trim());
+    updateDraft((current) => ({
+      ...current,
+      pattern: "note",
+      note: {
+        ...current.note,
+        body: flattenTaskIntoNoteBody(current.task) || current.note.body,
+        linkedInitiativeId: current.task.linkedInitiativeId ?? current.note.linkedInitiativeId
+      }
+    }));
+
+    if (hasStructuredTaskFields) {
+      setSwitchNotice("Next Step and Desired Outcome were preserved, but they flatten into note text.");
+    }
+
+    rememberPattern("note");
   }
 
   async function syncQueuedCaptures() {
@@ -227,9 +387,9 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
           sourcePath: queuedCapture.sourcePath,
           pattern: queuedCapture.pattern,
           privacy: queuedCapture.privacy,
-          summary: queuedCapture.summary,
-          followUp: queuedCapture.followUp,
-          privateContext: queuedCapture.privateContext
+          privateContext: queuedCapture.privateContext,
+          note: queuedCapture.note,
+          task: queuedCapture.task
         });
 
         if (!result.ok) {
@@ -267,6 +427,19 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
     };
   }, []);
 
+  function currentPrimaryValue() {
+    return draft.pattern === "note" ? draft.note.body : draft.task.description;
+  }
+
+  function setCurrentPrimaryValue(value: string) {
+    if (draft.pattern === "note") {
+      updateNote("body", value);
+      return;
+    }
+
+    updateTask("description", value);
+  }
+
   function handleMicrophoneToggle() {
     if (isListening) {
       recognitionRef.current?.stop();
@@ -289,7 +462,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
     }
 
     const recognition = new Recognition();
-    recognitionBaseSummaryRef.current = draft.summary.trim();
+    recognitionBaseValueRef.current = currentPrimaryValue().trim();
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = "en-US";
@@ -300,10 +473,8 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
         .join(" ")
         .trim();
 
-      setDraft((current) => ({
-        ...current,
-        summary: joinCaptureText(recognitionBaseSummaryRef.current, transcript)
-      }));
+      const nextValue = [recognitionBaseValueRef.current, transcript].filter(Boolean).join(" ").trim();
+      setCurrentPrimaryValue(nextValue);
     };
 
     recognition.onerror = (event) => {
@@ -328,7 +499,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
       setIsListening(true);
       setFeedback({
         kind: "status",
-        message: "Voice Note is listening. Speak now, then Save Note when the text looks right."
+        message: `Voice capture is listening. Speak now, then ${submitLabelForPattern(draft.pattern)} when the text looks right.`
       });
     } catch {
       recognitionRef.current = null;
@@ -344,17 +515,32 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const trimmedSummary = draft.summary.trim();
-    if (!trimmedSummary) {
+    const trimmedNoteBody = draft.note.body.trim();
+    const trimmedTaskDescription = draft.task.description.trim();
+    if (draft.pattern === "note" && !trimmedNoteBody) {
+      summaryRef.current?.focus();
+      return;
+    }
+
+    if (draft.pattern === "task" && !trimmedTaskDescription) {
       summaryRef.current?.focus();
       return;
     }
 
     const savedDraft: CaptureDraft = {
       ...draft,
-      summary: trimmedSummary,
-      followUp: draft.followUp.trim(),
-      privateContext: draft.privateContext.trim()
+      privateContext: draft.privateContext.trim(),
+      note: {
+        ...draft.note,
+        title: draft.note.title.trim(),
+        body: trimmedNoteBody
+      },
+      task: {
+        ...draft.task,
+        description: trimmedTaskDescription,
+        nextStep: draft.task.nextStep.trim(),
+        desiredOutcome: draft.task.desiredOutcome.trim()
+      }
     };
 
     setIsPending(true);
@@ -364,9 +550,9 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
         sourcePath: initialFrom ?? null,
         pattern: savedDraft.pattern,
         privacy: savedDraft.privacy,
-        summary: savedDraft.summary,
-        followUp: savedDraft.followUp,
-        privateContext: savedDraft.privateContext
+        privateContext: savedDraft.privateContext,
+        note: savedDraft.note,
+        task: savedDraft.task
       });
 
       if (!result.ok) {
@@ -383,10 +569,18 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
         message: `Captured ${savedDraft.pattern} in ${inheritedContext.name}.`,
         draft: savedDraft
       });
-      setDraft({
+      setDraft((current) => ({
         ...defaultDraft,
-        pattern: savedDraft.pattern
-      });
+        pattern: savedDraft.pattern,
+        task: {
+          ...defaultDraft.task,
+          linkedInitiativeId: savedDraft.pattern === "task" ? current.task.linkedInitiativeId : null
+        }
+      }));
+      setNoteInitiativeQuery("");
+      if (savedDraft.pattern !== "task") {
+        setTaskInitiativeQuery("");
+      }
       void syncQueuedCaptures();
     } finally {
       setIsPending(false);
@@ -398,15 +592,20 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
       return;
     }
 
-    const queuedCapture = queueCaptureLocally(initialFrom ?? null, feedback.draft);
-    setDraft({
+    const failedDraft = feedback.draft;
+    const queuedCapture = queueCaptureLocally(initialFrom ?? null, failedDraft);
+    setDraft((current) => ({
       ...defaultDraft,
-      pattern: feedback.draft.pattern
-    });
+      pattern: failedDraft.pattern,
+      task: {
+        ...defaultDraft.task,
+        linkedInitiativeId: failedDraft.pattern === "task" ? current.task.linkedInitiativeId : null
+      }
+    }));
     setFeedback({
       kind: "queued",
       message: "Saved locally only, not yet synced to Supabase.",
-      draft: feedback.draft,
+      draft: failedDraft,
       queueId: queuedCapture.id
     });
   }
@@ -436,15 +635,42 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
     restoreDraft(feedback.draft);
   }
 
+  function handleInitiativeInput(kind: "note" | "task", value: string) {
+    const trimmed = value.trim();
+    const match = initiatives.find((initiative) => initiative.title.toLowerCase() === trimmed.toLowerCase()) ?? null;
+
+    if (kind === "note") {
+      setNoteInitiativeQuery(value);
+      updateNote("linkedInitiativeId", match?.id ?? (trimmed ? draft.note.linkedInitiativeId : null));
+      if (!trimmed) {
+        updateNote("linkedInitiativeId", null);
+      }
+      return;
+    }
+
+    setTaskInitiativeQuery(value);
+    updateTask("linkedInitiativeId", match?.id ?? (trimmed ? draft.task.linkedInitiativeId : null));
+    if (!trimmed) {
+      updateTask("linkedInitiativeId", null);
+    }
+  }
+
   const hybridHelper =
     draft.privacy === "hybrid"
       ? "Hybrid keeps the main capture attached to the current context while the private note remains protected."
       : draft.privacy === "protected"
         ? "Protected capture is private by default."
         : "Open capture stays available within the inherited context.";
+  const selectedTaskCategory = categories.find((category) => category.id === draft.task.categoryId) ?? null;
 
   return (
     <div className="space-y-6 lg:space-y-8">
+      <datalist id="capture-initiative-options">
+        {initiatives.map((initiative) => (
+          <option key={initiative.id} value={initiative.title} />
+        ))}
+      </datalist>
+
       <section className="grid gap-4 xl:grid-cols-[1.12fr_0.88fr]">
         <div className="rounded-[1.85rem] border border-line/75 bg-white/78 p-5 focus-elevation md:p-6 lg:p-7">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -459,10 +685,9 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
                 <CaptureMicrophoneIcon className="h-5 w-5" />
                 <span className="text-sm font-medium">Capture</span>
               </button>
-              <h2 className="page-title mt-4">Always available, with context already attached.</h2>
+              <h2 className="page-title mt-4">Choose the object first, then keep the entry light.</h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted md:text-base">
-                Use note and task patterns without leaving the current working surface. Keep sensitive context private
-                when needed, and confirm quietly once the capture lands.
+                Notes stay lightweight memory. Tasks stay operational. Switching is easy, and Blackhawk preserves what it can instead of wiping the form.
               </p>
             </div>
 
@@ -477,8 +702,8 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
         <aside className="rounded-[1.85rem] border border-line/75 bg-white/68 p-5 md:p-6">
           <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Behavior</p>
           <div className="mt-4 space-y-4 text-sm leading-6 text-text-muted">
-            <p>Capture stays present in the center of the iPhone nav and as a persistent shell action on larger screens.</p>
-            <p>Undo and Edit remain available after capture so fast entry never traps the draft.</p>
+            <p>Blackhawk remembers whether you last captured a Note or a Task without turning it into an admin setting.</p>
+            <p>Task fields stay structured, but optional detail sits behind quiet expansion instead of crowding the first pass.</p>
             <p className="flex items-start gap-2">
               <Shield className="mt-1 h-4 w-4 shrink-0 text-accent-red" />
               Corvette red appears only around private or hybrid moments.
@@ -491,13 +716,13 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
         <section className="rounded-[1.85rem] border border-line/75 bg-white/76 p-5 md:p-6">
           <div className="space-y-5">
             <div>
-              <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Pattern</p>
+              <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Type</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {(["note", "task"] as CapturePattern[]).map((pattern) => (
                   <button
                     key={pattern}
                     type="button"
-                    onClick={() => updateDraft("pattern", pattern)}
+                    onClick={() => switchPattern(pattern)}
                     className={cn(
                       "rounded-full border px-4 py-2 text-sm font-medium transition-colors duration-200",
                       draft.pattern === pattern
@@ -509,34 +734,170 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
                   </button>
                 ))}
               </div>
+              {switchNotice ? (
+                <p className="mt-3 rounded-[1rem] border border-line/70 bg-white/72 px-4 py-3 text-sm leading-6 text-text-muted">
+                  {switchNotice}
+                </p>
+              ) : null}
             </div>
 
-            <div>
-              <label className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle" htmlFor="summary">
-                {draft.pattern === "note" ? "Note" : "Task"}
-              </label>
-              <textarea
-                id="summary"
-                ref={summaryRef}
-                rows={5}
-                value={draft.summary}
-                onChange={(event) => updateDraft("summary", event.target.value)}
-                placeholder={placeholderForPattern(draft.pattern)}
-                className="mt-3 w-full resize-none rounded-[1.45rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-4 text-base text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
-              />
-            </div>
+            {draft.pattern === "note" ? (
+              <div className="space-y-5">
+                <label className="block">
+                  <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Title (Optional)</span>
+                  <input
+                    value={draft.note.title}
+                    onChange={(event) => updateNote("title", event.target.value)}
+                    placeholder="Short title if it helps retrieval later"
+                    className="mt-3 w-full rounded-[1.3rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-3 text-sm text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
+                  />
+                </label>
 
-            <div>
-              <label className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle" htmlFor="follow-up">
-                {draft.pattern === "task" ? "Next step" : "Optional follow-up"}
-              </label>
+                <label className="block">
+                  <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Body</span>
+                  <textarea
+                    ref={summaryRef}
+                    rows={7}
+                    value={draft.note.body}
+                    onChange={(event) => updateNote("body", event.target.value)}
+                    placeholder="Capture the thought before it turns into work."
+                    className="mt-3 w-full resize-none rounded-[1.45rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-4 text-base text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <label className="block">
+                  <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Task Description</span>
+                  <textarea
+                    ref={summaryRef}
+                    rows={5}
+                    value={draft.task.description}
+                    onChange={(event) => updateTask("description", event.target.value)}
+                    placeholder="Capture the next concrete task in one sentence."
+                    className="mt-3 w-full resize-none rounded-[1.45rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-4 text-base text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
+                  />
+                </label>
+
+                <div className="grid gap-5 md:grid-cols-2">
+                  <div>
+                    <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Priority</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(["high", "medium", "low"] as TaskPriority[]).map((priority) => (
+                        <button
+                          key={priority}
+                          type="button"
+                          onClick={() => updateTask("priority", priority)}
+                          className={cn(
+                            "rounded-full border px-4 py-2 text-sm font-medium transition",
+                            draft.task.priority === priority
+                              ? "border-line bg-[rgb(var(--color-shell))] text-white"
+                              : "border-line/75 bg-white/60 text-text-muted hover:text-text"
+                          )}
+                        >
+                          {formatTaskPriorityLabel(priority)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Category</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {commonCategories.map((category) => (
+                        <button
+                          key={category.id}
+                          type="button"
+                          onClick={() => updateTask("categoryId", category.id)}
+                          className={cn(
+                            "rounded-full border px-4 py-2 text-sm font-medium transition",
+                            draft.task.categoryId === category.id
+                              ? "border-line bg-[rgb(var(--color-shell))] text-white"
+                              : "border-line/75 bg-white/60 text-text-muted hover:text-text"
+                          )}
+                        >
+                          {category.name}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setShowMoreCategories((current) => !current)}
+                        className="rounded-full border border-line/75 bg-white/60 px-4 py-2 text-sm font-medium text-text-muted transition hover:text-text"
+                      >
+                        More
+                      </button>
+                    </div>
+                    {showMoreCategories ? (
+                      <select
+                        value={draft.task.categoryId ?? ""}
+                        onChange={(event) => updateTask("categoryId", event.target.value || null)}
+                        className="mt-3 w-full rounded-[1rem] border border-line/75 bg-white/78 px-4 py-3 text-sm text-text outline-none"
+                      >
+                        <option value="">Leave uncategorized for now</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                    <p className="mt-3 text-sm text-text-muted">
+                      {selectedTaskCategory ? `${selectedTaskCategory.name} selected.` : "If you save without choosing, Blackhawk assigns TBD."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowNextStep((current) => !current)}
+                    className="flex w-full items-center justify-between text-left"
+                  >
+                    <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Next Step</span>
+                    {showNextStep ? <ChevronUp className="h-4 w-4 text-text-subtle" /> : <ChevronDown className="h-4 w-4 text-text-subtle" />}
+                  </button>
+                  {showNextStep ? (
+                    <input
+                      value={draft.task.nextStep}
+                      onChange={(event) => updateTask("nextStep", event.target.value)}
+                      placeholder="What should happen next?"
+                      className="w-full rounded-[1rem] border border-line/75 bg-white/78 px-4 py-3 text-sm text-text outline-none"
+                    />
+                  ) : null}
+                </div>
+
+                <div className="space-y-3 rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowDesiredOutcome((current) => !current)}
+                    className="flex w-full items-center justify-between text-left"
+                  >
+                    <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Desired Outcome</span>
+                    {showDesiredOutcome ? <ChevronUp className="h-4 w-4 text-text-subtle" /> : <ChevronDown className="h-4 w-4 text-text-subtle" />}
+                  </button>
+                  {showDesiredOutcome ? (
+                    <textarea
+                      rows={3}
+                      value={draft.task.desiredOutcome}
+                      onChange={(event) => updateTask("desiredOutcome", event.target.value)}
+                      placeholder="What does success look like?"
+                      className="w-full resize-none rounded-[1.05rem] border border-line/75 bg-white/78 px-4 py-3 text-sm leading-6 text-text outline-none"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-[1.45rem] border border-line/75 bg-[rgba(255,255,255,0.58)] p-4">
+              <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Linked Initiative</p>
               <input
-                id="follow-up"
-                value={draft.followUp}
-                onChange={(event) => updateDraft("followUp", event.target.value)}
-                placeholder={draft.pattern === "task" ? "Owner, due cue, or follow-up" : "Turn this into a task if needed"}
-                className="mt-3 w-full rounded-[1.3rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-3 text-sm text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
+                list="capture-initiative-options"
+                value={draft.pattern === "note" ? noteInitiativeQuery : taskInitiativeQuery}
+                onChange={(event) => handleInitiativeInput(draft.pattern, event.target.value)}
+                placeholder="Optional initiative link"
+                className="mt-3 w-full rounded-[1rem] border border-line/75 bg-white/78 px-4 py-3 text-sm text-text outline-none"
               />
+              <p className="mt-3 text-sm text-text-muted">Optional and intentionally quieter than the main task or note fields.</p>
             </div>
           </div>
         </section>
@@ -553,7 +914,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
                 <button
                   key={privacy}
                   type="button"
-                  onClick={() => updateDraft("privacy", privacy)}
+                  onClick={() => updatePrivacy(privacy)}
                   className={cn(
                     "rounded-full border px-4 py-2 text-sm font-medium transition-colors duration-200",
                     draft.privacy === privacy
@@ -579,7 +940,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
                 id="private-context"
                 rows={4}
                 value={draft.privateContext}
-                onChange={(event) => updateDraft("privateContext", event.target.value)}
+                onChange={(event) => setDraft((current) => ({ ...current, privateContext: event.target.value }))}
                 placeholder={
                   draft.privacy === "hybrid"
                     ? "Add the sensitive detail that should stay protected."
@@ -593,7 +954,7 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
           <div className="mt-6 rounded-[1.45rem] border border-line/75 bg-[rgba(255,255,255,0.58)] p-4">
             <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">After capture</p>
             <p className="mt-3 text-sm leading-6 text-text-muted">
-              A single quiet confirmation appears after save, with Undo and Edit kept immediately adjacent.
+              Save confirms quietly. Undo and Edit stay immediately adjacent so fast entry never traps the draft.
             </p>
           </div>
 
@@ -606,7 +967,9 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
               <CaptureMicrophoneIcon className="h-4 w-4" />
               {submitLabelForPattern(draft.pattern)}
             </button>
-            <p className="text-sm text-text-muted">Capture first. Sort and draft later.</p>
+            <p className="text-sm text-text-muted">
+              {draft.pattern === "note" ? "Capture memory first. Organize later." : "Capture structure first. Execute later."}
+            </p>
           </div>
 
           <div
@@ -651,21 +1014,21 @@ export function CaptureFlow({ initialFrom }: CaptureFlowProps) {
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="max-w-2xl">
             <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Patterns</p>
-            <h3 className="section-title">Two capture shapes, one quiet flow.</h3>
+            <h3 className="section-title">Two distinct object types, one calm flow.</h3>
           </div>
           <Sparkles className="h-5 w-5 text-text-subtle" />
         </div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div className="rounded-[1.35rem] border border-line/70 bg-white/64 p-4">
-            <p className="text-sm font-medium text-text">Note pattern</p>
+            <p className="text-sm font-medium text-text">Note</p>
             <p className="mt-2 text-sm leading-6 text-text-muted">
-              Fast intake for observations, fragments, and context that may become useful later.
+              Lightweight memory and context. Search and recency matter more than operational metadata.
             </p>
           </div>
           <div className="rounded-[1.35rem] border border-line/70 bg-white/64 p-4">
-            <p className="text-sm font-medium text-text">Task pattern</p>
+            <p className="text-sm font-medium text-text">Task</p>
             <p className="mt-2 text-sm leading-6 text-text-muted">
-              Captures a concrete next move while keeping optional private context attached when the work is sensitive.
+              Operational object with description, priority, category, and optional depth kept behind quiet expansion.
             </p>
           </div>
         </div>

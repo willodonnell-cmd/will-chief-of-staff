@@ -2,18 +2,17 @@ import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { withSupabaseTimeout } from "@/lib/supabase/request-timeout";
 import { execFile } from "node:child_process";
+import {
+  buildNoteWorkingContent,
+  buildTaskWorkingContent,
+  computeNoteDisplayTitle,
+  computeTaskDisplayTitle,
+  type BlackhawkCaptureInput as CaptureInput,
+  type CapturePattern,
+  type CapturePrivacy
+} from "@/lib/blackhawk-capture-model";
 
-export type CapturePattern = "note" | "task";
-export type CapturePrivacy = "open" | "protected" | "hybrid";
-
-export type CaptureInput = {
-  sourcePath: string | null;
-  pattern: CapturePattern;
-  privacy: CapturePrivacy;
-  summary: string;
-  followUp: string;
-  privateContext: string;
-};
+export type { CaptureInput };
 
 type CaptureRecord = {
   id: string;
@@ -52,34 +51,14 @@ export type SaveCaptureResult =
   | {
       ok: false;
       error: string;
-    };
+};
 
-function deriveCaptureTitle(summary: string) {
-  const collapsed = summary.replace(/\s+/g, " ").trim();
-  if (!collapsed) {
-    return "Untitled capture";
-  }
-
-  if (collapsed.length <= 120) {
-    return collapsed;
-  }
-
-  return `${collapsed.slice(0, 117).trimEnd()}...`;
-}
-
-function buildOriginalContent(input: CaptureInput) {
-  const sections = [input.summary.trim()];
-
-  if (input.followUp.trim()) {
-    sections.push(`Follow-up:\n${input.followUp.trim()}`);
-  }
-
-  if (input.privateContext.trim()) {
-    sections.push(`Private context:\n${input.privateContext.trim()}`);
-  }
-
-  return sections.join("\n\n");
-}
+type CaptureInsertContext = {
+  linkedInitiativeId: string | null;
+  linkedInitiativeTitle: string | null;
+  taskCategoryId: string | null;
+  taskCategoryName: string | null;
+};
 
 function mapCapture(record: CaptureRecord): SavedCapture {
   return {
@@ -173,17 +152,58 @@ function shouldRetryLegacyCaptureInsert(error: CaptureWriteError | null | undefi
     errorText.includes('column "original_content" of relation "captures" does not exist') ||
     errorText.includes('column "working_content" of relation "captures" does not exist') ||
     errorText.includes('column "last_active_at" of relation "captures" does not exist') ||
-    errorText.includes('column "save_state" of relation "captures" does not exist')
+    errorText.includes('column "save_state" of relation "captures" does not exist') ||
+    errorText.includes('column "note_body" of relation "captures" does not exist') ||
+    errorText.includes('column "task_description" of relation "captures" does not exist') ||
+    errorText.includes('column "task_category_id" of relation "captures" does not exist') ||
+    errorText.includes('column "linked_initiative_id" of relation "captures" does not exist')
   );
 }
 
-function buildCaptureInsertPayload(input: CaptureInput, includeLibraryFields: boolean) {
+function buildLegacySummary(input: CaptureInput) {
+  if (input.pattern === "note") {
+    return {
+      summary: input.note.body.trim(),
+      followUp: input.note.title.trim(),
+      title: computeNoteDisplayTitle(input.note.title, input.note.body)
+    };
+  }
+
+  const followUpSections = [input.task.nextStep.trim(), input.task.desiredOutcome.trim()].filter(Boolean);
+
+  return {
+    summary: input.task.description.trim(),
+    followUp: followUpSections.join("\n\n"),
+    title: computeTaskDisplayTitle(input.task.description)
+  };
+}
+
+function buildOriginalContent(input: CaptureInput, context: CaptureInsertContext) {
+  const mainContent =
+    input.pattern === "note"
+      ? buildNoteWorkingContent(input.note)
+      : buildTaskWorkingContent(input.task, {
+          categoryName: context.taskCategoryName,
+          initiativeTitle: context.linkedInitiativeTitle
+        });
+
+  const sections = [mainContent];
+
+  if (input.privateContext.trim()) {
+    sections.push(`Private context:\n${input.privateContext.trim()}`);
+  }
+
+  return sections.filter(Boolean).join("\n\n");
+}
+
+function buildCaptureInsertPayload(input: CaptureInput, context: CaptureInsertContext, includeLibraryFields: boolean) {
+  const legacy = buildLegacySummary(input);
   const basePayload = {
     source_path: input.sourcePath,
     pattern: input.pattern,
     privacy: input.privacy,
-    summary: input.summary,
-    follow_up: input.followUp || null,
+    summary: legacy.summary,
+    follow_up: legacy.followUp || null,
     private_context: input.privateContext || null
   };
 
@@ -191,15 +211,25 @@ function buildCaptureInsertPayload(input: CaptureInput, includeLibraryFields: bo
     return basePayload;
   }
 
-  const originalContent = buildOriginalContent(input);
+  const originalContent = buildOriginalContent(input, context);
+  const now = new Date().toISOString();
 
   return {
     ...basePayload,
     type: input.pattern,
-    title: deriveCaptureTitle(input.summary),
+    title: legacy.title,
     original_content: originalContent,
     working_content: originalContent,
-    last_active_at: new Date().toISOString(),
+    last_active_at: now,
+    note_title: input.pattern === "note" ? input.note.title.trim() || null : null,
+    note_body: input.pattern === "note" ? input.note.body.trim() : null,
+    task_description: input.pattern === "task" ? input.task.description.trim() : null,
+    task_next_step: input.pattern === "task" ? input.task.nextStep.trim() || null : null,
+    task_desired_outcome: input.pattern === "task" ? input.task.desiredOutcome.trim() || null : null,
+    task_category_id: input.pattern === "task" ? context.taskCategoryId : null,
+    linked_initiative_id: context.linkedInitiativeId,
+    due_at: input.pattern === "task" ? input.task.dueAt ?? null : null,
+    priority: input.pattern === "task" ? input.task.priority : null,
     save_state: "saved" as const
   };
 }
@@ -219,7 +249,8 @@ function execFileAsync(file: string, args: string[]) {
 
 async function insertCaptureViaCurlFallback(
   userId: string,
-  input: CaptureInput
+  input: CaptureInput,
+  context: CaptureInsertContext
 ): Promise<[SavedCapture | null, string | null]> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const apiKey =
@@ -237,7 +268,7 @@ async function insertCaptureViaCurlFallback(
 
   const payload = JSON.stringify({
     user_id: userId,
-    ...buildCaptureInsertPayload(input, true)
+    ...buildCaptureInsertPayload(input, context, true)
   });
 
   try {
@@ -296,6 +327,62 @@ async function insertCaptureViaCurlFallback(
   }
 }
 
+async function resolveCaptureInsertContext(
+  userId: string,
+  client: NonNullable<Awaited<ReturnType<typeof resolveCurrentAppUser>>>["client"],
+  input: CaptureInput
+): Promise<CaptureInsertContext | null> {
+  const linkedInitiativeId =
+    input.pattern === "note" ? input.note.linkedInitiativeId : input.task.linkedInitiativeId;
+
+  let linkedInitiativeTitle: string | null = null;
+  if (linkedInitiativeId) {
+    const { data } = await client
+      .from("initiatives")
+      .select("id, title")
+      .eq("user_id", userId)
+      .eq("id", linkedInitiativeId)
+      .maybeSingle<{ id: string; title: string }>();
+
+    linkedInitiativeTitle = data?.title ?? null;
+  }
+
+  if (input.pattern === "note") {
+    return {
+      linkedInitiativeId: linkedInitiativeTitle ? linkedInitiativeId : null,
+      linkedInitiativeTitle,
+      taskCategoryId: null,
+      taskCategoryName: null
+    };
+  }
+
+  const { data: categories } = await client
+    .from("task_categories")
+    .select("id, name, status, is_fallback, sort_order")
+    .eq("user_id", userId)
+    .order("sort_order", { ascending: true })
+    .returns<Array<{ id: string; name: string; status: "active" | "inactive"; is_fallback: boolean; sort_order: number }>>();
+
+  const activeCategories = (categories ?? []).filter((category) => category.status === "active");
+  const fallbackCategory =
+    activeCategories.find((category) => category.is_fallback) ??
+    activeCategories.find((category) => category.name.trim().toLowerCase() === "tbd") ??
+    null;
+  const selectedCategory =
+    activeCategories.find((category) => category.id === input.task.categoryId) ?? fallbackCategory ?? null;
+
+  if (!selectedCategory) {
+    return null;
+  }
+
+  return {
+    linkedInitiativeId: linkedInitiativeTitle ? linkedInitiativeId : null,
+    linkedInitiativeTitle,
+    taskCategoryId: selectedCategory.id,
+    taskCategoryName: selectedCategory.name
+  };
+}
+
 export async function saveCapture(input: CaptureInput): Promise<SaveCaptureResult> {
   const resolved = await resolveCurrentAppUser();
   if (!resolved) {
@@ -328,11 +415,19 @@ export async function saveCapture(input: CaptureInput): Promise<SaveCaptureResul
     pattern: input.pattern,
     privacy: input.privacy
   });
+  const insertContext = await resolveCaptureInsertContext(user.id, client, input);
+  if (!insertContext) {
+    return {
+      ok: false,
+      error: "Task categories are not configured yet. Run the latest migration and ensure the fallback TBD category exists."
+    };
+  }
+
   let { data, error } = await client
     .from("captures")
     .insert({
       user_id: user.id,
-      ...buildCaptureInsertPayload(input, true)
+      ...buildCaptureInsertPayload(input, insertContext, true)
     })
     .select("id, source_path, pattern, privacy, summary, follow_up, private_context, captured_at")
     .single<CaptureRecord>();
@@ -349,7 +444,7 @@ export async function saveCapture(input: CaptureInput): Promise<SaveCaptureResul
       .from("captures")
       .insert({
         user_id: user.id,
-        ...buildCaptureInsertPayload(input, false)
+        ...buildCaptureInsertPayload(input, insertContext, false)
       })
       .select("id, source_path, pattern, privacy, summary, follow_up, private_context, captured_at")
       .single<CaptureRecord>();
@@ -370,7 +465,7 @@ export async function saveCapture(input: CaptureInput): Promise<SaveCaptureResul
     });
 
     if (shouldUseCurlFallback(error)) {
-      const [fallbackCapture, curlRestMessage] = await insertCaptureViaCurlFallback(user.id, input);
+      const [fallbackCapture, curlRestMessage] = await insertCaptureViaCurlFallback(user.id, input, insertContext);
       if (fallbackCapture) {
         return {
           ok: true,

@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import {
   appendLibraryItemUpdate,
   archiveLibraryItem,
+  createTaskFromNote,
   deleteLibraryItem,
   setLibraryTaskCompletion,
   unarchiveLibraryItem,
@@ -42,7 +43,8 @@ export async function updateWorkingContentAction(formData: FormData) {
   const result = await updateLibraryItemWorkingCopy({
     captureId,
     title: String(formData.get("title") ?? ""),
-    workingContent: String(formData.get("workingContent") ?? "")
+    workingContent: String(formData.get("workingContent") ?? ""),
+    linkedInitiativeId: String(formData.get("linkedInitiativeId") ?? "") || null
   });
 
   revalidateLibraryPaths(captureId);
@@ -54,14 +56,39 @@ export async function updateTaskDetailsAction(formData: FormData) {
   const redirectTo = sanitizeLibraryPath(formData.get("redirectTo"), `/library/${captureId}`);
   const result = await updateLibraryTaskDetails({
     captureId,
-    title: String(formData.get("title") ?? ""),
+    description: String(formData.get("description") ?? ""),
+    nextStep: String(formData.get("nextStep") ?? ""),
+    desiredOutcome: String(formData.get("desiredOutcome") ?? ""),
     status: String(formData.get("status") ?? ""),
     dueAt: String(formData.get("dueAt") ?? ""),
-    priority: String(formData.get("priority") ?? "")
+    priority: String(formData.get("priority") ?? ""),
+    categoryId: String(formData.get("categoryId") ?? "") || null,
+    linkedInitiativeId: String(formData.get("linkedInitiativeId") ?? "") || null
   });
 
   revalidateLibraryPaths(captureId);
   redirect(withFlash(redirectTo, result.ok ? "notice" : "error", result.ok ? "task-details-saved" : result.error) as Route);
+}
+
+export async function createTaskFromNoteAction(formData: FormData) {
+  const captureId = String(formData.get("captureId") ?? "");
+  const redirectTo = sanitizeLibraryPath(formData.get("redirectTo"), `/library/${captureId}`);
+  const result = await createTaskFromNote({
+    captureId,
+    description: String(formData.get("description") ?? ""),
+    nextStep: String(formData.get("nextStep") ?? ""),
+    desiredOutcome: String(formData.get("desiredOutcome") ?? ""),
+    priority: String(formData.get("priority") ?? ""),
+    categoryId: String(formData.get("categoryId") ?? "") || null,
+    linkedInitiativeId: String(formData.get("linkedInitiativeId") ?? "") || null
+  });
+
+  revalidateLibraryPaths(captureId);
+  if (!result.ok) {
+    redirect(withFlash(redirectTo, "error", result.error) as Route);
+  }
+
+  redirect(withFlash(`/library/${result.object.captureId}?from=%2Flibrary%2Ftasks`, "notice", "task-created-from-note") as Route);
 }
 
 export async function appendUpdateAction(formData: FormData) {

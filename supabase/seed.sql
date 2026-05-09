@@ -9,6 +9,36 @@ on conflict (email) do update
 set full_name = excluded.full_name,
     timezone = excluded.timezone;
 
+insert into public.task_categories (user_id, slug, name, sort_order, is_fallback)
+values
+  ('11111111-1111-1111-1111-111111111111', 'priority-action', 'Priority Action', 0, false),
+  ('11111111-1111-1111-1111-111111111111', 'calendar', 'Calendar', 1, false),
+  ('11111111-1111-1111-1111-111111111111', 'person', 'Person', 2, false),
+  ('11111111-1111-1111-1111-111111111111', 'agenda', 'Agenda', 3, false),
+  ('11111111-1111-1111-1111-111111111111', 'waiting-for', 'Waiting For', 4, false),
+  ('11111111-1111-1111-1111-111111111111', 'personal', 'Personal', 5, false),
+  ('11111111-1111-1111-1111-111111111111', 'tbd', 'TBD', 6, true)
+on conflict (user_id, slug) do update
+set
+  name = excluded.name,
+  sort_order = excluded.sort_order,
+  is_fallback = excluded.is_fallback;
+
+insert into public.task_capture_settings (
+  user_id,
+  expand_next_step_by_default,
+  expand_desired_outcome_by_default
+)
+values (
+  '11111111-1111-1111-1111-111111111111',
+  false,
+  false
+)
+on conflict (user_id) do update
+set
+  expand_next_step_by_default = excluded.expand_next_step_by_default,
+  expand_desired_outcome_by_default = excluded.expand_desired_outcome_by_default;
+
 insert into public.people (
   id,
   user_id,

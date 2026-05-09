@@ -1,4 +1,5 @@
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
+import type { InitiativeOption } from "@/lib/blackhawk-capture-model";
 
 type InitiativeRecord = {
   id: string;
@@ -106,4 +107,35 @@ export async function getInitiativesPageData(): Promise<InitiativesPageData | nu
     })),
     goalMarkers: bySection("goal_marker").map((item) => item.body)
   };
+}
+
+type InitiativeOptionRow = {
+  id: string;
+  title: string;
+  status: string;
+};
+
+export async function listInitiativeOptions(): Promise<InitiativeOption[]> {
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
+    return [];
+  }
+
+  const { data, error } = await resolved.client
+    .from("initiatives")
+    .select("id, title, status")
+    .eq("user_id", resolved.user.id)
+    .in("status", ["active", "quiet", "at_risk"])
+    .order("sort_order", { ascending: true })
+    .returns<InitiativeOptionRow[]>();
+
+  if (error) {
+    return [];
+  }
+
+  return (data ?? []).map((initiative) => ({
+    id: initiative.id,
+    title: initiative.title,
+    status: initiative.status
+  }));
 }

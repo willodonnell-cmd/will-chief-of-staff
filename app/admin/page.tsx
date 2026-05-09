@@ -8,11 +8,20 @@ import {
   UserRoundCog
 } from "lucide-react";
 
+import {
+  createTaskCategoryAction,
+  deactivateTaskCategoryAction,
+  moveTaskCategoryDownAction,
+  moveTaskCategoryUpAction,
+  renameTaskCategoryAction,
+  updateTaskCaptureSettingsAction
+} from "@/app/admin/actions";
 import { AdminGroupCard } from "@/components/admin/admin-group-card";
 import { MaterialChangeRow } from "@/components/admin/material-change-row";
 import { RecommendedChangeCard } from "@/components/admin/recommended-change-card";
 import { PageIntro } from "@/components/shell/page-intro";
 import { getAdminSettingsPageData } from "@/lib/admin-settings";
+import { getTaskConfig } from "@/lib/task-config";
 
 const recommendedChanges = [
   {
@@ -120,7 +129,7 @@ const materialHistory = [
 ];
 
 export default async function AdminPage() {
-  const adminData = await getAdminSettingsPageData();
+  const [adminData, taskConfig] = await Promise.all([getAdminSettingsPageData(), getTaskConfig()]);
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -156,6 +165,116 @@ export default async function AdminPage() {
               why={change.why}
             />
           ))}
+        </div>
+      </section>
+
+      <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
+        <div className="max-w-3xl">
+          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Task capture</p>
+          <h2 className="section-title mt-2">Control task density without turning convenience toggles into admin clutter.</h2>
+          <p className="mt-3 text-sm leading-6 text-text-muted">
+            These controls govern the operational task model directly: category taxonomy and whether Next Step or Desired Outcome start expanded in task capture.
+          </p>
+        </div>
+
+        <form action={updateTaskCaptureSettingsAction} className="mt-6 rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
+          <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Default expansion</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <label className="flex items-center gap-3 rounded-[1rem] border border-line/70 bg-white/70 px-4 py-3 text-sm text-text">
+              <input
+                type="checkbox"
+                name="expandNextStepByDefault"
+                defaultChecked={taskConfig.captureSettings.expandNextStepByDefault}
+                className="h-4 w-4"
+              />
+              Expand Next Step by default
+            </label>
+            <label className="flex items-center gap-3 rounded-[1rem] border border-line/70 bg-white/70 px-4 py-3 text-sm text-text">
+              <input
+                type="checkbox"
+                name="expandDesiredOutcomeByDefault"
+                defaultChecked={taskConfig.captureSettings.expandDesiredOutcomeByDefault}
+                className="h-4 w-4"
+              />
+              Expand Desired Outcome by default
+            </label>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+              Save capture defaults
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-6 rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Task categories</p>
+              <p className="mt-2 text-sm leading-6 text-text-muted">
+                Categories can be added, renamed, reordered, and deactivated. The fallback TBD category stays protected so every task always retains a safe category value.
+              </p>
+            </div>
+            <form action={createTaskCategoryAction} className="flex w-full max-w-md gap-2">
+              <input
+                name="name"
+                placeholder="Add a new category"
+                className="min-w-0 flex-1 rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
+              />
+              <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+                Add
+              </button>
+            </form>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {taskConfig.categories.map((category) => (
+              <div key={category.id} className="rounded-[1.1rem] border border-line/70 bg-white/72 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <form action={renameTaskCategoryAction} className="flex min-w-0 flex-1 gap-2">
+                    <input type="hidden" name="categoryId" value={category.id} />
+                    <input
+                      name="name"
+                      defaultValue={category.name}
+                      disabled={category.isFallback}
+                      className="min-w-0 flex-1 rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none disabled:opacity-60"
+                    />
+                    <button
+                      type="submit"
+                      disabled={category.isFallback}
+                      className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white disabled:opacity-60"
+                    >
+                      Rename
+                    </button>
+                  </form>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <form action={moveTaskCategoryUpAction}>
+                      <input type="hidden" name="categoryId" value={category.id} />
+                      <button type="submit" className="rounded-full border border-line/75 bg-white/82 px-3 py-2 text-sm text-text transition hover:bg-white">
+                        Up
+                      </button>
+                    </form>
+                    <form action={moveTaskCategoryDownAction}>
+                      <input type="hidden" name="categoryId" value={category.id} />
+                      <button type="submit" className="rounded-full border border-line/75 bg-white/82 px-3 py-2 text-sm text-text transition hover:bg-white">
+                        Down
+                      </button>
+                    </form>
+                    <form action={deactivateTaskCategoryAction}>
+                      <input type="hidden" name="categoryId" value={category.id} />
+                      <button
+                        type="submit"
+                        disabled={category.isFallback || category.status === "inactive"}
+                        className="rounded-full border border-line/75 bg-white/82 px-3 py-2 text-sm text-text transition hover:bg-white disabled:opacity-60"
+                      >
+                        {category.status === "inactive" ? "Inactive" : "Deactivate"}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

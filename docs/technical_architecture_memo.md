@@ -62,12 +62,43 @@
 
 ## Inbox decisions
 
-- Priority Inbox is ordered as `Needs Attention`, `Possible Misses`, then `Priority Threads`.
-- Sections are intentionally tight, with compact rows and low item counts by default.
-- Each row exposes one primary action, usually `Open`.
-- Cold outreach is excluded from the surfaced set by default.
-- No explicit clear/done control appears in list rows; triage continues inside the opened thread.
-- Elevated treatment is reserved for the rare inbox item that clearly warrants stronger emphasis.
+- Priority Inbox now uses a five-state visible model: `High Priority`, `Needs Review`, `Deferred`, `Handled`, and `Dismissed`.
+- The route remains a decision layer rather than a mailbox client: each surfaced item preserves a native source link and `Open` never changes inbox state by itself.
+- Rows are ask-first when confidence is high, but keep sender/source context visible enough to preserve trust in why the item is here.
+- High-priority actions use a short inline confirmation-and-undo step before the item leaves the active layer; lower-priority items transition immediately with a lighter undo affordance.
+- High-priority confirmation is now enforced by both the client timer and the server mutation path so canonical routing or handled/dismissed transitions cannot commit before the undo window expires.
+- Deferred items are stored separately, then re-enter the active view when their return time is due rather than staying hidden in the collapsed deferred section.
+- Manual routing is supported through an internal `/inbox?manual=1` entry path so Blackhawk-native captures can enter the same triage model without being forced into mail semantics.
+- Priority Inbox now persists its item state and action history in Supabase, while still treating Outlook, Gmail, and Teams as native systems of record.
+- Local/dev bootstrap mode lazily seeds the inbox from the existing mock definitions so the surface stays populated before live ingestion exists; production empty inboxes remain empty until real inputs or manual adds arrive.
+- `Create task` and `Save reference` now create real canonical Library objects in `captures`, then mark the inbox item handled with stored created-object metadata.
+- The server mutation path now enforces that `task_created`, `reference_saved`, and `commitment_created` transitions include canonical payloads, so callers cannot silently downgrade those actions into metadata-only handled-state updates.
+- Canonical Library items created from Priority Inbox retain backlinks to both the inbox item and the native source so future routing or audit work can trace them cleanly.
+- Forwarded-email canonical routing also preserves the forwarded-detail record and fallback detail path inside `priority_inbox_source_metadata`, so source linkage remains truthful even when no native mailbox URL exists.
+- Restore remains intentionally simple: it reopens the inbox item for triage, but does not delete or archive the canonical object that was already created.
+- Returning an item to an active state clears stale handled/dismissed disposition metadata on the inbox row, while defer events now persist their defer reason in the event audit trail.
+- Outlook is the first live source adapter:
+  - Microsoft identity delegated OAuth connects a user mailbox without replacing app auth
+  - Microsoft Graph ingestion is bounded, read-only, and Inbox-scoped
+  - connection state and encrypted delegated tokens live in `priority_inbox_source_connections`
+  - synced items persist source-specific metadata such as external message id, conversation id, received time, and native Outlook link in `priority_inbox_items`
+- Forwarded email is now the interim real-world intake path when live Outlook access is blocked:
+  - forwarding destinations live in `priority_inbox_forwarding_configs`
+  - forwarded email detail, raw content, and truthful parsing metadata live in `priority_inbox_forwarded_email_sources`
+  - forwarded items still become normal `priority_inbox_items` and default to `Needs Review`
+  - `Open` uses a native link only when one is actually recoverable; otherwise it opens a stored forwarded-detail view rather than faking Outlook
+  - dev and local testing use the same forwarded parser and normalization path through an internal simulator, not a separate fake-only model
+  - when Supabase is unreachable from a local/dev network, Priority Inbox can fall back to a local file-backed store for forwarding config, forwarded-email intake, detail views, triage state changes, and local-only Library placeholders so the UX remains testable without pretending live persistence succeeded
+  - the dev-only route `/api/dev/priority-inbox-local-store` can inspect, reset, and locally transition that fallback state to speed up repeated verification loops on blocked networks
+  - CloudMailin is the first explicit live provider path for this workflow:
+    - live target route is `/api/inbox/cloudmailin`
+    - auth uses CloudMailin-compatible HTTP Basic Auth when configured, with the generic token path retained for internal/dev ingestion
+    - the route accepts CloudMailin normalized multipart and normalized JSON payloads, then maps them into the same forwarded-email ingest seam as local/dev
+    - malformed payloads reject with clear 4xx responses, while ingest failures return 5xx so provider retry semantics stay truthful
+    - duplicate provider retries deduplicate on the forwarded external message id while still recording an `inbound_received` event with dedupe metadata
+    - the event log schema must allow `source = forwarded_email` on `priority_inbox_events`, not just on `priority_inbox_items`
+    - production deployments that still run the app in bootstrap single-user mode need `ENABLE_SUPABASE_BOOTSTRAP_FALLBACK=true` so `/inbox` resolves the same user context that inbound routes write into
+- The ingestion seam is adapter-based so Gmail and Teams can be added later without rewriting the Priority Inbox state machine or action surface.
 
 ## People decisions
 

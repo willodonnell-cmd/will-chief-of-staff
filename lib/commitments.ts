@@ -259,7 +259,8 @@ export async function getCommitmentsPageData(now = Date.now()): Promise<Commitme
     search: "",
     type: "task",
     status: "all",
-    due: "all"
+    due: "all",
+    category: "all"
   });
 
   const overdue = tasks

@@ -1,3 +1,24 @@
+import type {
+  PriorityInboxCanonicalCommitmentInput,
+  PriorityInboxCanonicalReferenceInput,
+  PriorityInboxCanonicalTaskInput,
+  PriorityInboxItem
+} from "@/lib/priority-inbox";
+import {
+  buildNoteWorkingContent,
+  buildTaskWorkingContent,
+  computeNoteDisplayTitle,
+  computeTaskDisplayTitle,
+  isTaskPriority,
+  type TaskFields,
+  type TaskPriority
+} from "@/lib/blackhawk-capture-model";
+import {
+  getLocalPriorityInboxLibraryItem,
+  listLocalPriorityInboxLibraryItems,
+  type LocalPriorityInboxLibraryRecord
+} from "@/lib/priority-inbox-local-store";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 import { withSupabaseTimeout } from "@/lib/supabase/request-timeout";
 import { execFile } from "node:child_process";
@@ -12,6 +33,86 @@ export type LibraryStatusFilter = "all" | Exclude<LibraryItemStatus, "archived">
 export type LibraryDueFilter = "all" | "overdue" | "upcoming" | "none";
 export type LibraryTaskStatus = "active" | "completed";
 export type LibraryTaskPriority = "low" | "medium" | "high";
+export type LibraryTaskCategoryFilter = "all" | string;
+type JsonRecord = Record<string, unknown>;
+type CaptureLibraryDbClient =
+  | NonNullable<ReturnType<typeof createSupabaseAdminClient>>
+  | NonNullable<NonNullable<Awaited<ReturnType<typeof resolveCurrentAppUser>>>["client"]>;
+
+type ForwardedEmailSourceCaptureRow = {
+  id: string;
+  destination_address: string;
+  forwarded_by_name: string | null;
+  forwarded_by_email: string | null;
+  original_sender_name: string | null;
+  original_sender_email: string | null;
+  original_subject: string | null;
+  original_received_at: string | null;
+  forwarded_at: string | null;
+  provider_hint: "outlook" | "gmail" | null;
+  native_source_link: string | null;
+  detail_body: string | null;
+  raw_content: string;
+  attachment_names: string[] | null;
+  source_metadata: unknown;
+};
+
+type PriorityInboxSourceLinkage = {
+  priorityInboxItemId: string;
+  source: string;
+  sourceLabel: string | null;
+  sourceFamily: string | null;
+  ingestionMode: string | null;
+  nativeSourceLink: string | null;
+  fallbackDetailHref: string | null;
+  externalMessageId: string | null;
+  conversationId: string | null;
+  receivedAt: string | null;
+  sender: string | null;
+  senderRole: string | null;
+  threadTitle: string | null;
+  primaryLine: string | null;
+  summary: string | null;
+  metadata: JsonRecord | null;
+  forwardedEmailSource: {
+    id: string;
+    destinationAddress: string;
+    forwardedByName: string | null;
+    forwardedByEmail: string | null;
+    originalSenderName: string | null;
+    originalSenderEmail: string | null;
+    originalSubject: string | null;
+    originalReceivedAt: string | null;
+    forwardedAt: string | null;
+    providerHint: "outlook" | "gmail" | null;
+    nativeSourceLink: string | null;
+    detailBodyExcerpt: string | null;
+    attachmentNames: string[];
+    metadata: JsonRecord | null;
+  } | null;
+};
+
+type CaptureTaskCategoryRow = {
+  id: string;
+  name: string;
+  status: "active" | "inactive";
+  is_fallback: boolean;
+};
+
+type CaptureInitiativeRow = {
+  id: string;
+  title: string;
+  status: string;
+};
+
+type RelatedCaptureRow = {
+  id: string;
+  type: LibraryItemType | null;
+  title: string | null;
+  note_title: string | null;
+  note_body: string | null;
+  task_description: string | null;
+};
 
 type CaptureUpdateRow = {
   id: string;
@@ -30,6 +131,15 @@ type CaptureRow = {
   private_context: string | null;
   type: LibraryItemType | null;
   title: string;
+  note_title: string | null;
+  note_body: string | null;
+  task_description: string | null;
+  task_next_step: string | null;
+  task_desired_outcome: string | null;
+  task_category_id: string | null;
+  linked_initiative_id: string | null;
+  origin_capture_id: string | null;
+  origin_type: "note" | "task" | "email" | "capture" | null;
   original_content: string;
   working_content: string;
   captured_at: string;
@@ -41,6 +151,12 @@ type CaptureRow = {
   priority?: LibraryTaskPriority | null;
   save_state: CaptureSaveState;
   save_state_detail: string | null;
+  priority_inbox_item_id?: string | null;
+  native_source_link?: string | null;
+  priority_inbox_source_metadata?: unknown;
+  task_category?: CaptureTaskCategoryRow | null;
+  linked_initiative?: CaptureInitiativeRow | null;
+  origin_capture?: RelatedCaptureRow | null;
   capture_updates?: CaptureUpdateRow[] | null;
 };
 
@@ -57,8 +173,20 @@ const TRANSIENT_SUPABASE_RETRY_DELAY_MS = 350;
 type OwnedCaptureRow = {
   id: string;
   user_id: string;
+  source_path: string | null;
+  privacy: "open" | "protected" | "hybrid";
+  private_context: string | null;
   type: LibraryItemType | null;
   title: string;
+  note_title: string | null;
+  note_body: string | null;
+  task_description: string | null;
+  task_next_step: string | null;
+  task_desired_outcome: string | null;
+  task_category_id: string | null;
+  linked_initiative_id: string | null;
+  due_at: string | null;
+  priority: LibraryTaskPriority | null;
   archived_at: string | null;
   completed_at: string | null;
   deleted_at: string | null;
@@ -73,9 +201,24 @@ export type CaptureUpdateEntry = {
 
 export type LibraryTaskData = {
   title: string;
+  description: string;
+  nextStep: string;
+  desiredOutcome: string;
   status: LibraryTaskStatus;
   dueAt: string | null;
   priority: LibraryTaskPriority | null;
+  categoryId: string | null;
+  categoryName: string;
+  categoryIsFallback: boolean;
+  linkedInitiativeId: string | null;
+  linkedInitiativeTitle: string | null;
+};
+
+export type LibraryNoteData = {
+  title: string;
+  body: string;
+  linkedInitiativeId: string | null;
+  linkedInitiativeTitle: string | null;
 };
 
 export type LibraryItemSummary = {
@@ -93,7 +236,17 @@ export type LibraryItemSummary = {
   dueAt: string | null;
   saveState: CaptureSaveState;
   saveStateDetail: string;
+  localOnly: boolean;
+  note: LibraryNoteData | null;
   task: LibraryTaskData | null;
+  originCapture:
+    | {
+        id: string;
+        type: LibraryItemType;
+        title: string;
+      }
+    | null;
+  sourceLinkage: PriorityInboxSourceLinkage | null;
 };
 
 export type LibraryItemDetail = LibraryItemSummary & {
@@ -108,11 +261,27 @@ export type LibraryQuery = {
   type: LibraryTypeFilter;
   status: LibraryStatusFilter;
   due: LibraryDueFilter;
+  category: LibraryTaskCategoryFilter;
 };
 
 export type LibraryMutationResult =
   | {
       ok: true;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+export type PriorityInboxLibraryLinkResult =
+  | {
+      ok: true;
+      object: {
+        type: "task" | "commitment" | "reference";
+        title: string;
+        href: string;
+        captureId: string;
+      };
     }
   | {
       ok: false;
@@ -129,6 +298,15 @@ const CAPTURE_LIBRARY_SELECT = `
   private_context,
   type,
   title,
+  note_title,
+  note_body,
+  task_description,
+  task_next_step,
+  task_desired_outcome,
+  task_category_id,
+  linked_initiative_id,
+  origin_capture_id,
+  origin_type,
   original_content,
   working_content,
   captured_at,
@@ -140,6 +318,28 @@ const CAPTURE_LIBRARY_SELECT = `
   priority,
   save_state,
   save_state_detail,
+  priority_inbox_item_id,
+  native_source_link,
+  priority_inbox_source_metadata,
+  task_category:task_categories (
+    id,
+    name,
+    status,
+    is_fallback
+  ),
+  linked_initiative:initiatives (
+    id,
+    title,
+    status
+  ),
+  origin_capture:captures!captures_origin_capture_id_fkey (
+    id,
+    type,
+    title,
+    note_title,
+    note_body,
+    task_description
+  ),
   capture_updates (
     id,
     kind,
@@ -158,6 +358,15 @@ const CAPTURE_LIBRARY_CURL_SELECT = [
   "private_context",
   "type",
   "title",
+  "note_title",
+  "note_body",
+  "task_description",
+  "task_next_step",
+  "task_desired_outcome",
+  "task_category_id",
+  "linked_initiative_id",
+  "origin_capture_id",
+  "origin_type",
   "original_content",
   "working_content",
   "captured_at",
@@ -168,11 +377,24 @@ const CAPTURE_LIBRARY_CURL_SELECT = [
   "due_at",
   "priority",
   "save_state",
-  "save_state_detail"
+  "save_state_detail",
+  "priority_inbox_item_id",
+  "native_source_link",
+  "priority_inbox_source_metadata"
 ].join(",");
+
+const PRIORITY_INBOX_BODY_EXCERPT_LIMIT = 2_000;
 
 function firstValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function mapJsonRecord(value: unknown): JsonRecord | null {
+  return isRecord(value) ? value : null;
 }
 
 function logCaptureLibrary(message: string, details?: Record<string, unknown>) {
@@ -354,8 +576,10 @@ function getLibraryStatus(row: Pick<CaptureRow, "archived_at" | "completed_at" |
   return "active";
 }
 
-function buildPreview(workingContent: string, originalContent: string) {
-  const source = workingContent.trim() || originalContent.trim();
+function buildPreview(...values: Array<string | null | undefined>) {
+  const source = values
+    .map((value) => value?.trim() ?? "")
+    .find(Boolean) ?? "";
   const collapsed = source.replace(/\s+/g, " ").trim();
 
   if (!collapsed) {
@@ -369,6 +593,19 @@ function buildPreview(workingContent: string, originalContent: string) {
   return `${collapsed.slice(0, 177).trimEnd()}...`;
 }
 
+function takeExcerpt(value: string | null | undefined, limit: number) {
+  const collapsed = value?.replace(/\s+/g, " ").trim() ?? "";
+  if (!collapsed) {
+    return null;
+  }
+
+  if (collapsed.length <= limit) {
+    return collapsed;
+  }
+
+  return `${collapsed.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
+}
+
 function mapUpdateEntry(row: CaptureUpdateRow): CaptureUpdateEntry {
   return {
     id: row.id,
@@ -378,17 +615,82 @@ function mapUpdateEntry(row: CaptureUpdateRow): CaptureUpdateEntry {
   };
 }
 
+function localLibraryRecordToCaptureRow(record: LocalPriorityInboxLibraryRecord): CaptureRow {
+  return {
+    id: record.id,
+    source_path: record.source_path,
+    pattern: record.pattern,
+    privacy: record.privacy,
+    summary: record.summary,
+    follow_up: record.follow_up,
+    private_context: record.private_context,
+    type: record.type,
+    title: record.title,
+    note_title: record.note_title,
+    note_body: record.note_body,
+    task_description: record.task_description,
+    task_next_step: record.task_next_step,
+    task_desired_outcome: record.task_desired_outcome,
+    task_category_id: record.task_category_id,
+    linked_initiative_id: record.linked_initiative_id,
+    origin_capture_id: record.origin_capture_id,
+    origin_type: record.origin_type,
+    original_content: record.original_content,
+    working_content: record.working_content,
+    captured_at: record.captured_at,
+    last_active_at: record.last_active_at,
+    archived_at: record.archived_at,
+    completed_at: record.completed_at,
+    deleted_at: record.deleted_at,
+    due_at: record.due_at,
+    priority: record.priority,
+    save_state: record.save_state,
+    save_state_detail: record.save_state_detail,
+    priority_inbox_item_id: record.priority_inbox_item_id,
+    native_source_link: record.native_source_link,
+    priority_inbox_source_metadata: record.priority_inbox_source_metadata,
+    task_category: record.task_category,
+    linked_initiative: record.linked_initiative,
+    origin_capture: record.origin_capture,
+    capture_updates: record.capture_updates
+  };
+}
+
+function displayTitleForOrigin(row: RelatedCaptureRow) {
+  if ((row.type ?? "note") === "task") {
+    return computeTaskDisplayTitle(row.task_description ?? row.title ?? "");
+  }
+
+  return computeNoteDisplayTitle(row.note_title ?? row.title ?? "", row.note_body ?? row.title ?? "");
+}
+
 function mapLibrarySummary(row: CaptureRow): LibraryItemSummary {
   const type = mapRowType(row);
   const status = getLibraryStatus(row);
   const saveStateDetail = row.save_state_detail ?? "";
   const priority = isLibraryTaskPriority(row.priority) ? row.priority : null;
+  const noteTitle = computeNoteDisplayTitle(row.note_title ?? "", row.note_body ?? row.summary);
+  const taskDescription = row.task_description?.trim() || row.summary.trim();
+  const taskTitle = computeTaskDisplayTitle(taskDescription);
+  const categoryName = row.task_category?.name ?? "TBD";
+  const categoryIsFallback = row.task_category?.is_fallback ?? categoryName.trim().toLowerCase() === "tbd";
+  const originCapture =
+    row.origin_capture && row.origin_capture.id
+      ? {
+          id: row.origin_capture.id,
+          type: row.origin_capture.type ?? "note",
+          title: displayTitleForOrigin(row.origin_capture)
+        }
+      : null;
 
   return {
     id: row.id,
     type,
-    title: row.title,
-    preview: buildPreview(row.working_content, row.original_content),
+    title: type === "task" ? taskTitle : noteTitle,
+    preview:
+      type === "task"
+        ? buildPreview(row.task_next_step, row.task_desired_outcome, row.working_content, row.original_content)
+        : buildPreview(row.note_body, row.working_content, row.original_content),
     sourcePath: row.source_path,
     privacy: row.privacy,
     status,
@@ -399,13 +701,33 @@ function mapLibrarySummary(row: CaptureRow): LibraryItemSummary {
     dueAt: row.due_at,
     saveState: row.save_state,
     saveStateDetail,
+    localOnly: false,
+    note:
+      type === "note"
+        ? {
+            title: row.note_title?.trim() ?? "",
+            body: row.note_body?.trim() ?? row.summary,
+            linkedInitiativeId: row.linked_initiative_id,
+            linkedInitiativeTitle: row.linked_initiative?.title ?? null
+          }
+        : null,
+    sourceLinkage: mapPriorityInboxSourceLinkage(row),
+    originCapture,
     task:
       type === "task"
         ? {
-            title: row.title,
+            title: taskTitle,
+            description: taskDescription,
+            nextStep: row.task_next_step?.trim() ?? "",
+            desiredOutcome: row.task_desired_outcome?.trim() ?? "",
             status: getTaskStatus(row.completed_at),
             dueAt: row.due_at,
-            priority
+            priority,
+            categoryId: row.task_category_id,
+            categoryName,
+            categoryIsFallback,
+            linkedInitiativeId: row.linked_initiative_id,
+            linkedInitiativeTitle: row.linked_initiative?.title ?? null
           }
         : null
   };
@@ -424,6 +746,79 @@ function mapLibraryDetail(row: CaptureRow): LibraryItemDetail {
   };
 }
 
+function mapLocalLibrarySummary(record: LocalPriorityInboxLibraryRecord): LibraryItemSummary {
+  return {
+    ...mapLibrarySummary(localLibraryRecordToCaptureRow(record)),
+    localOnly: true
+  };
+}
+
+function mapLocalLibraryDetail(record: LocalPriorityInboxLibraryRecord): LibraryItemDetail {
+  return {
+    ...mapLibraryDetail(localLibraryRecordToCaptureRow(record)),
+    localOnly: true
+  };
+}
+
+function mapPriorityInboxSourceLinkage(row: CaptureRow): PriorityInboxSourceLinkage | null {
+  const rawMetadata = mapJsonRecord(row.priority_inbox_source_metadata);
+  const priorityInboxItemId =
+    (typeof rawMetadata?.priorityInboxItemId === "string" && rawMetadata.priorityInboxItemId) ||
+    row.priority_inbox_item_id;
+  const source = typeof rawMetadata?.source === "string" ? rawMetadata.source : null;
+
+  if (!priorityInboxItemId || !source) {
+    return null;
+  }
+
+  const forwardedRaw = mapJsonRecord(rawMetadata?.forwardedEmailSource);
+
+  return {
+    priorityInboxItemId,
+    source,
+    sourceLabel: typeof rawMetadata?.sourceLabel === "string" ? rawMetadata.sourceLabel : null,
+    sourceFamily: typeof rawMetadata?.sourceFamily === "string" ? rawMetadata.sourceFamily : null,
+    ingestionMode: typeof rawMetadata?.ingestionMode === "string" ? rawMetadata.ingestionMode : null,
+    nativeSourceLink:
+      (typeof rawMetadata?.nativeSourceLink === "string" && rawMetadata.nativeSourceLink) || row.native_source_link || null,
+    fallbackDetailHref: typeof rawMetadata?.fallbackDetailHref === "string" ? rawMetadata.fallbackDetailHref : null,
+    externalMessageId: typeof rawMetadata?.externalMessageId === "string" ? rawMetadata.externalMessageId : null,
+    conversationId: typeof rawMetadata?.conversationId === "string" ? rawMetadata.conversationId : null,
+    receivedAt: typeof rawMetadata?.receivedAt === "string" ? rawMetadata.receivedAt : null,
+    sender: typeof rawMetadata?.sender === "string" ? rawMetadata.sender : null,
+    senderRole: typeof rawMetadata?.senderRole === "string" ? rawMetadata.senderRole : null,
+    threadTitle: typeof rawMetadata?.threadTitle === "string" ? rawMetadata.threadTitle : null,
+    primaryLine: typeof rawMetadata?.primaryLine === "string" ? rawMetadata.primaryLine : null,
+    summary: typeof rawMetadata?.summary === "string" ? rawMetadata.summary : null,
+    metadata: mapJsonRecord(rawMetadata?.metadata),
+    forwardedEmailSource:
+      forwardedRaw && typeof forwardedRaw.id === "string" && typeof forwardedRaw.destinationAddress === "string"
+        ? {
+            id: forwardedRaw.id,
+            destinationAddress: forwardedRaw.destinationAddress,
+            forwardedByName: typeof forwardedRaw.forwardedByName === "string" ? forwardedRaw.forwardedByName : null,
+            forwardedByEmail: typeof forwardedRaw.forwardedByEmail === "string" ? forwardedRaw.forwardedByEmail : null,
+            originalSenderName: typeof forwardedRaw.originalSenderName === "string" ? forwardedRaw.originalSenderName : null,
+            originalSenderEmail: typeof forwardedRaw.originalSenderEmail === "string" ? forwardedRaw.originalSenderEmail : null,
+            originalSubject: typeof forwardedRaw.originalSubject === "string" ? forwardedRaw.originalSubject : null,
+            originalReceivedAt:
+              typeof forwardedRaw.originalReceivedAt === "string" ? forwardedRaw.originalReceivedAt : null,
+            forwardedAt: typeof forwardedRaw.forwardedAt === "string" ? forwardedRaw.forwardedAt : null,
+            providerHint:
+              forwardedRaw.providerHint === "outlook" || forwardedRaw.providerHint === "gmail"
+                ? forwardedRaw.providerHint
+                : null,
+            nativeSourceLink: typeof forwardedRaw.nativeSourceLink === "string" ? forwardedRaw.nativeSourceLink : null,
+            detailBodyExcerpt: typeof forwardedRaw.detailBodyExcerpt === "string" ? forwardedRaw.detailBodyExcerpt : null,
+            attachmentNames: Array.isArray(forwardedRaw.attachmentNames)
+              ? forwardedRaw.attachmentNames.filter((entry): entry is string => typeof entry === "string")
+              : [],
+            metadata: mapJsonRecord(forwardedRaw.metadata)
+          }
+        : null
+  };
+}
+
 function matchesSearch(row: CaptureRow, search: string) {
   if (!search) {
     return true;
@@ -431,6 +826,13 @@ function matchesSearch(row: CaptureRow, search: string) {
 
   const haystack = [
     row.title,
+    row.note_title,
+    row.note_body,
+    row.task_description,
+    row.task_next_step,
+    row.task_desired_outcome,
+    row.task_category?.name,
+    row.linked_initiative?.title,
     row.original_content,
     row.working_content,
     ...(row.capture_updates ?? []).map((entry) => entry.body)
@@ -441,42 +843,85 @@ function matchesSearch(row: CaptureRow, search: string) {
   return haystack.includes(search);
 }
 
-function dueRank(item: LibraryItemSummary, now: number) {
-  if (item.type !== "task") {
-    return 99;
-  }
-
-  if (item.status === "completed") {
-    return 4;
-  }
-
-  if (!item.dueAt) {
-    return 3;
-  }
-
-  return Date.parse(item.dueAt) < now ? 1 : 2;
-}
-
 function compareByLastActive(left: LibraryItemSummary, right: LibraryItemSummary) {
   return Date.parse(right.lastActiveAt) - Date.parse(left.lastActiveAt);
 }
 
+function prioritySortRank(priority: TaskPriority | null) {
+  if (priority === "high") {
+    return 0;
+  }
+
+  if (priority === "medium") {
+    return 1;
+  }
+
+  return 2;
+}
+
+function inlineDueCueRank(item: LibraryItemSummary) {
+  if (item.type !== "task" || !item.dueAt || item.status === "completed") {
+    return 2;
+  }
+
+  const dueAt = Date.parse(item.dueAt);
+  if (Number.isNaN(dueAt)) {
+    return 2;
+  }
+
+  const dueSoonWindow = Date.now() + 1000 * 60 * 60 * 24 * 3;
+  if (dueAt < Date.now()) {
+    return 0;
+  }
+
+  if (dueAt <= dueSoonWindow) {
+    return 1;
+  }
+
+  return 2;
+}
+
 function sortLibraryItems(items: LibraryItemSummary[], scope: LibraryScope) {
-  if (scope !== "tasks") {
+  if (scope === "archived") {
     return [...items].sort(compareByLastActive);
   }
 
-  const now = Date.now();
-
   return [...items].sort((left, right) => {
-    const leftRank = dueRank(left, now);
-    const rightRank = dueRank(right, now);
+    if (scope !== "tasks" && left.type !== right.type) {
+      return left.type === "task" ? -1 : 1;
+    }
+
+    if (left.type !== "task" || right.type !== "task") {
+      return compareByLastActive(left, right);
+    }
+
+    const leftPriority = prioritySortRank(left.task?.priority ?? null);
+    const rightPriority = prioritySortRank(right.task?.priority ?? null);
+
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    const leftFallback = left.task?.categoryIsFallback ? 0 : 1;
+    const rightFallback = right.task?.categoryIsFallback ? 0 : 1;
+
+    if (leftFallback !== rightFallback) {
+      return leftFallback - rightFallback;
+    }
+
+    const categoryComparison = (left.task?.categoryName ?? "").localeCompare(right.task?.categoryName ?? "");
+    if (categoryComparison !== 0) {
+      return categoryComparison;
+    }
+
+    const leftRank = inlineDueCueRank(left);
+    const rightRank = inlineDueCueRank(right);
 
     if (leftRank !== rightRank) {
       return leftRank - rightRank;
     }
 
-    if (leftRank === 1 || leftRank === 2) {
+    if (leftRank === 0 || leftRank === 1) {
       const leftDue = left.dueAt ? Date.parse(left.dueAt) : Number.POSITIVE_INFINITY;
       const rightDue = right.dueAt ? Date.parse(right.dueAt) : Number.POSITIVE_INFINITY;
 
@@ -527,6 +972,14 @@ function matchesDue(item: LibraryItemSummary, filter: LibraryDueFilter) {
   return dueAt >= Date.now();
 }
 
+function matchesCategory(item: LibraryItemSummary, filter: LibraryTaskCategoryFilter) {
+  if (item.type !== "task" || filter === "all") {
+    return true;
+  }
+
+  return item.task?.categoryId === filter;
+}
+
 function parseDueAt(value: string | null | undefined) {
   if (!value) {
     return { ok: true as const, value: null };
@@ -563,14 +1016,7 @@ function parseTaskStatus(value: string | null | undefined) {
 
 function parseTaskPriority(value: string | null | undefined) {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (!normalized) {
-    return {
-      ok: true as const,
-      value: null
-    };
-  }
-
-  if (isLibraryTaskPriority(normalized)) {
+  if (isTaskPriority(normalized)) {
     return {
       ok: true as const,
       value: normalized
@@ -579,7 +1025,476 @@ function parseTaskPriority(value: string | null | undefined) {
 
   return {
     ok: false as const,
-    error: "Task priority must be low, medium, or high."
+    error: "Task priority must be High, Medium, or Low."
+  };
+}
+
+function formatPriorityInboxSourceBlock(item: PriorityInboxItem) {
+  return [
+    `Priority Inbox item: ${item.primaryLine}`,
+    `Priority Inbox id: ${item.id}`,
+    `Native source: ${item.sourceLabel}`,
+    `Ingestion mode: ${item.ingestionMode}`,
+    item.externalMessageId ? `External message id: ${item.externalMessageId}` : null,
+    item.conversationId ? `Conversation id: ${item.conversationId}` : null,
+    item.sourceLink ? `Native link: ${item.sourceLink}` : "Native link: unavailable"
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
+function createLibraryHref(captureId: string, type: "task" | "reference") {
+  const base = type === "task" ? `/library/${captureId}?from=%2Flibrary%2Ftasks` : `/library/${captureId}?from=%2Flibrary`;
+  return base;
+}
+
+function createCommitmentHref(captureId: string) {
+  return `/library/${captureId}?from=%2Fcommitments`;
+}
+
+function getPriorityInboxDetailFallbackHref(item: PriorityInboxItem) {
+  return item.source === "forwarded_email" && !item.sourceLink ? `/inbox/${item.id}` : null;
+}
+
+async function getForwardedEmailSourceCaptureRow(params: {
+  client: CaptureLibraryDbClient;
+  userId: string;
+  itemId: string;
+}) {
+  const response = await withSupabaseTimeout(
+    params.client
+      .from("priority_inbox_forwarded_email_sources")
+      .select(
+        "id, destination_address, forwarded_by_name, forwarded_by_email, original_sender_name, original_sender_email, original_subject, original_received_at, forwarded_at, provider_hint, native_source_link, detail_body, raw_content, attachment_names, source_metadata"
+      )
+      .eq("user_id", params.userId)
+      .eq("item_id", params.itemId)
+      .maybeSingle<ForwardedEmailSourceCaptureRow>()
+  );
+
+  if (response.error) {
+    throw new Error(response.error.message);
+  }
+
+  return response.data ?? null;
+}
+
+function buildPriorityInboxLibraryContent(
+  item: PriorityInboxItem,
+  contextNote: string | null | undefined,
+  forwardedDetailBody?: string | null
+) {
+  const sections = [
+    item.primaryLine.trim(),
+    item.summary.trim(),
+    contextNote?.trim() ? `Context:\n${contextNote.trim()}` : null,
+    forwardedDetailBody?.trim() ? `Forwarded detail:\n${forwardedDetailBody.trim()}` : null,
+    item.sensitiveContext?.trim() ? `Sensitive context:\n${item.sensitiveContext.trim()}` : null,
+    `Source linkage:\n${formatPriorityInboxSourceBlock(item)}`
+  ].filter((section): section is string => Boolean(section));
+
+  return sections.join("\n\n");
+}
+
+function buildPriorityInboxSourceMetadata(
+  item: PriorityInboxItem,
+  forwardedSource?: ForwardedEmailSourceCaptureRow | null
+) {
+  return {
+    source: item.source,
+    sourceLabel: item.sourceLabel,
+    sourceFamily: item.sourceFamily,
+    ingestionMode: item.ingestionMode,
+    priorityInboxItemId: item.id,
+    nativeSourceLink: item.sourceLink,
+    fallbackDetailHref: getPriorityInboxDetailFallbackHref(item),
+    sourceLink: item.sourceLink,
+    externalMessageId: item.externalMessageId ?? null,
+    conversationId: item.conversationId ?? null,
+    receivedAt: item.receivedAt ?? null,
+    sender: item.sender,
+    senderRole: item.senderRole ?? null,
+    threadTitle: item.threadTitle,
+    primaryLine: item.primaryLine,
+    summary: item.summary,
+    forwardedEmailSource: forwardedSource
+      ? {
+          id: forwardedSource.id,
+          destinationAddress: forwardedSource.destination_address,
+          forwardedByName: forwardedSource.forwarded_by_name,
+          forwardedByEmail: forwardedSource.forwarded_by_email,
+          originalSenderName: forwardedSource.original_sender_name,
+          originalSenderEmail: forwardedSource.original_sender_email,
+          originalSubject: forwardedSource.original_subject,
+          originalReceivedAt: forwardedSource.original_received_at,
+          forwardedAt: forwardedSource.forwarded_at,
+          providerHint: forwardedSource.provider_hint,
+          nativeSourceLink: forwardedSource.native_source_link,
+          detailBodyExcerpt: takeExcerpt(
+            forwardedSource.detail_body ?? forwardedSource.raw_content,
+            PRIORITY_INBOX_BODY_EXCERPT_LIMIT
+          ),
+          attachmentNames: forwardedSource.attachment_names ?? [],
+          metadata: mapJsonRecord(forwardedSource.source_metadata)
+        }
+      : null,
+    metadata: item.sourceMetadata ?? null
+  };
+}
+
+export async function createCanonicalTaskFromPriorityInbox(params: {
+  item: PriorityInboxItem;
+  task: PriorityInboxCanonicalTaskInput;
+}): Promise<PriorityInboxLibraryLinkResult> {
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
+    return {
+      ok: false,
+      error: "No active app user could be resolved."
+    };
+  }
+
+  const client = createSupabaseAdminClient() ?? resolved.client;
+  const forwardedSource =
+    params.item.source === "forwarded_email"
+      ? await getForwardedEmailSourceCaptureRow({
+          client,
+          userId: resolved.user.id,
+          itemId: params.item.id
+        })
+      : null;
+  const description = params.task.description.trim();
+  if (!description) {
+    return {
+      ok: false,
+      error: "Task description is required."
+    };
+  }
+
+  const priority = parseTaskPriority(params.task.priority);
+  if (!priority.ok) {
+    return {
+      ok: false,
+      error: priority.error
+    };
+  }
+
+  const { data: categories } = await client
+    .from("task_categories")
+    .select("id, name, status, is_fallback")
+    .eq("user_id", resolved.user.id)
+    .order("sort_order", { ascending: true })
+    .returns<CaptureTaskCategoryRow[]>();
+
+  const activeCategories = (categories ?? []).filter((category) => category.status === "active");
+  const selectedCategory =
+    activeCategories.find((category) => category.id === params.task.categoryId) ??
+    activeCategories.find((category) => category.is_fallback) ??
+    null;
+
+  if (!selectedCategory) {
+    return {
+      ok: false,
+      error: "Task categories are not configured correctly."
+    };
+  }
+
+  let linkedInitiativeId: string | null = null;
+  let linkedInitiativeTitle: string | null = null;
+  if (params.task.linkedInitiativeId) {
+    const { data } = await client
+      .from("initiatives")
+      .select("id, title")
+      .eq("user_id", resolved.user.id)
+      .eq("id", params.task.linkedInitiativeId)
+      .maybeSingle<{ id: string; title: string }>();
+
+    linkedInitiativeId = data?.id ?? null;
+    linkedInitiativeTitle = data?.title ?? null;
+  }
+
+  const content = [
+    buildTaskWorkingContent(
+      {
+        description,
+        nextStep: params.task.nextStep?.trim() ?? "",
+        desiredOutcome: params.task.desiredOutcome?.trim() ?? "",
+        priority: priority.value,
+        categoryId: selectedCategory.id,
+        linkedInitiativeId,
+        dueAt: null
+      },
+      {
+        categoryName: selectedCategory.name,
+        initiativeTitle: linkedInitiativeTitle
+      }
+    ),
+    takeExcerpt(forwardedSource?.detail_body ?? forwardedSource?.raw_content, PRIORITY_INBOX_BODY_EXCERPT_LIMIT)
+      ? `Forwarded detail:\n${takeExcerpt(forwardedSource?.detail_body ?? forwardedSource?.raw_content, PRIORITY_INBOX_BODY_EXCERPT_LIMIT)}`
+      : null,
+    `Source linkage:\n${formatPriorityInboxSourceBlock(params.item)}`,
+    params.item.sensitiveContext?.trim() ? `Sensitive context:\n${params.item.sensitiveContext.trim()}` : null
+  ]
+    .filter((section): section is string => Boolean(section))
+    .join("\n\n");
+  const now = new Date().toISOString();
+  const title = computeTaskDisplayTitle(description);
+  const insert = await withSupabaseTimeout(
+    client
+      .from("captures")
+      .insert({
+        user_id: resolved.user.id,
+        source_path: "/inbox",
+        native_source_link: params.item.sourceLink ?? null,
+        priority_inbox_item_id: params.item.id,
+        priority_inbox_source_metadata: buildPriorityInboxSourceMetadata(params.item, forwardedSource),
+        pattern: "task",
+        privacy: params.item.sensitiveContext ? "hybrid" : "open",
+        summary: description,
+        follow_up: [params.task.nextStep?.trim() ?? "", params.task.desiredOutcome?.trim() ?? ""]
+          .filter(Boolean)
+          .join("\n\n") || params.item.summary,
+        private_context: params.item.sensitiveContext ?? null,
+        type: "task",
+        title,
+        task_description: description,
+        task_next_step: params.task.nextStep?.trim() || null,
+        task_desired_outcome: params.task.desiredOutcome?.trim() || null,
+        task_category_id: selectedCategory.id,
+        linked_initiative_id: linkedInitiativeId,
+        origin_type: "email",
+        original_content: content,
+        working_content: content,
+        last_active_at: now,
+        priority: priority.value,
+        save_state: "saved",
+        save_state_detail: null
+      })
+      .select("id, title")
+      .single<{ id: string; title: string }>()
+  );
+
+  if (insert.error || !insert.data) {
+    return {
+      ok: false,
+      error: insert.error?.message ?? "Task could not be created from Priority Inbox."
+    };
+  }
+
+  return {
+    ok: true,
+    object: {
+      type: "task",
+      title: insert.data.title,
+      href: createLibraryHref(insert.data.id, "task"),
+      captureId: insert.data.id
+    }
+  };
+}
+
+export async function createCanonicalReferenceFromPriorityInbox(params: {
+  item: PriorityInboxItem;
+  reference: PriorityInboxCanonicalReferenceInput;
+}): Promise<PriorityInboxLibraryLinkResult> {
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
+    return {
+      ok: false,
+      error: "No active app user could be resolved."
+    };
+  }
+
+  const client = createSupabaseAdminClient() ?? resolved.client;
+  const forwardedSource =
+    params.item.source === "forwarded_email"
+      ? await getForwardedEmailSourceCaptureRow({
+          client,
+          userId: resolved.user.id,
+          itemId: params.item.id
+        })
+      : null;
+  const title = params.reference.title.trim();
+  if (!title) {
+    return {
+      ok: false,
+      error: "Reference title is required."
+    };
+  }
+
+  const content = buildPriorityInboxLibraryContent(
+    params.item,
+    params.reference.summary,
+    takeExcerpt(forwardedSource?.detail_body ?? forwardedSource?.raw_content, PRIORITY_INBOX_BODY_EXCERPT_LIMIT)
+  );
+  const noteBody = params.reference.summary.trim() || params.item.summary;
+  const workingContent = buildNoteWorkingContent({
+    title,
+    body: noteBody,
+    linkedInitiativeId: null
+  });
+  const now = new Date().toISOString();
+  const insert = await withSupabaseTimeout(
+    client
+      .from("captures")
+      .insert({
+        user_id: resolved.user.id,
+        source_path: "/inbox",
+        native_source_link: params.item.sourceLink ?? null,
+        priority_inbox_item_id: params.item.id,
+        priority_inbox_source_metadata: buildPriorityInboxSourceMetadata(params.item, forwardedSource),
+        pattern: "note",
+        privacy: params.item.sensitiveContext ? "hybrid" : "open",
+        summary: noteBody,
+        follow_up: title,
+        private_context: params.item.sensitiveContext ?? null,
+        type: "note",
+        title,
+        note_title: title,
+        note_body: noteBody,
+        original_content: content,
+        working_content: workingContent,
+        origin_type: "email",
+        last_active_at: now,
+        save_state: "saved",
+        save_state_detail: null
+      })
+      .select("id, title")
+      .single<{ id: string; title: string }>()
+  );
+
+  if (insert.error || !insert.data) {
+    return {
+      ok: false,
+      error: insert.error?.message ?? "Reference could not be saved from Priority Inbox."
+    };
+  }
+
+  return {
+    ok: true,
+    object: {
+      type: "reference",
+      title: insert.data.title,
+      href: createLibraryHref(insert.data.id, "reference"),
+      captureId: insert.data.id
+    }
+  };
+}
+
+export async function createCanonicalCommitmentFromPriorityInbox(params: {
+  item: PriorityInboxItem;
+  commitment: PriorityInboxCanonicalCommitmentInput;
+}): Promise<PriorityInboxLibraryLinkResult> {
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
+    return {
+      ok: false,
+      error: "No active app user could be resolved."
+    };
+  }
+
+  const client = createSupabaseAdminClient() ?? resolved.client;
+  const title = params.commitment.statement.trim();
+  if (!title) {
+    return {
+      ok: false,
+      error: "Commitment statement is required."
+    };
+  }
+
+  const dueAt = parseDueAt(params.commitment.dueAt);
+  if (!dueAt.ok) {
+    return {
+      ok: false,
+      error: dueAt.error
+    };
+  }
+
+  const contextLines = [
+    params.commitment.contextNote?.trim() || null,
+    params.commitment.owedTo.trim() ? `Owed to: ${params.commitment.owedTo.trim()}` : null,
+    params.commitment.dueLabel?.trim() ? `Timing note: ${params.commitment.dueLabel.trim()}` : null
+  ].filter((line): line is string => Boolean(line));
+
+  const { data: categories } = await client
+    .from("task_categories")
+    .select("id, name, status, is_fallback")
+    .eq("user_id", resolved.user.id)
+    .order("sort_order", { ascending: true })
+    .returns<CaptureTaskCategoryRow[]>();
+  const fallbackCategory =
+    (categories ?? []).find((category) => category.status === "active" && category.is_fallback) ?? null;
+  if (!fallbackCategory) {
+    return {
+      ok: false,
+      error: "Task categories are not configured correctly."
+    };
+  }
+
+  const content = buildPriorityInboxLibraryContent(params.item, contextLines.join("\n"));
+  const workingContent = buildTaskWorkingContent(
+    {
+      description: title,
+      nextStep: params.commitment.contextNote?.trim() ?? "",
+      desiredOutcome: "",
+      priority: "medium",
+      categoryId: fallbackCategory.id,
+      linkedInitiativeId: null,
+      dueAt: dueAt.value
+    },
+    {
+      categoryName: fallbackCategory.name
+    }
+  );
+  const now = new Date().toISOString();
+  const insert = await withSupabaseTimeout(
+    client
+      .from("captures")
+      .insert({
+        user_id: resolved.user.id,
+        source_path: "/commitments",
+        native_source_link: params.item.sourceLink ?? null,
+        priority_inbox_item_id: params.item.id,
+        priority_inbox_source_metadata: buildPriorityInboxSourceMetadata(params.item),
+        pattern: "task",
+        privacy: params.item.sensitiveContext ? "hybrid" : "open",
+        summary: title,
+        follow_up: contextLines.join("\n") || params.item.summary,
+        private_context: params.item.sensitiveContext ?? null,
+        type: "task",
+        title,
+        task_description: title,
+        task_next_step: params.commitment.contextNote?.trim() || null,
+        task_desired_outcome: null,
+        task_category_id: fallbackCategory.id,
+        linked_initiative_id: null,
+        origin_type: "email",
+        original_content: content,
+        working_content: workingContent,
+        last_active_at: now,
+        due_at: dueAt.value,
+        priority: "medium",
+        save_state: "saved",
+        save_state_detail: null
+      })
+      .select("id, title")
+      .single<{ id: string; title: string }>()
+  );
+
+  if (insert.error || !insert.data) {
+    return {
+      ok: false,
+      error: insert.error?.message ?? "Commitment could not be created from Priority Inbox."
+    };
+  }
+
+  return {
+    ok: true,
+    object: {
+      type: "commitment",
+      title: insert.data.title,
+      href: createCommitmentHref(insert.data.id),
+      captureId: insert.data.id
+    }
   };
 }
 
@@ -616,7 +1531,9 @@ async function getOwnedCapture(captureId: string) {
   const { client, user } = resolved;
   const { data, error } = await client
     .from("captures")
-    .select("id, user_id, type, title, archived_at, completed_at, deleted_at")
+    .select(
+      "id, user_id, source_path, privacy, private_context, type, title, note_title, note_body, task_description, task_next_step, task_desired_outcome, task_category_id, linked_initiative_id, due_at, priority, archived_at, completed_at, deleted_at"
+    )
     .eq("user_id", user.id)
     .eq("id", captureId)
     .maybeSingle<OwnedCaptureRow>();
@@ -644,13 +1561,15 @@ export function parseLibraryQuery(
   const type = firstValue(raw.type);
   const status = firstValue(raw.status);
   const due = firstValue(raw.due);
+  const category = firstValue(raw.category)?.trim() ?? "all";
 
   return {
     scope,
     search,
     type: scope === "tasks" ? "task" : isLibraryType(type) ? type : "all",
     status: scope === "archived" ? "all" : isLibraryStatus(status) ? status : "all",
-    due: scope === "tasks" && isLibraryDue(due) ? due : "all"
+    due: scope === "tasks" && isLibraryDue(due) ? due : "all",
+    category: scope === "tasks" && category ? category : "all"
   };
 }
 
@@ -661,6 +1580,7 @@ export async function listLibraryItems(query: LibraryQuery): Promise<LibraryItem
   }
 
   const { client, user } = resolved;
+  const localRecords = await listLocalPriorityInboxLibraryItems(user.id);
   function buildScopedCaptureListRequest(selectClause: string) {
     let request = client
       .from("captures")
@@ -676,6 +1596,10 @@ export async function listLibraryItems(query: LibraryQuery): Promise<LibraryItem
 
     if (query.scope === "tasks") {
       request = request.eq("type", "task");
+    }
+
+    if (query.scope === "tasks" && query.category !== "all") {
+      request = request.eq("task_category_id", query.category);
     }
 
     return request;
@@ -723,19 +1647,25 @@ export async function listLibraryItems(query: LibraryQuery): Promise<LibraryItem
       errorDetails: error?.details ?? null,
       errorHint: error?.hint ?? null
     });
-    return [];
   }
 
   const normalizedSearch = normalizeSearchText(query.search);
-
-  const filtered = data
+  const remoteItems = (data ?? [])
     .filter((row) => matchesSearch(row, normalizedSearch))
     .map(mapLibrarySummary)
     .filter((item) => matchesType(item, query.type))
     .filter((item) => matchesStatus(item, query.status, query.scope))
-    .filter((item) => matchesDue(item, query.due));
+    .filter((item) => matchesDue(item, query.due))
+    .filter((item) => matchesCategory(item, query.category));
+  const localItems = localRecords
+    .filter((record) => matchesSearch(localLibraryRecordToCaptureRow(record), normalizedSearch))
+    .map(mapLocalLibrarySummary)
+    .filter((item) => matchesType(item, query.type))
+    .filter((item) => matchesStatus(item, query.status, query.scope))
+    .filter((item) => matchesDue(item, query.due))
+    .filter((item) => matchesCategory(item, query.category));
 
-  return sortLibraryItems(filtered, query.scope);
+  return sortLibraryItems([...remoteItems, ...localItems], query.scope);
 }
 
 export async function getLibraryItemDetail(captureId: string): Promise<LibraryItemDetail | null> {
@@ -745,6 +1675,10 @@ export async function getLibraryItemDetail(captureId: string): Promise<LibraryIt
   }
 
   const { client, user } = resolved;
+  const localRecord = await getLocalPriorityInboxLibraryItem(user.id, captureId);
+  if (localRecord) {
+    return mapLocalLibraryDetail(localRecord);
+  }
   let data: CaptureRow | null = null;
   let error: CaptureLibraryQueryError | null = null;
 
@@ -806,24 +1740,59 @@ export async function updateLibraryItemWorkingCopy(input: {
   captureId: string;
   title?: string | null;
   workingContent: string;
+  linkedInitiativeId?: string | null;
 }): Promise<LibraryMutationResult> {
   const owned = await getOwnedCapture(input.captureId);
   if (!owned.ok) {
     return owned;
   }
 
-  const title = (input.title ?? owned.capture.title).trim();
-  if (!title) {
+  if ((owned.capture.type ?? "note") !== "note") {
     return {
       ok: false,
-      error: "Title is required."
+      error: "Only notes use this editor."
     };
   }
+
+  const body = input.workingContent.trim();
+  if (!body) {
+    return {
+      ok: false,
+      error: "Note body is required."
+    };
+  }
+
+  const noteTitle = (input.title ?? owned.capture.note_title ?? "").trim();
+  const title = computeNoteDisplayTitle(noteTitle, body);
+  let initiativeId: string | null = null;
+
+  if (input.linkedInitiativeId) {
+    const { data } = await owned.client
+      .from("initiatives")
+      .select("id")
+      .eq("user_id", owned.user.id)
+      .eq("id", input.linkedInitiativeId)
+      .maybeSingle<{ id: string }>();
+
+    initiativeId = data?.id ?? null;
+  }
+
+  const workingContent = buildNoteWorkingContent({
+    title: noteTitle,
+    body,
+    linkedInitiativeId: initiativeId
+  });
+
   const { error } = await owned.client
     .from("captures")
     .update({
       title,
-      working_content: input.workingContent,
+      note_title: noteTitle || null,
+      note_body: body,
+      summary: body,
+      follow_up: noteTitle || null,
+      linked_initiative_id: initiativeId,
+      working_content: workingContent,
       last_active_at: new Date().toISOString(),
       save_state: "saved",
       save_state_detail: null
@@ -846,10 +1815,14 @@ export async function updateLibraryItemWorkingCopy(input: {
 
 export async function updateLibraryTaskDetails(input: {
   captureId: string;
-  title: string;
+  description: string;
+  nextStep?: string | null;
+  desiredOutcome?: string | null;
   status: string;
   dueAt?: string | null;
   priority?: string | null;
+  categoryId?: string | null;
+  linkedInitiativeId?: string | null;
 }): Promise<LibraryMutationResult> {
   const owned = await getOwnedCapture(input.captureId);
   if (!owned.ok) {
@@ -863,11 +1836,11 @@ export async function updateLibraryTaskDetails(input: {
     };
   }
 
-  const title = input.title.trim();
-  if (!title) {
+  const description = input.description.trim();
+  if (!description) {
     return {
       ok: false,
-      error: "Title is required."
+      error: "Task description is required."
     };
   }
 
@@ -895,11 +1868,87 @@ export async function updateLibraryTaskDetails(input: {
     };
   }
 
+  let categoryId: string | null = null;
+  let categoryName: string | null = null;
+  if (input.categoryId) {
+    const { data } = await owned.client
+      .from("task_categories")
+      .select("id, name, status, is_fallback")
+      .eq("user_id", owned.user.id)
+      .eq("id", input.categoryId)
+      .maybeSingle<CaptureTaskCategoryRow>();
+
+    if (data && data.status === "active") {
+      categoryId = data.id;
+      categoryName = data.name;
+    }
+  }
+
+  if (!categoryId) {
+    const { data } = await owned.client
+      .from("task_categories")
+      .select("id, name, status, is_fallback")
+      .eq("user_id", owned.user.id)
+      .eq("is_fallback", true)
+      .maybeSingle<CaptureTaskCategoryRow>();
+
+    categoryId = data?.id ?? null;
+    categoryName = data?.name ?? "TBD";
+  }
+
+  if (!categoryId) {
+    return {
+      ok: false,
+      error: "Task categories are not configured correctly."
+    };
+  }
+
+  let initiativeId: string | null = null;
+  let initiativeTitle: string | null = null;
+  if (input.linkedInitiativeId) {
+    const { data } = await owned.client
+      .from("initiatives")
+      .select("id, title")
+      .eq("user_id", owned.user.id)
+      .eq("id", input.linkedInitiativeId)
+      .maybeSingle<{ id: string; title: string }>();
+
+    initiativeId = data?.id ?? null;
+    initiativeTitle = data?.title ?? null;
+  }
+
+  const nextStep = input.nextStep?.trim() ?? "";
+  const desiredOutcome = input.desiredOutcome?.trim() ?? "";
+  const title = computeTaskDisplayTitle(description);
+  const workingContent = buildTaskWorkingContent(
+    {
+      description,
+      nextStep,
+      desiredOutcome,
+      priority: priority.value,
+      categoryId,
+      linkedInitiativeId: initiativeId,
+      dueAt: dueAt.value
+    } satisfies TaskFields,
+    {
+      categoryName,
+      initiativeTitle
+    }
+  );
+
   const now = new Date().toISOString();
   const { error } = await owned.client
     .from("captures")
     .update({
       title,
+      summary: description,
+      follow_up: [nextStep, desiredOutcome].filter(Boolean).join("\n\n") || null,
+      task_description: description,
+      task_next_step: nextStep || null,
+      task_desired_outcome: desiredOutcome || null,
+      task_category_id: categoryId,
+      linked_initiative_id: initiativeId,
+      working_content: workingContent,
       completed_at: status.value === "completed" ? owned.capture.completed_at ?? now : null,
       due_at: dueAt.value,
       priority: priority.value,
@@ -920,6 +1969,150 @@ export async function updateLibraryTaskDetails(input: {
 
   return {
     ok: true
+  };
+}
+
+export async function createTaskFromNote(input: {
+  captureId: string;
+  description: string;
+  nextStep?: string | null;
+  desiredOutcome?: string | null;
+  priority?: string | null;
+  categoryId?: string | null;
+  linkedInitiativeId?: string | null;
+}): Promise<PriorityInboxLibraryLinkResult> {
+  const owned = await getOwnedCapture(input.captureId);
+  if (!owned.ok) {
+    return {
+      ok: false,
+      error: owned.error
+    };
+  }
+
+  if ((owned.capture.type ?? "note") !== "note") {
+    return {
+      ok: false,
+      error: "Only notes can be converted into tasks."
+    };
+  }
+
+  const description = input.description.trim();
+  if (!description) {
+    return {
+      ok: false,
+      error: "Task description is required."
+    };
+  }
+
+  const priority = parseTaskPriority(input.priority);
+  if (!priority.ok) {
+    return {
+      ok: false,
+      error: priority.error
+    };
+  }
+
+  const { data: categories } = await owned.client
+    .from("task_categories")
+    .select("id, name, status, is_fallback")
+    .eq("user_id", owned.user.id)
+    .order("sort_order", { ascending: true })
+    .returns<CaptureTaskCategoryRow[]>();
+  const activeCategories = (categories ?? []).filter((category) => category.status === "active");
+  const selectedCategory =
+    activeCategories.find((category) => category.id === input.categoryId) ??
+    activeCategories.find((category) => category.is_fallback) ??
+    null;
+
+  if (!selectedCategory) {
+    return {
+      ok: false,
+      error: "Task categories are not configured correctly."
+    };
+  }
+
+  let initiativeId: string | null = null;
+  let initiativeTitle: string | null = null;
+  if (input.linkedInitiativeId) {
+    const { data } = await owned.client
+      .from("initiatives")
+      .select("id, title")
+      .eq("user_id", owned.user.id)
+      .eq("id", input.linkedInitiativeId)
+      .maybeSingle<{ id: string; title: string }>();
+
+    initiativeId = data?.id ?? null;
+    initiativeTitle = data?.title ?? null;
+  }
+
+  const noteTitle = owned.capture.note_title?.trim() ?? "";
+  const noteBody = owned.capture.note_body?.trim() ?? "";
+  const taskFields: TaskFields = {
+    description,
+    nextStep: input.nextStep?.trim() ?? "",
+    desiredOutcome: input.desiredOutcome?.trim() ?? "",
+    priority: priority.value,
+    categoryId: selectedCategory.id,
+    linkedInitiativeId: initiativeId,
+    dueAt: null
+  };
+  const workingContent = buildTaskWorkingContent(taskFields, {
+    categoryName: selectedCategory.name,
+    initiativeTitle
+  });
+  const originalContent = [
+    workingContent,
+    noteTitle || noteBody ? `Source note:\n${buildNoteWorkingContent({ title: noteTitle, body: noteBody, linkedInitiativeId: null })}` : null
+  ]
+    .filter((section): section is string => Boolean(section))
+    .join("\n\n");
+  const now = new Date().toISOString();
+  const title = computeTaskDisplayTitle(description);
+  const insert = await owned.client
+    .from("captures")
+    .insert({
+      user_id: owned.user.id,
+      source_path: owned.capture.source_path,
+      pattern: "task",
+      privacy: owned.capture.privacy,
+      summary: description,
+      follow_up: [taskFields.nextStep, taskFields.desiredOutcome].filter(Boolean).join("\n\n") || null,
+      private_context: owned.capture.private_context,
+      type: "task",
+      title,
+      task_description: description,
+      task_next_step: taskFields.nextStep || null,
+      task_desired_outcome: taskFields.desiredOutcome || null,
+      task_category_id: selectedCategory.id,
+      linked_initiative_id: initiativeId,
+      origin_capture_id: owned.capture.id,
+      origin_type: "note",
+      original_content: originalContent,
+      working_content: workingContent,
+      last_active_at: now,
+      due_at: null,
+      priority: priority.value,
+      save_state: "saved",
+      save_state_detail: null
+    })
+    .select("id, title")
+    .single<{ id: string; title: string }>();
+
+  if (insert.error || !insert.data) {
+    return {
+      ok: false,
+      error: insert.error?.message ?? "Task could not be created from the note."
+    };
+  }
+
+  return {
+    ok: true,
+    object: {
+      type: "task",
+      title: insert.data.title,
+      href: createLibraryHref(insert.data.id, "task"),
+      captureId: insert.data.id
+    }
   };
 }
 
@@ -944,7 +2137,8 @@ export async function listTodayTasks(now = Date.now()): Promise<{
     search: "",
     type: "task",
     status: "active",
-    due: "all"
+    due: "all",
+    category: "all"
   });
 
   const overdue = tasks

@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 
 import { LibraryDetail } from "@/components/library/library-detail";
 import { getLibraryItemDetail } from "@/lib/capture-library";
+import { listInitiativeOptions } from "@/lib/initiatives";
+import { listTaskCategories } from "@/lib/task-config";
 
 import { sanitizeLibraryFromPath, type LibrarySearchParams } from "../route-utils";
 
@@ -45,7 +47,11 @@ function fallbackReturnPath(item: Awaited<ReturnType<typeof getLibraryItemDetail
 export default async function LibraryDetailPage({ params, searchParams }: DetailPageProps) {
   const { id } = await params;
   const resolvedSearchParams = await searchParams;
-  const item = await getLibraryItemDetail(id);
+  const [item, categories, initiatives] = await Promise.all([
+    getLibraryItemDetail(id),
+    listTaskCategories({ includeInactive: true }),
+    listInitiativeOptions()
+  ]);
 
   if (!item) {
     notFound();
@@ -70,6 +76,8 @@ export default async function LibraryDetailPage({ params, searchParams }: Detail
       returnTo={returnTo}
       notice={notice}
       error={error}
+      categories={categories}
+      initiatives={initiatives}
     />
   );
 }
