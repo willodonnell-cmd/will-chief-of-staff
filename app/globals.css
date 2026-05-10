@@ -1,25 +1,81 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   DESIGN SYSTEM TOKENS — Chief of Staff v1.0
+   Source of truth: docs/design-system.md
+   ============================================================ */
+
 :root {
-  color-scheme: dark;
-  --color-shell: 17 23 30;
-  --color-plane: 238 236 231;
-  --color-surface: 250 248 243;
-  --color-line: 197 192 183;
-  --color-text: 34 39 45;
-  --color-text-muted: 86 91 97;
-  --color-text-subtle: 118 122 127;
-  --color-shell-text: 234 234 230;
-  --color-shell-muted: 142 145 150;
-  --color-accent-red: 125 35 31;
-  --color-accent-moss: 104 118 86;
-  --shell-gradient: radial-gradient(circle at top, rgba(64, 73, 84, 0.32), transparent 42%);
-  --plane-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(242, 239, 232, 0.96));
+  /* --- Sidebar (shared with Dossier) --- */
+  --color-sidebar-bg:        26 26 31;      /* #1a1a1f */
+  --color-sidebar-text:      232 230 224;   /* #e8e6e0 */
+  --color-sidebar-muted:     107 104 96;    /* #6b6860 */
+  --color-sidebar-active:    255 255 255;
+  --color-sidebar-indicator: 255 255 255;
+  --color-sidebar-hover:     rgba(255, 255, 255, 0.05);
+
+  /* --- Borders (shared) --- */
+  --color-border:             rgba(0, 0, 0, 0.08);
+  --color-border-strong:      rgba(0, 0, 0, 0.15);
+
+  /* --- CoS surfaces --- */
+  --color-bg:                244 243 240;   /* #f4f3f0 */
+  --color-surface:           255 255 255;   /* #ffffff */
+  --color-surface-secondary: 240 237 232;   /* #f0ede8 */
+  --color-text-primary:      26 26 31;      /* #1a1a1f */
+  --color-text-secondary:    107 104 96;    /* #6b6860 */
+  --color-text-muted:        168 165 160;   /* #a8a5a0 */
+
+  /* --- Functional / status colors (shared) --- */
+  --color-live:              45 106 79;     /* #2d6a4f */
+  --color-live-bg:           232 245 239;   /* #e8f5ef */
+  --color-actionable:        146 64 14;     /* #92400e */
+  --color-actionable-bg:     254 243 199;   /* #fef3c7 */
+  --color-watch:             30 77 107;     /* #1e4d6b */
+  --color-watch-bg:          224 240 248;   /* #e0f0f8 */
+  --color-hypothesis:        74 29 107;     /* #4a1d6b */
+  --color-hypothesis-bg:     243 232 255;   /* #f3e8ff */
+  --color-pressure:          30 58 95;      /* #1e3a5f */
+  --color-pressure-bg:       224 234 248;   /* #e0eaf8 */
+  --color-signal:            75 85 99;      /* #4b5563 */
+  --color-signal-bg:         243 244 246;   /* #f3f4f6 */
+  --color-high-priority:     185 28 28;     /* #b91c1c */
+  --color-high-priority-bg:  254 242 242;   /* #fef2f2 */
+  --color-decision-bg:       26 26 31;      /* #1a1a1f */
+  --color-decision-text:     255 255 255;
+
+  /* --- Motion --- */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+
+  /* --- Spacing --- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* --- Legacy aliases (keeps existing Tailwind classes working) --- */
+  --color-shell:       26 26 31;
+  --color-shell-text:  232 230 224;
+  --color-shell-muted: 107 104 96;
+  --color-plane:       240 237 232;
+  --color-line:        168 165 160;
+  --color-text:        26 26 31;
+  --color-text-subtle: 168 165 160;
+  --color-accent-red:  185 28 28;
+  --color-accent-moss: 45 106 79;
 }
+
+/* ============================================================
+   BASE RESET
+   ============================================================ */
 
 * {
   box-sizing: border-box;
@@ -36,8 +92,7 @@ body {
   min-height: 100vh;
   margin: 0;
   background: transparent;
-  color: rgb(var(--color-text));
-  font-family: Inter, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  color: rgb(var(--color-text-primary));
 }
 
 a {
@@ -53,24 +108,381 @@ select {
 }
 
 ::selection {
-  background: rgba(125, 35, 31, 0.18);
+  background: rgba(26, 26, 31, 0.12);
 }
+
+/* ============================================================
+   SKELETON LOADER
+   ============================================================ */
+
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--color-surface-secondary)) 25%,
+    rgba(0, 0, 0, 0.06) 50%,
+    rgb(var(--color-surface-secondary)) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 4px;
+}
+
+/* ============================================================
+   SECTION LABELS
+   ============================================================ */
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgb(var(--color-text-muted));
+}
+
+.sidebar-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgb(var(--color-sidebar-muted));
+  padding: 24px 16px 8px;
+}
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+
+.card {
+  background: rgb(var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.card-secondary {
+  background: rgb(var(--color-surface-secondary));
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 20px 24px;
+}
+
+/* ============================================================
+   STAT CARDS
+   ============================================================ */
+
+.stat-card {
+  background: rgb(var(--color-surface-secondary));
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 20px 24px;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgb(var(--color-text-muted));
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 600;
+  color: rgb(var(--color-text-primary));
+  line-height: 1;
+}
+
+/* ============================================================
+   STATUS PILLS (filled)
+   ============================================================ */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.pill-live       { color: rgb(var(--color-live));          background: rgb(var(--color-live-bg)); }
+.pill-actionable { color: rgb(var(--color-actionable));    background: rgb(var(--color-actionable-bg)); }
+.pill-watch      { color: rgb(var(--color-watch));         background: rgb(var(--color-watch-bg)); }
+.pill-hypothesis { color: rgb(var(--color-hypothesis));    background: rgb(var(--color-hypothesis-bg)); }
+.pill-pressure   { color: rgb(var(--color-pressure));      background: rgb(var(--color-pressure-bg)); }
+.pill-signal     { color: rgb(var(--color-signal));        background: rgb(var(--color-signal-bg)); }
+.pill-priority   { color: rgb(var(--color-high-priority)); background: rgb(var(--color-high-priority-bg)); }
+.pill-decision   { color: rgb(var(--color-decision-text)); background: rgb(var(--color-decision-bg)); }
+
+/* ============================================================
+   TAG CHIPS (outline)
+   ============================================================ */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgb(var(--color-text-secondary));
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+
+.btn-primary {
+  background: rgb(var(--color-decision-bg));
+  color: rgb(var(--color-decision-text));
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.btn-primary:hover {
+  opacity: 0.88;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: rgb(var(--color-text-primary));
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.btn-secondary:hover {
+  background: rgb(var(--color-surface-secondary));
+}
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgb(var(--color-text-muted));
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-border-strong);
+  text-align: left;
+}
+
+.data-table td {
+  font-size: 13px;
+  color: rgb(var(--color-text-primary));
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* ============================================================
+   TAB SWITCHER
+   ============================================================ */
+
+.tab-group {
+  display: inline-flex;
+  background: rgb(var(--color-surface));
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.tab {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--color-text-secondary));
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.tab.active {
+  background: rgb(var(--color-surface-secondary));
+  color: rgb(var(--color-text-primary));
+  font-weight: 600;
+}
+
+/* ============================================================
+   REGIME BAR (Dossier)
+   ============================================================ */
+
+.regime-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.regime-tag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgb(var(--color-text-secondary));
+}
+
+.regime-tag::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ============================================================
+   LEGACY COMPATIBILITY
+   Keep dark-shell classes working in capture/tray components.
+   Remove once those components are migrated to new tokens.
+   ============================================================ */
+
+.shell-panel {
+  background: rgb(var(--color-sidebar-bg));
+}
+
+.content-plane {
+  background: rgb(var(--color-bg));
+}
+
+.capture-control {
+  background: linear-gradient(180deg, rgba(50, 59, 70, 0.96), rgba(25, 31, 39, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    0 18px 30px -22px rgba(0, 0, 0, 0.66),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.28);
+  transition:
+    transform 180ms ease-out,
+    filter 180ms ease-out,
+    background 180ms ease-out,
+    box-shadow 180ms ease-out,
+    border-color 180ms ease-out;
+}
+
+.capture-control:hover,
+.capture-control:focus-visible {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.capture-control-active {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  background: linear-gradient(180deg, rgba(60, 70, 82, 0.98), rgba(29, 36, 45, 1));
+  border-color: rgba(255, 255, 255, 0.13);
+}
+
+.shell-control {
+  background: linear-gradient(180deg, rgba(44, 51, 60, 0.92), rgba(24, 30, 38, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition:
+    transform 160ms ease-out,
+    filter 160ms ease-out,
+    background 160ms ease-out,
+    border-color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+.shell-control:hover,
+.shell-control:focus-visible {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+  border-color: rgba(255, 255, 255, 0.11);
+}
+
+.shell-control-active {
+  filter: brightness(1.04);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, rgba(50, 58, 68, 0.95), rgba(27, 33, 41, 0.98));
+}
+
+.shell-control-notification {
+  background: linear-gradient(180deg, rgba(48, 56, 66, 0.94), rgba(26, 31, 39, 0.97));
+  border: 1px solid rgba(255, 255, 255, 0.095);
+}
+
+.shell-control-notification:hover,
+.shell-control-notification:focus-visible {
+  filter: brightness(1.04);
+  border-color: rgba(255, 255, 255, 0.115);
+}
+
+.shell-control-notification-active {
+  filter: brightness(1.06);
+  border-color: rgba(255, 255, 255, 0.13);
+  background: linear-gradient(180deg, rgba(54, 63, 74, 0.96), rgba(29, 35, 43, 0.99));
+}
+
+.shell-tray {
+  background: linear-gradient(180deg, rgba(39, 46, 55, 0.98), rgba(23, 29, 36, 0.99));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+.shell-tray-row {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition:
+    background 160ms ease-out,
+    border-color 160ms ease-out,
+    transform 160ms ease-out;
+}
+
+.shell-tray-row:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.refined-b {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 242, 236, 0.94));
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/* ============================================================
+   TAILWIND UTILITIES
+   ============================================================ */
 
 @layer utilities {
   .page-title {
-    @apply mt-3 max-w-[31ch] text-[1.78rem] font-medium leading-[1.1] tracking-[-0.03em] text-text md:text-[2rem] lg:max-w-[73%];
-  }
-
-  .brief-title {
-    @apply mt-3 text-[1.14rem] font-medium leading-[1.08] tracking-[-0.032em] text-text md:text-[1.3rem] lg:max-w-[91%] xl:text-[1.34rem];
-  }
-
-  .section-title {
-    @apply mt-3 text-[1.12rem] font-medium leading-[1.16] tracking-[-0.02em] text-text md:text-[1.22rem];
+    @apply text-[2rem] font-semibold leading-tight tracking-[-0.02em];
+    color: rgb(var(--color-text-primary));
   }
 
   .brief-layout {
-    @apply grid gap-5 lg:grid-cols-[minmax(0,1fr)_14.5rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_15.5rem];
+    @apply grid gap-5 lg:grid-cols-[minmax(0,1fr)_14.5rem] lg:items-start;
   }
 
   .brief-main {
@@ -78,170 +490,6 @@ select {
   }
 
   .brief-side {
-    @apply min-w-0 lg:w-full lg:max-w-[14.5rem] lg:justify-self-end xl:max-w-[15.5rem];
-  }
-
-  .brief-body {
-    @apply mt-4 max-w-[48rem] text-sm leading-6 text-text-muted md:text-base;
-  }
-
-  .shell-panel {
-    background:
-      var(--shell-gradient),
-      linear-gradient(180deg, rgba(34, 41, 50, 0.98), rgba(19, 24, 31, 0.98));
-  }
-
-  .content-plane {
-    background:
-      radial-gradient(circle at top right, rgba(255, 255, 255, 0.45), transparent 34%),
-      var(--plane-gradient);
-  }
-
-  .focus-elevation {
-    box-shadow: 0 18px 50px -32px rgba(15, 23, 42, 0.42);
-  }
-
-  .capture-control {
-    background:
-      radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.14), transparent 48%),
-      linear-gradient(180deg, rgba(50, 59, 70, 0.96), rgba(25, 31, 39, 0.98));
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    box-shadow:
-      0 18px 30px -22px rgba(0, 0, 0, 0.66),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.28);
-    transition:
-      transform 180ms ease-out,
-      filter 180ms ease-out,
-      background 180ms ease-out,
-      box-shadow 180ms ease-out,
-      border-color 180ms ease-out;
-  }
-
-  .capture-control:hover,
-  .capture-control:focus-visible {
-    transform: translateY(-1px);
-    filter: brightness(1.05);
-    border-color: rgba(255, 255, 255, 0.12);
-    box-shadow:
-      0 22px 34px -22px rgba(0, 0, 0, 0.72),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.28);
-  }
-
-  .capture-control-active {
-    transform: translateY(-1px);
-    filter: brightness(1.08);
-    background:
-      radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.18), transparent 52%),
-      linear-gradient(180deg, rgba(60, 70, 82, 0.98), rgba(29, 36, 45, 1));
-    border-color: rgba(255, 255, 255, 0.13);
-    box-shadow:
-      0 24px 38px -22px rgba(0, 0, 0, 0.76),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.3);
-  }
-
-  .shell-control {
-    background:
-      radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.06), transparent 52%),
-      linear-gradient(180deg, rgba(44, 51, 60, 0.92), rgba(24, 30, 38, 0.96));
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    box-shadow:
-      0 12px 26px -24px rgba(0, 0, 0, 0.7),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    transition:
-      transform 160ms ease-out,
-      filter 160ms ease-out,
-      background 160ms ease-out,
-      border-color 160ms ease-out,
-      box-shadow 160ms ease-out;
-  }
-
-  .shell-control:hover,
-  .shell-control:focus-visible {
-    transform: translateY(-1px);
-    filter: brightness(1.03);
-    border-color: rgba(255, 255, 255, 0.11);
-    box-shadow:
-      0 16px 28px -24px rgba(0, 0, 0, 0.74),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  }
-
-  .shell-control-active {
-    filter: brightness(1.04);
-    border-color: rgba(255, 255, 255, 0.12);
-    background:
-      radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.08), transparent 52%),
-      linear-gradient(180deg, rgba(50, 58, 68, 0.95), rgba(27, 33, 41, 0.98));
-  }
-
-  .shell-control-notification {
-    background:
-      radial-gradient(circle at 34% 22%, rgba(255, 255, 255, 0.1), transparent 46%),
-      linear-gradient(180deg, rgba(48, 56, 66, 0.94), rgba(26, 31, 39, 0.97));
-    border: 1px solid rgba(255, 255, 255, 0.095);
-    box-shadow:
-      0 16px 28px -24px rgba(0, 0, 0, 0.7),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.22);
-  }
-
-  .shell-control-notification:hover,
-  .shell-control-notification:focus-visible {
-    filter: brightness(1.04);
-    border-color: rgba(255, 255, 255, 0.115);
-    box-shadow:
-      0 18px 30px -24px rgba(0, 0, 0, 0.74),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.24);
-  }
-
-  .shell-control-notification-active {
-    filter: brightness(1.06);
-    border-color: rgba(255, 255, 255, 0.13);
-    background:
-      radial-gradient(circle at 34% 22%, rgba(255, 255, 255, 0.13), transparent 48%),
-      linear-gradient(180deg, rgba(54, 63, 74, 0.96), rgba(29, 35, 43, 0.99));
-    box-shadow:
-      0 20px 32px -24px rgba(0, 0, 0, 0.76),
-      inset 0 1px 0 rgba(255, 255, 255, 0.11),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.24);
-  }
-
-  .shell-tray {
-    background:
-      radial-gradient(circle at top right, rgba(255, 255, 255, 0.09), transparent 34%),
-      linear-gradient(180deg, rgba(39, 46, 55, 0.98), rgba(23, 29, 36, 0.99));
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow:
-      0 32px 56px -34px rgba(0, 0, 0, 0.72),
-      inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(16px);
-  }
-
-  .shell-tray-row {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    transition:
-      background 160ms ease-out,
-      border-color 160ms ease-out,
-      transform 160ms ease-out;
-  }
-
-  .shell-tray-row:hover {
-    transform: translateY(-1px);
-    background: rgba(255, 255, 255, 0.045);
-    border-color: rgba(255, 255, 255, 0.08);
-  }
-
-  .refined-b {
-    background:
-      radial-gradient(circle at top right, rgba(255, 255, 255, 0.58), transparent 38%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 242, 236, 0.94));
-    border: 1px solid rgba(197, 192, 183, 0.84);
-    box-shadow:
-      0 32px 64px -42px rgba(15, 23, 42, 0.46),
-      0 10px 24px -18px rgba(15, 23, 42, 0.24);
+    @apply min-w-0 lg:w-full lg:max-w-[14.5rem] lg:justify-self-end;
   }
 }

@@ -42,13 +42,13 @@ export function CommitmentRow({
       <div className="flex-1">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <p className="text-sm font-medium text-text">{title}</p>
-          <span className="text-[0.72rem] uppercase tracking-[0.16em] text-text-subtle">{stateLabel}</span>
+          <span className="section-label">{stateLabel}</span>
           {priorityLabel ? (
-            <span className="text-[0.72rem] uppercase tracking-[0.16em] text-text-subtle">{priorityLabel}</span>
+            <span className="section-label">{priorityLabel}</span>
           ) : null}
         </div>
         <p className="mt-2 text-sm leading-6 text-text-muted">{summary}</p>
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.72rem] uppercase tracking-[0.16em] text-text-subtle">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 section-label">
           <span>{dueLabel}</span>
           <span>{activityLabel}</span>
         </div>
@@ -56,7 +56,7 @@ export function CommitmentRow({
 
       <Link
         href={href as Route}
-        className="rounded-full border border-line/75 bg-white/78 px-4 py-2 text-sm font-medium text-text transition-colors duration-200 hover:bg-white"
+        className="btn-secondary"
       >
         {actionLabel}
       </Link>

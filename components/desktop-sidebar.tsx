@@ -88,7 +88,7 @@ export function DesktopSidebar() {
   }
 
   return (
-    <aside className="hidden h-full min-h-0 w-[284px] flex-col border-r border-white/8 px-5 py-6 md:flex">
+    <aside className="hidden h-full min-h-0 w-[284px] flex-col px-5 py-6 md:flex">
       <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#1B2530] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
         <div
           aria-hidden="true"
@@ -149,7 +149,7 @@ export function DesktopSidebar() {
         ))}
       </nav>
 
-      <div className="mt-6 shrink-0 border-t border-white/8 pt-5">
+      <div className="mt-6 shrink-0 pt-5">
         <div
           className="grid items-center px-4"
           style={{ gridTemplateColumns: `repeat(${railColumnCount}, minmax(0, 1fr))` }}

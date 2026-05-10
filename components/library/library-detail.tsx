@@ -272,7 +272,7 @@ export function LibraryDetail({
       <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
         <div className="brief-layout">
           <div className="brief-main">
-            <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Library detail</p>
+            <p className="section-label">Library detail</p>
             <h2 className="brief-title">{item.title}</h2>
             <p className="brief-body">
               {item.type === "note" ? item.note?.body ?? item.preview : item.task?.description ?? item.preview}
@@ -282,7 +282,7 @@ export function LibraryDetail({
           <div className="brief-side space-y-3">
             {metadataRows(item).map((row) => (
               <div key={row.label} className="rounded-[1.3rem] border border-line/75 bg-white/68 px-4 py-4">
-                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">{row.label}</p>
+                <p className="section-label">{row.label}</p>
                 <p className="mt-2 text-sm font-medium leading-6 text-text">{row.value}</p>
               </div>
             ))}
@@ -298,7 +298,7 @@ export function LibraryDetail({
               <input type="hidden" name="redirectTo" value={redirectTo} />
 
               <div>
-                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Working note</p>
+                <p className="section-label">Working note</p>
                 <p className="mt-2 text-sm leading-6 text-text-muted">
                   The editable note stays foregrounded. Original captured content remains preserved below when you need it.
                 </p>
@@ -306,7 +306,7 @@ export function LibraryDetail({
 
               <div className="mt-4 space-y-4">
                 <label className="space-y-2 text-sm text-text-muted">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Title (Optional)</span>
+                  <span className="section-label">Title (Optional)</span>
                   <input
                     name="title"
                     defaultValue={item.note?.title ?? ""}
@@ -315,7 +315,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Body</span>
+                  <span className="section-label">Body</span>
                   <textarea
                     name="workingContent"
                     rows={10}
@@ -326,7 +326,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Linked Initiative</span>
+                  <span className="section-label">Linked Initiative</span>
                   <select
                     name="linkedInitiativeId"
                     defaultValue={item.note?.linkedInitiativeId ?? ""}
@@ -356,7 +356,7 @@ export function LibraryDetail({
               <input type="hidden" name="redirectTo" value={redirectTo} />
 
               <div>
-                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Working task</p>
+                <p className="section-label">Working task</p>
                 <p className="mt-2 text-sm leading-6 text-text-muted">
                   Tasks stay operational here: description, execution detail, categorization, initiative linkage, and normal task metadata.
                 </p>
@@ -364,7 +364,7 @@ export function LibraryDetail({
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="space-y-2 text-sm text-text-muted md:col-span-2">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Task Description</span>
+                  <span className="section-label">Task Description</span>
                   <textarea
                     name="description"
                     rows={5}
@@ -375,7 +375,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Priority</span>
+                  <span className="section-label">Priority</span>
                   <select
                     name="priority"
                     defaultValue={item.task?.priority ?? "medium"}
@@ -388,7 +388,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Category</span>
+                  <span className="section-label">Category</span>
                   <select
                     name="categoryId"
                     defaultValue={item.task?.categoryId ?? ""}
@@ -404,7 +404,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted md:col-span-2">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Next Step</span>
+                  <span className="section-label">Next Step</span>
                   <input
                     name="nextStep"
                     defaultValue={item.task?.nextStep ?? ""}
@@ -413,7 +413,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted md:col-span-2">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Desired Outcome</span>
+                  <span className="section-label">Desired Outcome</span>
                   <textarea
                     name="desiredOutcome"
                     rows={3}
@@ -423,7 +423,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Linked Initiative</span>
+                  <span className="section-label">Linked Initiative</span>
                   <select
                     name="linkedInitiativeId"
                     defaultValue={item.task?.linkedInitiativeId ?? ""}
@@ -439,7 +439,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Status</span>
+                  <span className="section-label">Status</span>
                   <select
                     name="status"
                     defaultValue={item.task?.status ?? "active"}
@@ -451,7 +451,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted md:col-span-2">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Due (Optional)</span>
+                  <span className="section-label">Due (Optional)</span>
                   <input
                     name="dueAt"
                     type="datetime-local"
@@ -475,7 +475,7 @@ export function LibraryDetail({
               <input type="hidden" name="redirectTo" value={redirectTo} />
 
               <div>
-                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Create task from note</p>
+                <p className="section-label">Create task from note</p>
                 <p className="mt-2 text-sm leading-6 text-text-muted">
                   The original note stays intact. This creates a new task with a preserved backlink to the note as source lineage.
                 </p>
@@ -483,7 +483,7 @@ export function LibraryDetail({
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="space-y-2 text-sm text-text-muted md:col-span-2">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Task Description</span>
+                  <span className="section-label">Task Description</span>
                   <textarea
                     name="description"
                     rows={4}
@@ -494,7 +494,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted md:col-span-2">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Next Step</span>
+                  <span className="section-label">Next Step</span>
                   <input
                     name="nextStep"
                     defaultValue={item.note?.title ?? ""}
@@ -503,7 +503,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted md:col-span-2">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Desired Outcome</span>
+                  <span className="section-label">Desired Outcome</span>
                   <textarea
                     name="desiredOutcome"
                     rows={3}
@@ -513,7 +513,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Priority</span>
+                  <span className="section-label">Priority</span>
                   <select
                     name="priority"
                     defaultValue="medium"
@@ -526,7 +526,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Category</span>
+                  <span className="section-label">Category</span>
                   <select
                     name="categoryId"
                     defaultValue=""
@@ -542,7 +542,7 @@ export function LibraryDetail({
                 </label>
 
                 <label className="space-y-2 text-sm text-text-muted md:col-span-2">
-                  <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Linked Initiative</span>
+                  <span className="section-label">Linked Initiative</span>
                   <select
                     name="linkedInitiativeId"
                     defaultValue={item.note?.linkedInitiativeId ?? ""}
@@ -579,7 +579,7 @@ export function LibraryDetail({
               <div className="mt-4 space-y-3">
                 {provenance.map((row) => (
                   <div key={`${row.label}-${row.value}`} className="rounded-[1.15rem] border border-line/70 bg-[rgba(255,255,255,0.56)] px-4 py-4">
-                    <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">{row.label}</p>
+                    <p className="section-label">{row.label}</p>
                     {row.href ? (
                       <Link href={row.href as Route} className="mt-2 inline-flex text-sm font-medium leading-6 text-text transition hover:text-text-muted">
                         {row.value}
@@ -596,14 +596,14 @@ export function LibraryDetail({
 
         <div className="space-y-4">
           <section className="rounded-[1.55rem] border border-line/75 bg-white/68 p-5">
-            <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Actions</p>
+            <p className="section-label">Actions</p>
             <div className="mt-4">
               <DetailActions item={item} redirectTo={redirectTo} returnTo={returnTo} isLocalOnly={isLocalOnly} />
             </div>
           </section>
 
           <section className="rounded-[1.55rem] border border-line/75 bg-white/68 p-5">
-            <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Updates</p>
+            <p className="section-label">Updates</p>
             {isLocalOnly ? (
               <p className="mt-4 text-sm leading-6 text-text-muted">Updates stay disabled while this item is still local-only.</p>
             ) : (
@@ -633,7 +633,7 @@ export function LibraryDetail({
                     item.updates.map((update) => (
                       <div key={update.id} className="rounded-[1.15rem] border border-line/70 bg-[rgba(255,255,255,0.56)] px-4 py-4">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">{update.kind}</p>
+                          <p className="section-label">{update.kind}</p>
                           <p className="text-sm text-text-muted">{formatTimestamp(update.createdAt)}</p>
                         </div>
                         <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-text-muted">{update.body}</p>

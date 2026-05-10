@@ -33,7 +33,7 @@ export function InboxRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <p className="text-sm font-medium text-text">{sender}</p>
-          <span className="text-[0.72rem] uppercase tracking-[0.18em] text-text-subtle">{received}</span>
+          <span className="section-label">{received}</span>
           {protectedThread ? (
             <span className="rounded-full border border-accent-red/22 px-2 py-0.5 text-[0.68rem] uppercase tracking-[0.16em] text-text-subtle">
               Protected
@@ -47,12 +47,7 @@ export function InboxRow({
       <div className="md:pl-4">
         <button
           type="button"
-          className={cn(
-            "rounded-full border px-4 py-2 text-sm font-medium transition-colors duration-200",
-            elevated
-              ? "border-line/80 bg-text text-white"
-              : "border-line/75 bg-white/78 text-text hover:bg-white"
-          )}
+          className={cn(elevated ? "btn-primary" : "btn-secondary")}
         >
           {action}
         </button>

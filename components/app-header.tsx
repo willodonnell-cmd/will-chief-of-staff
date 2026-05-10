@@ -11,7 +11,7 @@ export function AppHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="flex items-center justify-between border-b border-white/8 px-4 py-4 md:px-6 lg:px-8">
+    <header className="flex items-center justify-between px-4 py-4 md:px-6 lg:px-8">
       <div>
         <p className="text-[0.7rem] uppercase tracking-[0.28em] text-[rgb(var(--color-shell-muted))]">
           Responsive web app

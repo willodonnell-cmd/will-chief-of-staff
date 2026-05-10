@@ -17,13 +17,13 @@ export function HighFocusItem({
     <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
       <div className="brief-layout">
         <div className="brief-main">
-          <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">High focus</p>
+          <p className="section-label">High focus</p>
           <h3 className="brief-title">{title}</h3>
           <p className="brief-body">{summary}</p>
         </div>
 
         <div className="brief-side rounded-[1.35rem] border border-line/70 bg-white/66 px-4 py-4">
-          <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Next decision</p>
+          <p className="section-label">Next decision</p>
           <p className="mt-3 text-base font-medium leading-6 text-text">{decision}</p>
         </div>
       </div>

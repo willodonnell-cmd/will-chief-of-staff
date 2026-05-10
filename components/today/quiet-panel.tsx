@@ -10,7 +10,7 @@ type QuietPanelProps = {
 export function QuietPanel({ title, eyebrow, items }: QuietPanelProps) {
   return (
     <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
-      <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">{eyebrow}</p>
+      <p className="section-label">{eyebrow}</p>
       <h3 className="section-title">{title}</h3>
 
       <div className="mt-5 space-y-4">

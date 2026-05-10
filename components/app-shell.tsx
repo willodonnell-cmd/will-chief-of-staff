@@ -16,7 +16,7 @@ export function AppShell({ children }: AppShellProps) {
         <div className="flex min-h-0 flex-1 flex-col">
           <AppHeader />
           <main className="min-h-0 flex-1 overflow-y-auto p-3 pb-24 md:p-4 md:pb-4 lg:p-6">
-            <div className="content-plane min-h-full rounded-[1.75rem] border border-white/55 p-4 text-text shadow-focus md:p-6 lg:p-8">
+            <div className="content-plane min-h-full rounded-[1.75rem] p-4 text-text md:p-6 lg:p-8">
               {children}
             </div>
           </main>

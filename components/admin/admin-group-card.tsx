@@ -32,7 +32,7 @@ export function AdminGroupCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">{eyebrow}</p>
+          <p className="section-label">{eyebrow}</p>
           <h3 className="section-title mt-2">{title}</h3>
         </div>
         <div
@@ -48,7 +48,7 @@ export function AdminGroupCard({
       <p className="mt-3 text-sm leading-6 text-text-muted">{summary}</p>
 
       <div className="mt-5 rounded-[1.2rem] border border-line/60 bg-[rgba(255,255,255,0.72)] px-4 py-3">
-        <p className="text-[0.67rem] uppercase tracking-[0.2em] text-text-subtle">Current state</p>
+        <p className="section-label">Current state</p>
         <p className="mt-2 text-sm font-medium leading-6 text-text">{currentState}</p>
       </div>
 

@@ -27,7 +27,7 @@ function TaskSection({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">{title}</p>
+        <p className="section-label">{title}</p>
         <p className="text-xs text-text-muted">{items.length}</p>
       </div>
 
@@ -56,7 +56,7 @@ export function TaskRadar({ overdue, dueSoon }: TaskRadarProps) {
     <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Task system</p>
+          <p className="section-label">Task system</p>
           <h3 className="section-title">Operational tasks worth foreground attention.</h3>
         </div>
 

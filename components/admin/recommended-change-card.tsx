@@ -11,11 +11,11 @@ export function RecommendedChangeCard({ summary, impacts, why }: RecommendedChan
 
       <div className="mt-4 space-y-3 text-sm leading-6 text-text-muted">
         <div>
-          <p className="text-[0.67rem] uppercase tracking-[0.2em] text-text-subtle">What it impacts</p>
+          <p className="section-label">What it impacts</p>
           <p className="mt-1">{impacts}</p>
         </div>
         <div>
-          <p className="text-[0.67rem] uppercase tracking-[0.2em] text-text-subtle">Why</p>
+          <p className="section-label">Why</p>
           <p className="mt-1">{why}</p>
         </div>
       </div>

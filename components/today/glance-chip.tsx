@@ -16,7 +16,7 @@ export function GlanceChip({ label, value, tone = "default" }: GlanceChipProps) 
         tone === "protected" && "border-accent-red/18 bg-[rgba(125,35,31,0.08)]"
       )}
     >
-      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">{label}</p>
+      <p className="section-label">{label}</p>
       <p className="mt-3 text-2xl font-medium tracking-[-0.03em] text-text">{value}</p>
     </div>
   );

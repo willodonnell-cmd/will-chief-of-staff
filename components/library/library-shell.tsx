@@ -133,7 +133,7 @@ function Filters({
     <form action={basePath} className="rounded-[1.55rem] border border-line/75 bg-white/68 p-4 md:p-5">
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_repeat(2,minmax(0,0.52fr))_auto]">
         <label className="space-y-2 text-sm text-text-muted">
-          <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Search</span>
+          <span className="section-label">Search</span>
           <input
             type="search"
             name="search"
@@ -145,7 +145,7 @@ function Filters({
 
         {query.scope !== "archived" ? (
           <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Status</span>
+            <span className="section-label">Status</span>
             <select
               name="status"
               defaultValue={query.status}
@@ -160,7 +160,7 @@ function Filters({
 
         {query.scope === "tasks" ? (
           <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Due cue</span>
+            <span className="section-label">Due cue</span>
             <select
               name="due"
               defaultValue={query.due}
@@ -175,10 +175,10 @@ function Filters({
         ) : null}
 
         <div className="flex items-end gap-2">
-          <button type="submit" className="rounded-full border border-line/80 bg-white/85 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+          <button type="submit" className="btn-secondary">
             Apply
           </button>
-          <Link href={basePath} className="rounded-full border border-line/70 bg-[rgba(255,255,255,0.45)] px-4 py-2.5 text-sm text-text-muted transition hover:bg-white/75">
+          <Link href={basePath} className="btn-secondary">
             Clear
           </Link>
         </div>
@@ -215,7 +215,7 @@ function Filters({
           </div>
 
           <label className="block space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">More categories</span>
+            <span className="section-label">More categories</span>
             <select
               name="category"
               defaultValue={query.category}
@@ -338,7 +338,7 @@ function TaskGroups({
   return (
     <section className="space-y-4">
       <div>
-        <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">{title}</p>
+        <p className="section-label">{title}</p>
       </div>
 
       {priorities.map((priority) => {
@@ -387,7 +387,7 @@ export function LibraryShell({ copy, scope, items, query, currentPath, categorie
           </section>
         ) : (
           <section className="rounded-[1.75rem] border border-line/75 bg-white/66 px-5 py-10 text-center">
-            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Archived library</p>
+            <p className="section-label">Archived library</p>
             <p className="mt-3 text-[1.02rem] font-medium text-text">No archived items match the current view.</p>
           </section>
         )
@@ -396,7 +396,7 @@ export function LibraryShell({ copy, scope, items, query, currentPath, categorie
           <TaskGroups items={taskItems} currentPath={currentPath} title="Tasks grouped for execution" />
         ) : (
           <section className="rounded-[1.75rem] border border-line/75 bg-white/66 px-5 py-10 text-center">
-            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Task library</p>
+            <p className="section-label">Task library</p>
             <p className="mt-3 text-[1.02rem] font-medium text-text">No tasks match the current view.</p>
           </section>
         )
@@ -406,7 +406,7 @@ export function LibraryShell({ copy, scope, items, query, currentPath, categorie
 
           <section className="space-y-4">
             <div>
-              <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Notes</p>
+              <p className="section-label">Notes</p>
             </div>
             {noteItems.length > 0 ? (
               noteItems.map((item) => <NoteRow key={item.id} item={item} currentPath={currentPath} />)
