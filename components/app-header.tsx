@@ -13,10 +13,7 @@ export function AppHeader() {
   return (
     <header className="flex items-center justify-between px-4 py-4 md:px-6 lg:px-8">
       <div>
-        <p className="text-[0.7rem] uppercase tracking-[0.28em] text-[rgb(var(--color-shell-muted))]">
-          Responsive web app
-        </p>
-        <h1 className="mt-1 text-lg font-medium text-white">Chief of Staff</h1>
+        <h1 className="text-lg font-medium text-white">Blackhawk: Chief of Staff</h1>
       </div>
       <div className="flex items-center gap-3">
         {mobileShellActions.map((item) => {
