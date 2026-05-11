@@ -41,9 +41,6 @@ export function AppHeader() {
 
         <div className="hidden items-center gap-3 md:flex">
           <NotificationsTray />
-          <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-[rgb(var(--color-shell-muted))]">
-            Shell foundation
-          </div>
         </div>
       </div>
     </header>
