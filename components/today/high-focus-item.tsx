@@ -1,9 +1,13 @@
+import type { Route } from "next";
+import Link from "next/link";
+
 type HighFocusItemProps = {
   title: string;
   summary: string;
   owner: string;
   timing: string;
   decision: string;
+  href: string;
 };
 
 export function HighFocusItem({
@@ -11,7 +15,8 @@ export function HighFocusItem({
   summary,
   owner,
   timing,
-  decision
+  decision,
+  href
 }: HighFocusItemProps) {
   return (
     <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
@@ -36,7 +41,9 @@ export function HighFocusItem({
             {timing}
           </span>
         </div>
-        <p className="font-medium text-text">Keep the next move narrow.</p>
+        <Link href={href as Route} className="font-medium text-text transition hover:text-text-muted">
+          View in inbox →
+        </Link>
       </div>
     </section>
   );

@@ -1,32 +1,14 @@
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 import { listTodayTasks, type LibraryItemSummary } from "@/lib/capture-library";
+import { listInitiativeOptions } from "@/lib/initiatives";
+import { listPriorityInboxItems } from "@/lib/priority-inbox-store";
+import type { PriorityInboxRecommendedAction } from "@/lib/priority-inbox";
 
-type TodayBriefRecord = {
+type TaskRadarItem = {
   id: string;
-  high_focus_title: string;
-  high_focus_summary: string;
-  high_focus_owner: string;
-  high_focus_timing: string;
-  high_focus_decision: string;
-  quiet_panel_eyebrow: string;
-  quiet_panel_title: string;
-};
-
-type TodayGlanceItemRecord = {
-  label: string;
-  value: string;
-  tone: "default" | "quiet" | "protected";
-};
-
-type TodayQuietItemRecord = {
-  label: string;
-  detail: string;
-};
-
-type TodaySupportNoteRecord = {
-  eyebrow: string;
   title: string;
-  body: string;
+  detail: string;
+  href: string;
 };
 
 export type TodayPageData = {
@@ -34,6 +16,7 @@ export type TodayPageData = {
     label: string;
     value: string;
     tone?: "default" | "quiet" | "protected";
+    href?: string;
   }>;
   highFocus: {
     title: string;
@@ -41,35 +24,39 @@ export type TodayPageData = {
     owner: string;
     timing: string;
     decision: string;
+    href: string;
   } | null;
   quietPanel: {
     eyebrow: string;
     title: string;
-    items: Array<{
-      label: string;
-      detail: string;
-    }>;
+    items: Array<{ label: string; detail: string; href?: string }>;
   } | null;
-  supportNotes: Array<{
-    eyebrow: string;
-    title: string;
-    body: string;
-  }>;
+  inboxSummary: {
+    needsReview: number;
+    highPriority: number;
+  } | null;
   taskSections: {
-    overdue: Array<{
-      id: string;
-      title: string;
-      detail: string;
-      href: string;
-    }>;
-    dueSoon: Array<{
-      id: string;
-      title: string;
-      detail: string;
-      href: string;
-    }>;
+    overdue: TaskRadarItem[];
+    dueSoon: TaskRadarItem[];
   };
 };
+
+function recommendedActionLabel(action: PriorityInboxRecommendedAction): string {
+  switch (action) {
+    case "create_task":
+      return "Create a task";
+    case "add_commitment":
+      return "Add a commitment";
+    case "save_reference":
+      return "Save as reference";
+    case "mark_handled":
+      return "Mark handled";
+    case "defer":
+      return "Defer this item";
+    default:
+      return "Review this item";
+  }
+}
 
 function formatTaskTimestamp(value: string) {
   const date = new Date(value);
@@ -85,7 +72,7 @@ function formatTaskTimestamp(value: string) {
   }).format(date);
 }
 
-function mapTodayTaskItem(item: LibraryItemSummary, kind: "overdue" | "dueSoon") {
+function mapTodayTaskItem(item: LibraryItemSummary, kind: "overdue" | "dueSoon"): TaskRadarItem {
   const timingLabel = item.dueAt
     ? kind === "overdue"
       ? `Overdue since ${formatTaskTimestamp(item.dueAt)}`
@@ -108,67 +95,82 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
   if (!resolved) {
     return null;
   }
-  const { client, user } = resolved;
 
-  const { data: brief, error: briefError } = await client
-    .from("today_briefs")
-    .select(
-      "id, high_focus_title, high_focus_summary, high_focus_owner, high_focus_timing, high_focus_decision, quiet_panel_eyebrow, quiet_panel_title"
-    )
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .order("sort_order", { ascending: true })
-    .limit(1)
-    .maybeSingle<TodayBriefRecord>();
-
-  if (briefError || !brief) {
-    return null;
-  }
-
-  const [{ data: glanceItems }, { data: quietItems }, { data: supportNotes }] = await Promise.all([
-    client
-      .from("today_glance_items")
-      .select("label, value, tone")
-      .eq("user_id", user.id)
-      .eq("today_brief_id", brief.id)
-      .eq("status", "active")
-      .order("sort_order", { ascending: true })
-      .returns<TodayGlanceItemRecord[]>(),
-    client
-      .from("today_quiet_items")
-      .select("label, detail")
-      .eq("user_id", user.id)
-      .eq("today_brief_id", brief.id)
-      .eq("status", "active")
-      .order("sort_order", { ascending: true })
-      .returns<TodayQuietItemRecord[]>(),
-    client
-      .from("today_support_notes")
-      .select("eyebrow, title, body")
-      .eq("user_id", user.id)
-      .eq("today_brief_id", brief.id)
-      .eq("status", "active")
-      .order("sort_order", { ascending: true })
-      .returns<TodaySupportNoteRecord[]>()
+  const [inboxItems, initiatives, taskSections] = await Promise.all([
+    listPriorityInboxItems(),
+    listInitiativeOptions(),
+    listTodayTasks()
   ]);
 
-  const taskSections = await listTodayTasks();
+  const highPriorityItems = inboxItems.filter((item) => item.visibleState === "high_priority");
+  const needsReviewItems = inboxItems.filter((item) => item.visibleState === "needs_review");
+  const protectedCount = inboxItems.filter(
+    (item) =>
+      item.sensitiveContext &&
+      item.visibleState !== "handled" &&
+      item.visibleState !== "dismissed"
+  ).length;
+
+  const topItem = highPriorityItems[0] ?? needsReviewItems[0] ?? null;
+
+  const glanceItems: TodayPageData["glanceItems"] = [
+    {
+      label: "Needs decision",
+      value: String(highPriorityItems.length + needsReviewItems.length),
+      tone: "default",
+      href: "/inbox"
+    },
+    {
+      label: "Quietly on track",
+      value: String(initiatives.length),
+      tone: "quiet",
+      href: "/initiatives"
+    },
+    {
+      label: "Protected",
+      value: protectedCount > 0 ? String(protectedCount) : "—",
+      tone: "protected",
+      href: "/inbox"
+    }
+  ];
+
+  const highFocus: TodayPageData["highFocus"] = topItem
+    ? {
+        title: topItem.threadTitle,
+        summary: topItem.summary,
+        owner: topItem.sender,
+        timing: topItem.timeLabel,
+        decision: recommendedActionLabel(topItem.recommendedAction),
+        href: "/inbox"
+      }
+    : null;
+
+  const quietPanel: TodayPageData["quietPanel"] =
+    initiatives.length > 0
+      ? {
+          eyebrow: "Active initiatives",
+          title: "Running in the background.",
+          items: initiatives.slice(0, 4).map((initiative) => ({
+            label: initiative.title,
+            detail: initiative.status === "quiet" ? "Quietly on track" : "Active",
+            href: "/initiatives"
+          }))
+        }
+      : null;
+
+  const inboxSummary: TodayPageData["inboxSummary"] =
+    highPriorityItems.length + needsReviewItems.length > 0
+      ? {
+          needsReview: needsReviewItems.length,
+          highPriority: highPriorityItems.length
+        }
+      : null;
 
   return {
-    glanceItems: glanceItems ?? [],
-    highFocus: {
-      title: brief.high_focus_title,
-      summary: brief.high_focus_summary,
-      owner: brief.high_focus_owner,
-      timing: brief.high_focus_timing,
-      decision: brief.high_focus_decision
-    },
-    quietPanel: {
-      eyebrow: brief.quiet_panel_eyebrow,
-      title: brief.quiet_panel_title,
-      items: quietItems ?? []
-    },
-    supportNotes: supportNotes ?? [],
+    glanceItems,
+    highFocus,
+    quietPanel,
+    inboxSummary,
     taskSections: {
       overdue: taskSections.overdue.map((item) => mapTodayTaskItem(item, "overdue")),
       dueSoon: taskSections.dueSoon.map((item) => mapTodayTaskItem(item, "dueSoon"))
