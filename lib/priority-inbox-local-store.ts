@@ -714,6 +714,17 @@ export async function listLocalPriorityInboxItems(userId: string) {
   });
 }
 
+export async function deleteLocalPriorityInboxItem(userId: string, itemId: string): Promise<boolean> {
+  return await updateStore((store) => {
+    const index = findLocalItemIndex(store, userId, itemId);
+    if (index === -1) {
+      return false;
+    }
+    store.items.splice(index, 1);
+    return true;
+  });
+}
+
 export async function upsertLocalPriorityInboxSourceCandidates(params: {
   userId: string;
   candidates: PriorityInboxSourceCandidate[];

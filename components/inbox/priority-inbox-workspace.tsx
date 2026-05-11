@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 
 import {
+  deletePriorityInboxItemAction,
   demotePriorityInboxItemAction,
   openPriorityInboxSourceAction,
   promotePriorityInboxItemAction,
@@ -628,6 +629,7 @@ type PriorityInboxRowProps = {
   onDemote: (item: LocalPriorityInboxItem) => void;
   onUndoPending: (itemId: string) => void;
   onRestore: (item: LocalPriorityInboxItem) => void;
+  onDelete: (item: LocalPriorityInboxItem) => void;
 };
 
 function PriorityInboxRow({
@@ -655,7 +657,8 @@ function PriorityInboxRow({
   onPromote,
   onDemote,
   onUndoPending,
-  onRestore
+  onRestore,
+  onDelete
 }: PriorityInboxRowProps) {
   const resolvedState = getResolvedVisibleState(item, now);
   const resurfacedCue = getResurfacedCue(item, now);
@@ -727,9 +730,14 @@ function PriorityInboxRow({
                 </button>
               </>
             ) : (
-              <button type="button" onClick={() => onRestore(item)} className={primaryButtonClass()}>
-                Restore
-              </button>
+              <>
+                <button type="button" onClick={() => onRestore(item)} className={primaryButtonClass()}>
+                  Restore
+                </button>
+                <button type="button" onClick={() => onDelete(item)} className={tertiaryButtonClass()}>
+                  Delete
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -935,6 +943,7 @@ type SectionProps = {
   onDemote: (item: LocalPriorityInboxItem) => void;
   onUndoPending: (itemId: string) => void;
   onRestore: (item: LocalPriorityInboxItem) => void;
+  onDelete: (item: LocalPriorityInboxItem) => void;
 };
 
 function PriorityInboxSection({
@@ -968,7 +977,8 @@ function PriorityInboxSection({
   onPromote,
   onDemote,
   onUndoPending,
-  onRestore
+  onRestore,
+  onDelete
 }: SectionProps) {
   const isOpen = onToggle ? open : defaultOpen;
 
@@ -1024,6 +1034,7 @@ function PriorityInboxSection({
                 onDemote={onDemote}
                 onUndoPending={onUndoPending}
                 onRestore={onRestore}
+                onDelete={onDelete}
               />
             ))
           ) : emptyMessage ? (
@@ -1228,6 +1239,17 @@ export function PriorityInboxWorkspace({
       }
 
       syncServerItem(result.item);
+    });
+  }
+
+  function handleDelete(item: LocalPriorityInboxItem) {
+    setItems((current) => current.filter((entry) => entry.id !== item.id));
+    startMutation(async () => {
+      const result = await deletePriorityInboxItemAction(item.id);
+      if (!result.ok) {
+        setItems((current) => [item, ...current.filter((entry) => entry.id !== item.id)]);
+        showErrorMessage(result.error);
+      }
     });
   }
 
@@ -1645,6 +1667,7 @@ export function PriorityInboxWorkspace({
             onDemote={handleDemote}
             onUndoPending={handleUndoPending}
             onRestore={handleRestore}
+            onDelete={handleDelete}
           />
 
           <PriorityInboxSection
@@ -1676,6 +1699,7 @@ export function PriorityInboxWorkspace({
             onDemote={handleDemote}
             onUndoPending={handleUndoPending}
             onRestore={handleRestore}
+            onDelete={handleDelete}
           />
         </div>
       ) : deferredItems.length > 0 ? (
@@ -1725,6 +1749,7 @@ export function PriorityInboxWorkspace({
         onDemote={handleDemote}
         onUndoPending={handleUndoPending}
         onRestore={handleRestore}
+            onDelete={handleDelete}
       />
 
       <PriorityInboxSection
@@ -1758,6 +1783,7 @@ export function PriorityInboxWorkspace({
         onDemote={handleDemote}
         onUndoPending={handleUndoPending}
         onRestore={handleRestore}
+            onDelete={handleDelete}
       />
 
       <PriorityInboxSection
@@ -1791,6 +1817,7 @@ export function PriorityInboxWorkspace({
         onDemote={handleDemote}
         onUndoPending={handleUndoPending}
         onRestore={handleRestore}
+            onDelete={handleDelete}
       />
 
     </div>

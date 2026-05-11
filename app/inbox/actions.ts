@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import {
   addManualPriorityInboxItem,
+  deletePriorityInboxItem,
   demotePriorityInboxItem,
   getPriorityInboxContext,
   ingestForwardedPriorityInboxItem,
@@ -51,6 +52,12 @@ export async function demotePriorityInboxItemAction(itemId: string) {
 
 export async function restorePriorityInboxItemAction(itemId: string) {
   const result = await restorePriorityInboxItem(itemId);
+  revalidatePriorityInbox();
+  return result;
+}
+
+export async function deletePriorityInboxItemAction(itemId: string) {
+  const result = await deletePriorityInboxItem(itemId);
   revalidatePriorityInbox();
   return result;
 }

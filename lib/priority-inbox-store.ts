@@ -28,6 +28,7 @@ import {
 } from "@/lib/priority-inbox-errors";
 import {
   addLocalManualPriorityInboxItem,
+  deleteLocalPriorityInboxItem,
   ensureLocalPriorityInboxSeedItems,
   getLocalForwardedPriorityInboxItemDetail,
   getLocalPriorityInboxItem,
@@ -1428,4 +1429,50 @@ export async function restorePriorityInboxItem(itemId: string): Promise<Priority
     timeLabel: "Restored just now",
     updatedCue: "Restored"
   });
+}
+
+export async function deletePriorityInboxItem(itemId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await getPriorityInboxItemRow(itemId);
+  if ("error" in result) {
+    return {
+      ok: false,
+      error: result.error ?? "Priority Inbox item could not be found."
+    };
+  }
+
+  const userId = result.context.resolved.user.id;
+
+  if ("localItem" in result && result.localItem) {
+    await deleteLocalPriorityInboxItem(userId, itemId);
+    return { ok: true };
+  }
+
+  const { client } = result.context;
+
+  try {
+    const { error } = await withSupabaseTimeout(
+      client
+        .from("priority_inbox_items")
+        .delete()
+        .eq("user_id", userId)
+        .eq("id", itemId)
+    );
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return { ok: true };
+  } catch (error) {
+    if (shouldUsePriorityInboxLocalFallback(error)) {
+      markPriorityInboxLocalFallbackActive();
+      await deleteLocalPriorityInboxItem(userId, itemId);
+      return { ok: true };
+    }
+
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Priority Inbox item could not be deleted."
+    };
+  }
 }
