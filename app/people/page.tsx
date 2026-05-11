@@ -1,6 +1,7 @@
 import { CollapsedPeopleSection } from "@/components/people/collapsed-people-section";
 import { OpenLoopRow } from "@/components/people/open-loop-row";
 import { RecentInteractionRow } from "@/components/people/recent-interaction-row";
+import { RecentlyViewedStrip } from "@/components/people/recently-viewed-strip";
 import { getPeoplePageData } from "@/lib/people";
 import { PageIntro } from "@/components/shell/page-intro";
 
@@ -14,6 +15,8 @@ export default async function PeoplePage() {
         title="Relationship brief first, with the rest kept behind a quiet fold."
         description="This screen stays focused on why the relationship matters now, the next interaction if it truly matters, and only the commitments that still need tracking."
       />
+
+      <RecentlyViewedStrip />
 
       <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
         <div className="brief-layout gap-4">
