@@ -1,20 +1,14 @@
 "use client";
 
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 
 import {
-  addManualPriorityInboxItemAction,
   demotePriorityInboxItemAction,
-  ingestForwardedEmailFixtureAction,
-  ingestForwardedEmailRawAction,
   openPriorityInboxSourceAction,
   promotePriorityInboxItemAction,
   restorePriorityInboxItemAction,
-  syncOutlookPriorityInboxAction,
-  transitionPriorityInboxItemAction,
-  updatePriorityInboxForwardingDestinationAction
+  transitionPriorityInboxItemAction
 } from "@/app/inbox/actions";
 
 import {
@@ -38,15 +32,11 @@ import {
   type PriorityInboxDisposition,
   type PriorityInboxDispositionReason,
   type PriorityInboxItem,
-  type PriorityInboxManualAddInput,
   type PriorityInboxRecommendedAction,
-  type PriorityInboxSourceConnectionSummary,
   type PriorityInboxSourceFilter,
-  type PriorityInboxSourceStatus,
   type PriorityInboxTransitionPayload,
   type PriorityInboxVisibleState
 } from "@/lib/priority-inbox";
-import type { PriorityInboxForwardingSummary } from "@/lib/priority-inbox-forwarding";
 import {
   buildPriorityInboxTaskPrefill,
   resolvePrefillCategoryId,
@@ -58,7 +48,7 @@ type LocalPriorityInboxItem = PriorityInboxItem & {
   openFollowUp?: boolean;
 };
 
-type ComposerKind = "task" | "commitment" | "initiative" | "defer" | "manual" | "forwarded_dev";
+type ComposerKind = "task" | "commitment" | "initiative" | "defer";
 
 type ComposerState =
   | {
@@ -86,8 +76,7 @@ type PendingTransition = {
 const SOURCE_FILTERS: Array<{ id: PriorityInboxSourceFilter; label: string }> = [
   { id: "all", label: "All" },
   { id: "email", label: "Email" },
-  { id: "teams", label: "Teams" },
-  { id: "manual", label: "Manual / Captures" }
+  { id: "teams", label: "Teams" }
 ];
 
 const DEFER_REASON_OPTIONS: Array<{ value: PriorityInboxDeferredReason; label: string }> = [
@@ -106,12 +95,6 @@ const DISMISS_REASON_OPTIONS: Array<{ value: PriorityInboxDispositionReason; lab
   { value: "generic_update", label: "Generic update" },
   { value: "not_actionable", label: "Not actionable" }
 ];
-
-const FORWARDED_EMAIL_FIXTURE_OPTIONS = [
-  { id: "parsable_sender_subject_body", label: "Seed parsable forward" },
-  { id: "weak_ambiguous_structure", label: "Seed ambiguous forward" },
-  { id: "attachment_document_cues", label: "Seed attachment cue" }
-] as const;
 
 const HIGH_PRIORITY_CONFIRMATION_MS = 3600;
 const FLASH_MS = 5200;
@@ -247,267 +230,6 @@ function OverflowSection({
       <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">{title}</p>
       <div className="mt-3">{children}</div>
     </div>
-  );
-}
-
-type ManualAddComposerProps = {
-  onCancel: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-};
-
-function ManualAddComposer({ onCancel, onSubmit }: ManualAddComposerProps) {
-  return (
-    <section className="rounded-[1.65rem] border border-line/75 bg-white/72 p-5 md:p-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Manual add</p>
-          <h2 className="section-title">Route a Blackhawk-native item into Priority Inbox.</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-text-muted">
-            This is the v1 internal path for adding captures, notes, or hand-routed context into the inbox without pretending they are native mail or Teams items.
-          </p>
-        </div>
-      </div>
-
-      <form className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]" onSubmit={onSubmit}>
-        <div className="space-y-4">
-          <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Primary meaning</span>
-            <input
-              name="primaryLine"
-              required
-              placeholder="What entered your world that deserves attention?"
-              className="w-full rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
-            />
-          </label>
-
-          <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Context note</span>
-            <textarea
-              name="summary"
-              required
-              rows={4}
-              placeholder="Short context only. Keep it triage-level."
-              className="w-full rounded-[1.05rem] border border-line/75 bg-white/82 px-4 py-3 text-sm leading-6 text-text outline-none"
-            />
-          </label>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-2 text-sm text-text-muted">
-              <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Sender / source</span>
-              <input
-                name="sender"
-                defaultValue="Blackhawk capture"
-                className="w-full rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
-              />
-            </label>
-
-            <label className="space-y-2 text-sm text-text-muted">
-              <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Thread / title</span>
-              <input
-                name="threadTitle"
-                defaultValue="Manual route"
-                className="w-full rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="space-y-4 rounded-[1.2rem] border border-line/70 bg-[rgba(255,255,255,0.52)] p-4">
-          <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Starting state</span>
-            <select
-              name="visibleState"
-              defaultValue="needs_review"
-              className="w-full rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
-            >
-              <option value="needs_review">Needs Review</option>
-              <option value="high_priority">High Priority</option>
-              <option value="deferred">Deferred</option>
-            </select>
-          </label>
-
-          <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Why surfaced</span>
-            <input
-              name="whySurfaced"
-              defaultValue="Manual add."
-              className="w-full rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
-            />
-          </label>
-
-          <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Deferred until</span>
-            <input
-              name="deferredUntil"
-              type="datetime-local"
-              className="w-full rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
-            />
-          </label>
-
-          <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Source link</span>
-            <input
-              name="sourceLink"
-              defaultValue="/capture?from=%2Finbox"
-              className="w-full rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
-            />
-          </label>
-
-          <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Sensitive context</span>
-            <textarea
-              name="sensitiveContext"
-              rows={3}
-              placeholder="Only if it materially changes triage."
-              className="w-full rounded-[1.05rem] border border-line/75 bg-white/82 px-4 py-3 text-sm leading-6 text-text outline-none"
-            />
-          </label>
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            <button type="submit" className={primaryButtonClass(true)}>
-              Add to inbox
-            </button>
-            <button type="button" onClick={onCancel} className={tertiaryButtonClass()}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      </form>
-    </section>
-  );
-}
-
-type ForwardingSetupProps = {
-  forwardingSummary: PriorityInboxForwardingSummary | null;
-  onSaveDestination: (event: FormEvent<HTMLFormElement>) => void;
-  onOpenDevIngest: () => void;
-  isMutating: boolean;
-};
-
-function ForwardingSetupCard({
-  forwardingSummary,
-  onSaveDestination,
-  onOpenDevIngest,
-  isMutating
-}: ForwardingSetupProps) {
-  return (
-    <div className="w-full rounded-[1.25rem] border border-line/70 bg-[rgba(255,255,255,0.6)] p-4 xl:max-w-[24rem]">
-      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Forward to Blackhawk</p>
-      <p className="mt-2 text-sm font-medium text-text">
-        {forwardingSummary?.destinationAddress ?? "Forwarding destination not configured"}
-      </p>
-      <p className="mt-2 text-sm leading-6 text-text-muted">
-        {forwardingSummary?.statusLabel ??
-          "Set a forwarding destination so Blackhawk can accept forwarded emails without mailbox sync."}
-      </p>
-
-      <form className="mt-4 space-y-3" onSubmit={onSaveDestination}>
-        <label className="space-y-2 text-sm text-text-muted">
-          <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Destination address</span>
-          <input
-            name="destinationAddress"
-            defaultValue={forwardingSummary?.destinationAddress ?? ""}
-            placeholder="priority@blackhawk.example"
-            className="w-full rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
-          />
-        </label>
-
-        <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={isMutating} className={primaryButtonClass(true)}>
-            Save destination
-          </button>
-          {process.env.NODE_ENV !== "production" ? (
-            <button type="button" onClick={onOpenDevIngest} className={primaryButtonClass()}>
-              Simulate forward
-            </button>
-          ) : null}
-        </div>
-      </form>
-    </div>
-  );
-}
-
-type ForwardedEmailDevComposerProps = {
-  forwardingSummary: PriorityInboxForwardingSummary | null;
-  onCancel: () => void;
-  onSeedFixture: (fixtureId: (typeof FORWARDED_EMAIL_FIXTURE_OPTIONS)[number]["id"]) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-};
-
-function ForwardedEmailDevComposer({
-  forwardingSummary,
-  onCancel,
-  onSeedFixture,
-  onSubmit
-}: ForwardedEmailDevComposerProps) {
-  return (
-    <section className="rounded-[1.65rem] border border-line/75 bg-white/72 p-5 md:p-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Forwarded email simulator</p>
-          <h2 className="section-title">Test the interim forwarding path without a live mail provider.</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-text-muted">
-            This uses the same parser and canonical inbox-item creation path as real inbound forwarded mail. Use a fixture or paste a realistic forwarded-email body.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        {FORWARDED_EMAIL_FIXTURE_OPTIONS.map((fixture) => (
-          <button key={fixture.id} type="button" onClick={() => onSeedFixture(fixture.id)} className={tertiaryButtonClass()}>
-            {fixture.label}
-          </button>
-        ))}
-      </div>
-
-      <form className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]" onSubmit={onSubmit}>
-        <div className="space-y-4">
-          <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Forwarded subject</span>
-            <input
-              name="subject"
-              placeholder="Fwd: Board packet scope changed"
-              className="w-full rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
-            />
-          </label>
-
-          <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Forwarded raw text</span>
-            <textarea
-              name="rawText"
-              required
-              rows={14}
-              placeholder="Paste a realistic forwarded email here."
-              className="w-full rounded-[1.05rem] border border-line/75 bg-white/82 px-4 py-3 text-sm leading-6 text-text outline-none"
-            />
-          </label>
-        </div>
-
-        <div className="space-y-4 rounded-[1.2rem] border border-line/70 bg-[rgba(255,255,255,0.52)] p-4">
-          <label className="space-y-2 text-sm text-text-muted">
-            <span className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Destination address</span>
-            <input
-              name="destinationAddress"
-              defaultValue={forwardingSummary?.destinationAddress ?? "priority@blackhawk.test"}
-              className="w-full rounded-[1rem] border border-line/75 bg-white/82 px-4 py-3 text-sm text-text outline-none"
-            />
-          </label>
-
-          <p className="text-sm leading-6 text-text-muted">
-            Native links are only preserved when the forwarded message actually contains one. Otherwise the inbox item will fall back to a stored detail view.
-          </p>
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            <button type="submit" className={primaryButtonClass(true)}>
-              Ingest forwarded email
-            </button>
-            <button type="button" onClick={onCancel} className={tertiaryButtonClass()}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      </form>
-    </section>
   );
 }
 
@@ -947,7 +669,7 @@ function PriorityInboxRow({
       <article className="rounded-[1.35rem] border border-line/75 bg-[rgba(255,255,255,0.68)] p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-medium text-text">{item.primaryLine}</p>
+            <p className="text-sm font-medium text-text">{item.threadTitle}</p>
             <p className="mt-1 text-sm text-text-muted">
               {pendingTransition.message} This stays visible briefly so you can undo before it leaves the active layer.
             </p>
@@ -982,12 +704,12 @@ function PriorityInboxRow({
               {item.sensitiveContext ? <span className={subtleChipClass("sensitive")}>Sensitive context</span> : null}
             </div>
 
-            <p className="mt-3 text-[1.02rem] font-medium leading-6 text-text md:text-[1.08rem]">{item.primaryLine}</p>
-            <p className="mt-2 text-sm font-medium text-text-muted">
-              {item.sender}
-              {item.senderRole ? ` · ${item.senderRole}` : ""}
-              {" · "}
-              {item.threadTitle}
+            <p className="mt-3 text-[1.02rem] font-medium leading-6 text-text md:text-[1.08rem]">{item.threadTitle}</p>
+            <p className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-line/70 bg-white/72 px-2.5 py-0.5 text-sm font-medium text-text">
+                {item.sender}
+              </span>
+              {item.senderRole ? <span className="text-sm text-text-subtle">{item.senderRole}</span> : null}
             </p>
             <p className="mt-2 max-w-[60rem] text-sm leading-6 text-text-muted">{item.summary}</p>
           </div>
@@ -1321,39 +1043,26 @@ function PriorityInboxSection({
 
 export function PriorityInboxWorkspace({
   initialItems,
-  initialManualComposerOpen = false,
-  outlookConnection,
-  forwardingSummary,
-  sourceStatuses,
-  initialNotice = null,
   categories,
   commonCategories,
   initiatives
 }: {
   initialItems: PriorityInboxItem[];
-  initialManualComposerOpen?: boolean;
-  outlookConnection: PriorityInboxSourceConnectionSummary;
-  forwardingSummary: PriorityInboxForwardingSummary | null;
-  sourceStatuses: PriorityInboxSourceStatus[];
-  initialNotice?: string | null;
   categories: TaskCategoryOption[];
   commonCategories: TaskCategoryOption[];
   initiatives: InitiativeOption[];
 }) {
-  const router = useRouter();
   const [items, setItems] = useState<LocalPriorityInboxItem[]>(() => createLocalItems(initialItems));
   const [sourceFilter, setSourceFilter] = useState<PriorityInboxSourceFilter>("all");
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const [composerState, setComposerState] = useState<ComposerState>(initialManualComposerOpen ? { kind: "manual", itemId: null } : null);
+  const [composerState, setComposerState] = useState<ComposerState>(null);
   const [deferredOpen, setDeferredOpen] = useState(false);
   const [handledOpen, setHandledOpen] = useState(false);
   const [dismissedOpen, setDismissedOpen] = useState(false);
   const [flash, setFlash] = useState<FlashState | null>(null);
-  const [notice, setNotice] = useState<string | null>(initialNotice);
   const [now, setNow] = useState(() => Date.now());
   const [pendingTransitions, setPendingTransitions] = useState<Record<string, PendingTransition>>({});
-  const [isMutating, startMutation] = useTransition();
-  const canUseDevForwardedIngest = process.env.NODE_ENV !== "production";
+  const [, startMutation] = useTransition();
 
   const flashTimeoutRef = useRef<number | null>(null);
   const pendingTimeoutsRef = useRef<Record<string, number>>({});
@@ -1364,10 +1073,6 @@ export function PriorityInboxWorkspace({
   useEffect(() => {
     setItems(createLocalItems(initialItems));
   }, [initialItems]);
-
-  useEffect(() => {
-    setNotice(initialNotice);
-  }, [initialNotice]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -1602,56 +1307,6 @@ export function PriorityInboxWorkspace({
       if (!result.ok) {
         showErrorMessage(result.error);
       }
-    });
-  }
-
-  function handleSaveForwardingDestination(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const destinationAddress = `${formData.get("destinationAddress") ?? ""}`.trim();
-
-    startMutation(async () => {
-      const result = await updatePriorityInboxForwardingDestinationAction(destinationAddress);
-      if (!result.ok) {
-        showErrorMessage(result.error);
-        return;
-      }
-
-      setNotice(`Forwarding destination saved: ${result.destinationAddress}`);
-      router.refresh();
-    });
-  }
-
-  function handleSeedForwardedFixture(fixtureId: (typeof FORWARDED_EMAIL_FIXTURE_OPTIONS)[number]["id"]) {
-    startMutation(async () => {
-      const result = await ingestForwardedEmailFixtureAction(fixtureId);
-      if (!result.ok) {
-        showErrorMessage(result.error);
-        return;
-      }
-
-      const nextItem = {
-        ...result.item,
-        openFollowUp: false
-      };
-
-      setItems((current) => [nextItem, ...current.filter((item) => item.id !== nextItem.id)]);
-      setComposerState(null);
-      setExpandedItemId(nextItem.id);
-      setNotice(`Forwarded email ingested: ${result.item.threadTitle}`);
-    });
-  }
-
-  function handleOutlookSync() {
-    startMutation(async () => {
-      const result = await syncOutlookPriorityInboxAction();
-      if (!result.ok) {
-        showErrorMessage(result.error);
-        return;
-      }
-
-      setNotice(`Outlook synced${result.syncedCount > 0 ? `: ${result.syncedCount} item${result.syncedCount === 1 ? "" : "s"} refreshed.` : "."}`);
-      router.refresh();
     });
   }
 
@@ -1909,73 +1564,6 @@ export function PriorityInboxWorkspace({
     });
   }
 
-  function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const requestedState = `${formData.get("visibleState") ?? "needs_review"}` as PriorityInboxVisibleState;
-    const deferredUntil = `${formData.get("deferredUntil") ?? ""}`.trim();
-    const payload: PriorityInboxManualAddInput = {
-      sourceLink: `${formData.get("sourceLink") ?? "/capture?from=%2Finbox"}`.trim() || "/capture?from=%2Finbox",
-      sender: `${formData.get("sender") ?? "Blackhawk capture"}`.trim() || "Blackhawk capture",
-      threadTitle: `${formData.get("threadTitle") ?? "Manual route"}`.trim() || "Manual route",
-      primaryLine: `${formData.get("primaryLine") ?? ""}`.trim(),
-      summary: `${formData.get("summary") ?? ""}`.trim(),
-      visibleState: requestedState === "handled" || requestedState === "dismissed" ? "needs_review" : requestedState,
-      whySurfaced: `${formData.get("whySurfaced") ?? "Manual add."}`.trim() || "Manual add.",
-      deferredUntil: requestedState === "deferred" && deferredUntil ? new Date(deferredUntil).toISOString() : null,
-      sensitiveContext: `${formData.get("sensitiveContext") ?? ""}`.trim() || null
-    };
-
-    startMutation(async () => {
-      const result = await addManualPriorityInboxItemAction(payload);
-      if (!result.ok) {
-        showErrorMessage(result.error);
-        return;
-      }
-
-      const nextItem = {
-        ...result.item,
-        openFollowUp: false
-      };
-
-      setItems((current) => [nextItem, ...current.filter((item) => item.id !== nextItem.id)]);
-      setComposerState(null);
-      setExpandedItemId(nextItem.id);
-      setFlashMessage(null);
-    });
-  }
-
-  function handleForwardedDevSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const destinationAddress = `${formData.get("destinationAddress") ?? ""}`.trim();
-    const rawText = `${formData.get("rawText") ?? ""}`.trim();
-    const subject = `${formData.get("subject") ?? ""}`.trim() || null;
-
-    startMutation(async () => {
-      const result = await ingestForwardedEmailRawAction({
-        destinationAddress,
-        subject,
-        rawText
-      });
-
-      if (!result.ok) {
-        showErrorMessage(result.error);
-        return;
-      }
-
-      const nextItem = {
-        ...result.item,
-        openFollowUp: false
-      };
-
-      setItems((current) => [nextItem, ...current.filter((item) => item.id !== nextItem.id)]);
-      setComposerState(null);
-      setExpandedItemId(nextItem.id);
-      setNotice(`Forwarded email ingested: ${result.item.threadTitle}`);
-    });
-  }
-
   const filteredItems = items.filter((item) => matchesPriorityInboxSourceFilter(item, sourceFilter));
 
   const highPriorityItems = filteredItems.filter((item) => getResolvedVisibleState(item, now) === "high_priority");
@@ -1989,104 +1577,29 @@ export function PriorityInboxWorkspace({
   return (
     <div className="space-y-6 lg:space-y-8">
       <section className="rounded-[1.85rem] border border-line/75 bg-white/74 p-5 md:p-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-          <div className="max-w-3xl">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
             <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Priority Inbox</p>
-            <h1 className="page-title">Inbound items likely requiring action, follow-up, or routing.</h1>
-            <p className="mt-3 text-sm leading-6 text-text-muted">
-              Priority Inbox stays a decision layer over email, Teams, and selected Blackhawk inputs. Native systems remain the record; this surface only helps decide what deserves attention now.
-            </p>
-            <p className="mt-4 text-sm font-medium text-text-muted">
+            <h1 className="page-title mt-2">Inbound items requiring action, follow-up, or routing.</h1>
+            <p className="mt-3 text-sm font-medium text-text-muted">
               {highPriorityItems.length} High Priority · {needsReviewItems.length} Needs Review · {deferredDueCount} Deferred due
             </p>
           </div>
 
-          <div className="flex flex-col items-start gap-3 xl:items-end">
-            <div className="flex flex-wrap gap-2">
-              {SOURCE_FILTERS.map((filter) => (
-                <button
-                  key={filter.id}
-                  type="button"
-                  onClick={() => setSourceFilter(filter.id)}
-                  className={topButtonClass(sourceFilter === filter.id)}
-                >
-                  {filter.label}
-                </button>
-              ))}
-            </div>
-
-            <button type="button" onClick={() => setComposerState({ kind: "manual", itemId: null })} className={primaryButtonClass()}>
-              Manual add
-            </button>
-
-            <div className="w-full rounded-[1.25rem] border border-line/70 bg-[rgba(255,255,255,0.6)] p-4 xl:max-w-[24rem]">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Outlook source</p>
-              <p className="mt-2 text-sm font-medium text-text">
-                {outlookConnection.accountLabel ?? "Read-only delegated inbox ingestion"}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-text-muted">{outlookConnection.statusLabel}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <a
-                  href={outlookConnection.connectHref}
-                  className={primaryButtonClass(outlookConnection.state !== "connected")}
-                >
-                  {outlookConnection.state === "connected" ? "Reconnect Outlook" : "Connect Outlook"}
-                </a>
-                {outlookConnection.canSync ? (
-                  <button type="button" onClick={handleOutlookSync} disabled={isMutating} className={primaryButtonClass()}>
-                    Sync now
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-col gap-3 rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.54)] px-4 py-4">
-          <div className="flex flex-wrap gap-2 text-sm text-text-muted">
-            {sourceStatuses
-              .filter((status) => status.kind === "healthy")
-              .map((status) => (
-                <span key={status.id}>{status.label}</span>
-              ))
-              .reduce<React.ReactNode[]>((parts, part, index) => {
-                if (index > 0) {
-                  parts.push(<span key={`sep-${index}`}>·</span>);
-                }
-
-                parts.push(part);
-                return parts;
-              }, [])}
-          </div>
-
-          {sourceStatuses
-            .filter((status) => status.kind === "warning")
-            .map((status) => (
-              <div key={status.id} className="inline-flex w-fit items-center rounded-full border border-accent-red/18 bg-[rgba(125,35,31,0.06)] px-3 py-1.5 text-sm text-text-muted">
-                {status.label}
-              </div>
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+            {SOURCE_FILTERS.map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                onClick={() => setSourceFilter(filter.id)}
+                className={topButtonClass(sourceFilter === filter.id)}
+              >
+                {filter.label}
+              </button>
             ))}
+          </div>
         </div>
       </section>
-
-      {composerState?.kind === "manual" && composerState.itemId === null ? (
-        <ManualAddComposer onCancel={() => setComposerState(null)} onSubmit={handleManualSubmit} />
-      ) : null}
-
-      {canUseDevForwardedIngest && composerState?.kind === "forwarded_dev" && composerState.itemId === null ? (
-        <ForwardedEmailDevComposer
-          forwardingSummary={forwardingSummary}
-          onCancel={() => setComposerState(null)}
-          onSeedFixture={handleSeedForwardedFixture}
-          onSubmit={handleForwardedDevSubmit}
-        />
-      ) : null}
-
-      {notice ? (
-        <section className="rounded-[1.35rem] border border-line/75 bg-white/70 px-4 py-3">
-          <p className="text-sm text-text-muted">{notice}</p>
-        </section>
-      ) : null}
 
       {flash ? (
         <section className="rounded-[1.35rem] border border-line/75 bg-white/70 px-4 py-3">
@@ -2280,12 +1793,6 @@ export function PriorityInboxWorkspace({
         onRestore={handleRestore}
       />
 
-      <ForwardingSetupCard
-        forwardingSummary={forwardingSummary}
-        onSaveDestination={handleSaveForwardingDestination}
-        onOpenDevIngest={() => setComposerState({ kind: "forwarded_dev", itemId: null })}
-        isMutating={isMutating}
-      />
     </div>
   );
 }
