@@ -1,24 +1,42 @@
+import type { Route } from "next";
+import Link from "next/link";
+
 import { cn } from "@/lib/utils";
 
 type GlanceChipProps = {
   label: string;
   value: string;
   tone?: "default" | "quiet" | "protected";
+  href?: string;
 };
 
-export function GlanceChip({ label, value, tone = "default" }: GlanceChipProps) {
+const chipClass = (tone: GlanceChipProps["tone"]) =>
+  cn(
+    "rounded-[1.35rem] border px-4 py-4 transition-colors duration-150",
+    tone === "default" && "border-line/70 bg-white/72 hover:bg-white/90",
+    tone === "quiet" && "border-accent-moss/18 bg-[rgba(104,118,86,0.08)] hover:bg-[rgba(104,118,86,0.13)]",
+    tone === "protected" && "border-accent-red/18 bg-[rgba(125,35,31,0.08)] hover:bg-[rgba(125,35,31,0.12)]"
+  );
+
+const inner = (label: string, value: string) => (
+  <>
+    <p className="section-label">{label}</p>
+    <p className="mt-3 text-2xl font-medium tracking-[-0.03em] text-text">{value}</p>
+  </>
+);
+
+export function GlanceChip({ label, value, tone = "default", href }: GlanceChipProps) {
+  if (href) {
+    return (
+      <Link href={href as Route} className={chipClass(tone)}>
+        {inner(label, value)}
+      </Link>
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        "rounded-[1.35rem] border px-4 py-4",
-        tone === "default" && "border-line/70 bg-white/72",
-        tone === "quiet" && "border-accent-moss/18 bg-[rgba(104,118,86,0.08)]",
-        tone === "protected" && "border-accent-red/18 bg-[rgba(125,35,31,0.08)]"
-      )}
-    >
-      <p className="section-label">{label}</p>
-      <p className="mt-3 text-2xl font-medium tracking-[-0.03em] text-text">{value}</p>
+    <div className={chipClass(tone)}>
+      {inner(label, value)}
     </div>
   );
 }
-

@@ -23,7 +23,15 @@ export default async function TodayPage() {
           { label: "Quietly on track", value: "4", tone: "quiet" as const },
           { label: "Protected", value: "1 thread", tone: "protected" as const }
         ]).map((item) => (
-          <GlanceChip key={item.label} label={item.label} value={item.value} tone={item.tone} />
+          <GlanceChip
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            tone={item.tone}
+            href={
+              item.tone === "quiet" ? "/initiatives" : "/inbox"
+            }
+          />
         ))}
       </section>
 
