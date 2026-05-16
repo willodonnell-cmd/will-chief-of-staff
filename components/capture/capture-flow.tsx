@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Shield, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { persistCaptureAction } from "@/app/capture/actions";
 import type {
@@ -120,7 +120,7 @@ function labelForContext(from: string | null) {
 }
 
 function submitLabelForPattern(pattern: CapturePattern) {
-  return pattern === "note" ? "Save Note" : "Save Task";
+  return pattern === "note" ? "Save" : "Save Task";
 }
 
 function readQueuedCaptures() {
@@ -664,246 +664,133 @@ export function CaptureFlow({
   const selectedTaskCategory = categories.find((category) => category.id === draft.task.categoryId) ?? null;
 
   return (
-    <div className="space-y-6 lg:space-y-8">
+    <div>
       <datalist id="capture-initiative-options">
         {initiatives.map((initiative) => (
           <option key={initiative.id} value={initiative.title} />
         ))}
       </datalist>
 
-      <section className="grid gap-4 xl:grid-cols-[1.12fr_0.88fr]">
-        <div className="rounded-[1.85rem] border border-line/75 bg-white/78 p-5 focus-elevation md:p-6 lg:p-7">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="max-w-2xl">
-              <button
-                type="button"
-                onClick={handleMicrophoneToggle}
-                aria-pressed={isListening}
-                disabled={isPending}
-                className="inline-flex items-center gap-3 rounded-full border border-line/70 bg-white/70 px-3 py-2 text-text disabled:opacity-60"
-              >
-                <CaptureMicrophoneIcon className="h-5 w-5" />
-                <span className="text-sm font-medium">Capture</span>
-              </button>
-              <h2 className="page-title mt-4">Choose the object first, then keep the entry light.</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted md:text-base">
-                Notes stay lightweight memory. Tasks stay operational. Switching is easy, and Blackhawk preserves what it can instead of wiping the form.
+      <form onSubmit={handleSubmit} className="grid gap-4 xl:grid-cols-[0.72fr_1.28fr]">
+        {/* Left panel: What is this */}
+        <section className="flex flex-col gap-5 rounded-[1.85rem] border border-line/75 bg-white/76 p-5 md:p-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleMicrophoneToggle}
+              aria-pressed={isListening}
+              disabled={isPending}
+              className="inline-flex items-center gap-3 rounded-full border border-line/70 bg-white/70 px-3 py-2 text-text disabled:opacity-60"
+            >
+              <CaptureMicrophoneIcon className="h-5 w-5" />
+              <span className="text-sm font-medium">Capture</span>
+            </button>
+            <button
+              type="submit"
+              disabled={isPending}
+              className="inline-flex items-center gap-2 rounded-full bg-text px-4 py-2 text-sm font-medium text-white transition-opacity duration-200 disabled:opacity-60"
+            >
+              {submitLabelForPattern(draft.pattern)}
+            </button>
+          </div>
+
+          <div>
+            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Type</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(["note", "task"] as CapturePattern[]).map((pattern) => (
+                <button
+                  key={pattern}
+                  type="button"
+                  onClick={() => switchPattern(pattern)}
+                  className={cn(
+                    "rounded-full border px-4 py-2 text-sm font-medium transition-colors duration-200",
+                    draft.pattern === pattern
+                      ? "border-line bg-text text-white"
+                      : "border-line/75 bg-white/60 text-text-muted hover:text-text"
+                  )}
+                >
+                  {pattern === "note" ? "Note" : "Task"}
+                </button>
+              ))}
+            </div>
+            {switchNotice ? (
+              <p className="mt-3 rounded-[1rem] border border-line/70 bg-white/72 px-4 py-3 text-sm leading-6 text-text-muted">
+                {switchNotice}
               </p>
-            </div>
-
-            <div className="rounded-[1.35rem] border border-line/75 bg-[rgba(255,255,255,0.62)] px-4 py-4 md:max-w-[16rem]">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Inherited context</p>
-              <p className="mt-3 text-base font-medium text-text">{inheritedContext.name}</p>
-              <p className="mt-2 text-sm leading-6 text-text-muted">{inheritedContext.detail}</p>
-            </div>
+            ) : null}
           </div>
-        </div>
 
-        <aside className="rounded-[1.85rem] border border-line/75 bg-white/68 p-5 md:p-6">
-          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Behavior</p>
-          <div className="mt-4 space-y-4 text-sm leading-6 text-text-muted">
-            <p>Blackhawk remembers whether you last captured a Note or a Task without turning it into an admin setting.</p>
-            <p>Task fields stay structured, but optional detail sits behind quiet expansion instead of crowding the first pass.</p>
-            <p className="flex items-start gap-2">
-              <Shield className="mt-1 h-4 w-4 shrink-0 text-accent-red" />
-              Corvette red appears only around private or hybrid moments.
-            </p>
-          </div>
-        </aside>
-      </section>
-
-      <form onSubmit={handleSubmit} className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <section className="rounded-[1.85rem] border border-line/75 bg-white/76 p-5 md:p-6">
-          <div className="space-y-5">
+          {draft.pattern === "task" ? (
             <div>
-              <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Type</p>
+              <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Priority</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {(["note", "task"] as CapturePattern[]).map((pattern) => (
+                {(["high", "medium", "low"] as TaskPriority[]).map((priority) => (
                   <button
-                    key={pattern}
+                    key={priority}
                     type="button"
-                    onClick={() => switchPattern(pattern)}
+                    onClick={() => updateTask("priority", priority)}
                     className={cn(
-                      "rounded-full border px-4 py-2 text-sm font-medium transition-colors duration-200",
-                      draft.pattern === pattern
-                        ? "border-line bg-text text-white"
+                      "rounded-full border px-4 py-2 text-sm font-medium transition",
+                      draft.task.priority === priority
+                        ? "border-line bg-[rgb(var(--color-shell))] text-white"
                         : "border-line/75 bg-white/60 text-text-muted hover:text-text"
                     )}
                   >
-                    {pattern === "note" ? "Note" : "Task"}
+                    {formatTaskPriorityLabel(priority)}
                   </button>
                 ))}
               </div>
-              {switchNotice ? (
-                <p className="mt-3 rounded-[1rem] border border-line/70 bg-white/72 px-4 py-3 text-sm leading-6 text-text-muted">
-                  {switchNotice}
-                </p>
+            </div>
+          ) : null}
+
+          {draft.pattern === "task" ? (
+            <div>
+              <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Category</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {commonCategories.map((category) => (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => updateTask("categoryId", category.id)}
+                    className={cn(
+                      "rounded-full border px-4 py-2 text-sm font-medium transition",
+                      draft.task.categoryId === category.id
+                        ? "border-line bg-[rgb(var(--color-shell))] text-white"
+                        : "border-line/75 bg-white/60 text-text-muted hover:text-text"
+                    )}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowMoreCategories((current) => !current)}
+                  className="rounded-full border border-line/75 bg-white/60 px-4 py-2 text-sm font-medium text-text-muted transition hover:text-text"
+                >
+                  More
+                </button>
+              </div>
+              {showMoreCategories ? (
+                <select
+                  value={draft.task.categoryId ?? ""}
+                  onChange={(event) => updateTask("categoryId", event.target.value || null)}
+                  className="mt-3 w-full rounded-[1rem] border border-line/75 bg-white/78 px-4 py-3 text-sm text-text outline-none"
+                >
+                  <option value="">Leave uncategorized for now</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
               ) : null}
+              <p className="mt-3 text-sm text-text-muted">
+                {selectedTaskCategory ? `${selectedTaskCategory.name} selected.` : "If you save without choosing, Blackhawk assigns TBD."}
+              </p>
             </div>
+          ) : null}
 
-            {draft.pattern === "note" ? (
-              <div className="space-y-5">
-                <label className="block">
-                  <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Title (Optional)</span>
-                  <input
-                    value={draft.note.title}
-                    onChange={(event) => updateNote("title", event.target.value)}
-                    placeholder="Short title if it helps retrieval later"
-                    className="mt-3 w-full rounded-[1.3rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-3 text-sm text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Body</span>
-                  <textarea
-                    ref={summaryRef}
-                    rows={7}
-                    value={draft.note.body}
-                    onChange={(event) => updateNote("body", event.target.value)}
-                    placeholder="Capture the thought before it turns into work."
-                    className="mt-3 w-full resize-none rounded-[1.45rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-4 text-base text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
-                  />
-                </label>
-              </div>
-            ) : (
-              <div className="space-y-5">
-                <label className="block">
-                  <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Task Description</span>
-                  <textarea
-                    ref={summaryRef}
-                    rows={5}
-                    value={draft.task.description}
-                    onChange={(event) => updateTask("description", event.target.value)}
-                    placeholder="Capture the next concrete task in one sentence."
-                    className="mt-3 w-full resize-none rounded-[1.45rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-4 text-base text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
-                  />
-                </label>
-
-                <div className="grid gap-5 md:grid-cols-2">
-                  <div>
-                    <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Priority</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(["high", "medium", "low"] as TaskPriority[]).map((priority) => (
-                        <button
-                          key={priority}
-                          type="button"
-                          onClick={() => updateTask("priority", priority)}
-                          className={cn(
-                            "rounded-full border px-4 py-2 text-sm font-medium transition",
-                            draft.task.priority === priority
-                              ? "border-line bg-[rgb(var(--color-shell))] text-white"
-                              : "border-line/75 bg-white/60 text-text-muted hover:text-text"
-                          )}
-                        >
-                          {formatTaskPriorityLabel(priority)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Category</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {commonCategories.map((category) => (
-                        <button
-                          key={category.id}
-                          type="button"
-                          onClick={() => updateTask("categoryId", category.id)}
-                          className={cn(
-                            "rounded-full border px-4 py-2 text-sm font-medium transition",
-                            draft.task.categoryId === category.id
-                              ? "border-line bg-[rgb(var(--color-shell))] text-white"
-                              : "border-line/75 bg-white/60 text-text-muted hover:text-text"
-                          )}
-                        >
-                          {category.name}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setShowMoreCategories((current) => !current)}
-                        className="rounded-full border border-line/75 bg-white/60 px-4 py-2 text-sm font-medium text-text-muted transition hover:text-text"
-                      >
-                        More
-                      </button>
-                    </div>
-                    {showMoreCategories ? (
-                      <select
-                        value={draft.task.categoryId ?? ""}
-                        onChange={(event) => updateTask("categoryId", event.target.value || null)}
-                        className="mt-3 w-full rounded-[1rem] border border-line/75 bg-white/78 px-4 py-3 text-sm text-text outline-none"
-                      >
-                        <option value="">Leave uncategorized for now</option>
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : null}
-                    <p className="mt-3 text-sm text-text-muted">
-                      {selectedTaskCategory ? `${selectedTaskCategory.name} selected.` : "If you save without choosing, Blackhawk assigns TBD."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3 rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowNextStep((current) => !current)}
-                    className="flex w-full items-center justify-between text-left"
-                  >
-                    <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Next Step</span>
-                    {showNextStep ? <ChevronUp className="h-4 w-4 text-text-subtle" /> : <ChevronDown className="h-4 w-4 text-text-subtle" />}
-                  </button>
-                  {showNextStep ? (
-                    <input
-                      value={draft.task.nextStep}
-                      onChange={(event) => updateTask("nextStep", event.target.value)}
-                      placeholder="What should happen next?"
-                      className="w-full rounded-[1rem] border border-line/75 bg-white/78 px-4 py-3 text-sm text-text outline-none"
-                    />
-                  ) : null}
-                </div>
-
-                <div className="space-y-3 rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowDesiredOutcome((current) => !current)}
-                    className="flex w-full items-center justify-between text-left"
-                  >
-                    <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Desired Outcome</span>
-                    {showDesiredOutcome ? <ChevronUp className="h-4 w-4 text-text-subtle" /> : <ChevronDown className="h-4 w-4 text-text-subtle" />}
-                  </button>
-                  {showDesiredOutcome ? (
-                    <textarea
-                      rows={3}
-                      value={draft.task.desiredOutcome}
-                      onChange={(event) => updateTask("desiredOutcome", event.target.value)}
-                      placeholder="What does success look like?"
-                      className="w-full resize-none rounded-[1.05rem] border border-line/75 bg-white/78 px-4 py-3 text-sm leading-6 text-text outline-none"
-                    />
-                  ) : null}
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-[1.45rem] border border-line/75 bg-[rgba(255,255,255,0.58)] p-4">
-              <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Linked Initiative</p>
-              <input
-                list="capture-initiative-options"
-                value={draft.pattern === "note" ? noteInitiativeQuery : taskInitiativeQuery}
-                onChange={(event) => handleInitiativeInput(draft.pattern, event.target.value)}
-                placeholder="Optional initiative link"
-                className="mt-3 w-full rounded-[1rem] border border-line/75 bg-white/78 px-4 py-3 text-sm text-text outline-none"
-              />
-              <p className="mt-3 text-sm text-text-muted">Optional and intentionally quieter than the main task or note fields.</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-[1.85rem] border border-line/75 bg-white/70 p-5 md:p-6">
-          <div>
+          <div className="mt-auto">
             <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Privacy</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {([
@@ -929,110 +816,161 @@ export function CaptureFlow({
               ))}
             </div>
             <p className="mt-3 text-sm leading-6 text-text-muted">{hybridHelper}</p>
-          </div>
 
-          {(draft.privacy === "protected" || draft.privacy === "hybrid") && (
-            <div className="mt-5">
-              <label className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle" htmlFor="private-context">
-                {draft.privacy === "hybrid" ? "Private context" : "Protected note"}
-              </label>
-              <textarea
-                id="private-context"
-                rows={4}
-                value={draft.privateContext}
-                onChange={(event) => setDraft((current) => ({ ...current, privateContext: event.target.value }))}
-                placeholder={
-                  draft.privacy === "hybrid"
-                    ? "Add the sensitive detail that should stay protected."
-                    : "Capture the private note."
-                }
-                className="mt-3 w-full resize-none rounded-[1.45rem] border border-accent-red/20 bg-[rgba(125,35,31,0.06)] px-4 py-4 text-sm text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-accent-red/35"
-              />
-            </div>
-          )}
-
-          <div className="mt-6 rounded-[1.45rem] border border-line/75 bg-[rgba(255,255,255,0.58)] p-4">
-            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">After capture</p>
-            <p className="mt-3 text-sm leading-6 text-text-muted">
-              Save confirms quietly. Undo and Edit stay immediately adjacent so fast entry never traps the draft.
-            </p>
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <button
-              type="submit"
-              disabled={isPending}
-              className="inline-flex items-center gap-2 rounded-full bg-text px-5 py-3 text-sm font-medium text-white transition-opacity duration-200 disabled:opacity-60"
-            >
-              <CaptureMicrophoneIcon className="h-4 w-4" />
-              {submitLabelForPattern(draft.pattern)}
-            </button>
-            <p className="text-sm text-text-muted">
-              {draft.pattern === "note" ? "Capture memory first. Organize later." : "Capture structure first. Execute later."}
-            </p>
-          </div>
-
-          <div
-            className={cn(
-              "mt-4 min-h-6 text-sm transition-all duration-200",
-              feedback ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"
-            )}
-            aria-live="polite"
-          >
-            {feedback ? (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-text-muted">
-                <span>{feedback.message}</span>
-                {feedback.kind === "save-failed" && feedback.draft ? (
-                  <>
-                    <button type="button" onClick={handleSaveLocally} className="font-medium text-text">
-                      Save locally
-                    </button>
-                    <button type="button" onClick={handleEdit} className="font-medium text-text">
-                      Keep editing
-                    </button>
-                  </>
-                ) : null}
-                {feedback.draft && feedback.kind !== "save-failed" ? (
-                  <>
-                    <button type="button" onClick={handleUndo} className="font-medium text-text">
-                      Undo
-                    </button>
-                    <button type="button" onClick={handleEdit} className="font-medium text-text">
-                      Edit
-                    </button>
-                  </>
-                ) : null}
+            {(draft.privacy === "protected" || draft.privacy === "hybrid") && (
+              <div className="mt-5">
+                <label className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle" htmlFor="private-context">
+                  {draft.privacy === "hybrid" ? "Private context" : "Protected note"}
+                </label>
+                <textarea
+                  id="private-context"
+                  rows={4}
+                  value={draft.privateContext}
+                  onChange={(event) => setDraft((current) => ({ ...current, privateContext: event.target.value }))}
+                  placeholder={
+                    draft.privacy === "hybrid"
+                      ? "Add the sensitive detail that should stay protected."
+                      : "Capture the private note."
+                  }
+                  className="mt-3 w-full resize-none rounded-[1.45rem] border border-accent-red/20 bg-[rgba(125,35,31,0.06)] px-4 py-4 text-sm text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-accent-red/35"
+                />
               </div>
-            ) : (
-              <span>&nbsp;</span>
             )}
           </div>
         </section>
-      </form>
 
-      <section className="rounded-[1.75rem] border border-line/75 bg-white/68 p-5 md:p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Patterns</p>
-            <h3 className="section-title">Two distinct object types, one calm flow.</h3>
+        {/* Right panel: What are you capturing + Save */}
+        <section className="flex flex-col gap-5 rounded-[1.85rem] border border-line/75 bg-white/76 p-5 md:p-6">
+          {draft.pattern === "note" ? (
+            <>
+              <label className="block">
+                <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Title (Optional)</span>
+                <input
+                  value={draft.note.title}
+                  onChange={(event) => updateNote("title", event.target.value)}
+                  placeholder="Short title if it helps retrieval later"
+                  className="mt-3 w-full rounded-[1.3rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-3 text-sm text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Body</span>
+                <textarea
+                  ref={summaryRef}
+                  rows={9}
+                  value={draft.note.body}
+                  onChange={(event) => updateNote("body", event.target.value)}
+                  placeholder="Capture the thought before it turns into work."
+                  className="mt-3 w-full resize-none rounded-[1.45rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-4 text-base text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="block">
+                <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Task Description</span>
+                <textarea
+                  ref={summaryRef}
+                  rows={6}
+                  value={draft.task.description}
+                  onChange={(event) => updateTask("description", event.target.value)}
+                  placeholder="Capture the next concrete task in one sentence."
+                  className="mt-3 w-full resize-none rounded-[1.45rem] border border-line/80 bg-[rgba(255,255,255,0.72)] px-4 py-4 text-base text-text outline-none transition-colors duration-200 placeholder:text-text-subtle focus:border-text/30"
+                />
+              </label>
+
+              <div className="space-y-3 rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
+                <button
+                  type="button"
+                  onClick={() => setShowNextStep((current) => !current)}
+                  className="flex w-full items-center justify-between text-left"
+                >
+                  <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Next Step</span>
+                  {showNextStep ? <ChevronUp className="h-4 w-4 text-text-subtle" /> : <ChevronDown className="h-4 w-4 text-text-subtle" />}
+                </button>
+                {showNextStep ? (
+                  <input
+                    value={draft.task.nextStep}
+                    onChange={(event) => updateTask("nextStep", event.target.value)}
+                    placeholder="What should happen next?"
+                    className="w-full rounded-[1rem] border border-line/75 bg-white/78 px-4 py-3 text-sm text-text outline-none"
+                  />
+                ) : null}
+              </div>
+
+              <div className="space-y-3 rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
+                <button
+                  type="button"
+                  onClick={() => setShowDesiredOutcome((current) => !current)}
+                  className="flex w-full items-center justify-between text-left"
+                >
+                  <span className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Desired Outcome</span>
+                  {showDesiredOutcome ? <ChevronUp className="h-4 w-4 text-text-subtle" /> : <ChevronDown className="h-4 w-4 text-text-subtle" />}
+                </button>
+                {showDesiredOutcome ? (
+                  <textarea
+                    rows={3}
+                    value={draft.task.desiredOutcome}
+                    onChange={(event) => updateTask("desiredOutcome", event.target.value)}
+                    placeholder="What does success look like?"
+                    className="w-full resize-none rounded-[1.05rem] border border-line/75 bg-white/78 px-4 py-3 text-sm leading-6 text-text outline-none"
+                  />
+                ) : null}
+              </div>
+            </>
+          )}
+
+          <div className="rounded-[1.45rem] border border-line/75 bg-[rgba(255,255,255,0.58)] p-4">
+            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Linked Initiative</p>
+            <input
+              list="capture-initiative-options"
+              value={draft.pattern === "note" ? noteInitiativeQuery : taskInitiativeQuery}
+              onChange={(event) => handleInitiativeInput(draft.pattern, event.target.value)}
+              placeholder="Optional initiative link"
+              className="mt-3 w-full rounded-[1rem] border border-line/75 bg-white/78 px-4 py-3 text-sm text-text outline-none"
+            />
+            <p className="mt-3 text-sm text-text-muted">Optional and intentionally quieter than the main task or note fields.</p>
           </div>
-          <Sparkles className="h-5 w-5 text-text-subtle" />
-        </div>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div className="rounded-[1.35rem] border border-line/70 bg-white/64 p-4">
-            <p className="text-sm font-medium text-text">Note</p>
-            <p className="mt-2 text-sm leading-6 text-text-muted">
-              Lightweight memory and context. Search and recency matter more than operational metadata.
-            </p>
+
+          <div className="mt-auto">
+            <div
+              className={cn(
+                "mt-4 min-h-6 text-sm transition-all duration-200",
+                feedback ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"
+              )}
+              aria-live="polite"
+            >
+              {feedback ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-text-muted">
+                  <span>{feedback.message}</span>
+                  {feedback.kind === "save-failed" && feedback.draft ? (
+                    <>
+                      <button type="button" onClick={handleSaveLocally} className="font-medium text-text">
+                        Save locally
+                      </button>
+                      <button type="button" onClick={handleEdit} className="font-medium text-text">
+                        Keep editing
+                      </button>
+                    </>
+                  ) : null}
+                  {feedback.draft && feedback.kind !== "save-failed" ? (
+                    <>
+                      <button type="button" onClick={handleUndo} className="font-medium text-text">
+                        Undo
+                      </button>
+                      <button type="button" onClick={handleEdit} className="font-medium text-text">
+                        Edit
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              ) : (
+                <span>&nbsp;</span>
+              )}
+            </div>
           </div>
-          <div className="rounded-[1.35rem] border border-line/70 bg-white/64 p-4">
-            <p className="text-sm font-medium text-text">Task</p>
-            <p className="mt-2 text-sm leading-6 text-text-muted">
-              Operational object with description, priority, category, and optional depth kept behind quiet expansion.
-            </p>
-          </div>
-        </div>
-      </section>
+        </section>
+      </form>
     </div>
   );
 }

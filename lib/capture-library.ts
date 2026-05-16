@@ -332,7 +332,7 @@ const CAPTURE_LIBRARY_SELECT = `
     title,
     status
   ),
-  origin_capture:captures!captures_origin_capture_id_fkey (
+  origin_capture:captures!origin_capture_id (
     id,
     type,
     title,

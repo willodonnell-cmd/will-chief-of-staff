@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 
+import { PriorityInboxDigestBar } from "@/components/inbox/priority-inbox-digest-bar";
 import {
   deletePriorityInboxItemAction,
   demotePriorityInboxItemAction,
@@ -1620,6 +1621,10 @@ export function PriorityInboxWorkspace({
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mt-4 border-t border-line/60 pt-4">
+          <PriorityInboxDigestBar items={items} sourceFilter={sourceFilter} now={now} />
         </div>
       </section>
 

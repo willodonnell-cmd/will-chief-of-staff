@@ -226,6 +226,7 @@ function payloadToForwardedInput(
   const rawText =
     (typeof payload.reply_plain === "string" && payload.reply_plain.trim()) ||
     (typeof payload.plain === "string" && payload.plain.trim()) ||
+    (typeof payload.html === "string" && payload.html.trim()) ||
     "";
 
   if (!destinationAddress || !rawText) {

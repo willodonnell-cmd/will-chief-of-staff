@@ -492,4 +492,14 @@ select {
   .brief-side {
     @apply min-w-0 lg:w-full lg:max-w-[14.5rem] lg:justify-self-end;
   }
+
+  @keyframes research-loader-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .research-loader-spin {
+    animation: research-loader-spin 0.8s linear infinite;
+  }
 }

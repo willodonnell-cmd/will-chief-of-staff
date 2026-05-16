@@ -9,6 +9,13 @@ export interface PersonIndex {
 
 export const BOOTSTRAP_PEOPLE: PersonIndex[] = [
   {
+    id: "1",
+    name: "Ninaad Archarya",
+    organization: "Fulfillment IQ",
+    title: "CEO",
+    currentReadSnippet: "First substantive meeting May 11. FIQ building warehouse ops intelligence"
+  },
+  {
     id: "hamid-moghadam",
     name: "Hamid Moghadam",
     organization: "Prologis",
@@ -49,6 +56,20 @@ export function searchPeople(query: string, people: PersonIndex[]): PersonIndex[
       p.name.toLowerCase().startsWith(q)
     );
   });
+}
+
+/** Dedupe by `id`; earlier entries win (e.g. bootstrap before Supabase). */
+export function mergePeopleSearchResults(...groups: PersonIndex[][]): PersonIndex[] {
+  const seen = new Set<string>();
+  const out: PersonIndex[] = [];
+  for (const group of groups) {
+    for (const p of group) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      out.push(p);
+    }
+  }
+  return out;
 }
 
 const RECENTLY_VIEWED_KEY = "blackhawk:recently-viewed-people";
