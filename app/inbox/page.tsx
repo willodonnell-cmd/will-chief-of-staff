@@ -1,11 +1,10 @@
 import { PriorityInboxWorkspace } from "@/components/inbox/priority-inbox-workspace";
 import { listInitiativeOptions } from "@/lib/initiatives";
-import { ensureSeedPriorityInboxItems, listPriorityInboxItems } from "@/lib/priority-inbox-store";
+import { listPriorityInboxItems } from "@/lib/priority-inbox-store";
 import { shouldAutoSyncPriorityInboxSource, syncPriorityInboxSource } from "@/lib/priority-inbox-sources";
 import { getTaskConfig } from "@/lib/task-config";
 
 export default async function InboxPage() {
-  await ensureSeedPriorityInboxItems();
   if (await shouldAutoSyncPriorityInboxSource("outlook")) {
     await syncPriorityInboxSource("outlook");
   }
