@@ -15,7 +15,8 @@ export function HighFocusItem({
   summary,
   owner,
   timing,
-  decision,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  decision: _decision,
   href
 }: HighFocusItemProps) {
   return (
