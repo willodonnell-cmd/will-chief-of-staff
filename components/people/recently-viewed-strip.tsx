@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { type PersonIndex, addRecentlyViewed, getRecentlyViewed } from "@/lib/people-search";
+import { type PersonIndex, addRecentlyViewed, clearRecentlyViewed, getRecentlyViewed } from "@/lib/people-search";
 
 export function RecentlyViewedStrip() {
   const router = useRouter();
@@ -20,20 +20,34 @@ export function RecentlyViewedStrip() {
     router.push(`/people/${person.id}`);
   }
 
+  function handleClear() {
+    clearRecentlyViewed();
+    setPeople([]);
+  }
+
   return (
     <section>
-      <p
-        className="text-text-muted"
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          marginBottom: 10
-        }}
-      >
-        Recently Viewed
-      </p>
+      <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+        <p
+          className="text-text-muted"
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        >
+          Recently Viewed
+        </p>
+        <button
+          type="button"
+          onClick={handleClear}
+          className="text-text-muted transition-colors hover:text-text"
+          style={{ fontSize: 11 }}
+        >
+          Clear
+        </button>
+      </div>
       <div className="flex gap-3 overflow-x-auto pb-1">
         {people.map((person) => (
           <button

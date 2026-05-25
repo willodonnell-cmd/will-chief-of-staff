@@ -88,6 +88,15 @@ export function getRecentlyViewed(): PersonIndex[] {
   }
 }
 
+export function clearRecentlyViewed(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(RECENTLY_VIEWED_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function addRecentlyViewed(person: PersonIndex): void {
   if (typeof window === "undefined") return;
   try {
