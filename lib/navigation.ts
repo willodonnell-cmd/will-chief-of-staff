@@ -2,8 +2,8 @@ import type { Route } from "next";
 import type { ComponentType } from "react";
 import {
   BookOpen,
-  BookUser,
   BriefcaseBusiness,
+  CandlestickChart,
   Inbox,
   SlidersHorizontal,
   Target,
@@ -49,7 +49,7 @@ export const desktopPrimaryNav: AnyNavItem[] = [
   { label: "Today", href: "/", icon: Target },
   { label: "Priority Inbox", href: "/inbox", icon: Inbox },
   { label: "People", href: "/people", icon: Users },
-  { label: "Dossier", href: "https://odossier.vercel.app", icon: BookUser, external: true },
+  { label: "Dossier", href: "https://odossier.vercel.app", icon: CandlestickChart, external: true },
   { label: "Library", href: "/library", icon: BookOpen },
   { label: "Initiatives", href: "/initiatives", icon: Waypoints },
   { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness },
