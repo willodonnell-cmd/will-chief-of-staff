@@ -138,35 +138,32 @@ export function DesktopSidebar() {
       </div>
 
       <nav className="mt-8 flex-1 space-y-2 overflow-y-auto pr-1">
-        {desktopPrimaryNav.map((item) => (
-          <SidebarLink
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={item.icon}
-            active={pathname === item.href}
-          />
-        ))}
-
-        {desktopExternalLinks.length > 0 && (
-          <div className="pt-2 border-t border-white/8 mt-2">
-            {desktopExternalLinks.map((item) => {
-              const Icon = item.icon;
-              return (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-[rgb(var(--color-shell-muted))] transition hover:bg-white/5 hover:text-white"
-                >
-                  <Icon className="h-5 w-5 text-white/70" />
-                  <span className="font-medium">{item.label}</span>
-                </a>
-              );
-            })}
-          </div>
-        )}
+        {desktopPrimaryNav.map((item) => {
+          if (item.external) {
+            const Icon = item.icon;
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-[rgb(var(--color-shell-muted))] transition hover:bg-white/5 hover:text-white"
+              >
+                <Icon className="h-5 w-5 text-white/70" />
+                <span className="font-medium">{item.label}</span>
+              </a>
+            );
+          }
+          return (
+            <SidebarLink
+              key={item.href}
+              href={item.href as Parameters<typeof SidebarLink>[0]["href"]}
+              label={item.label}
+              icon={item.icon}
+              active={pathname === item.href}
+            />
+          );
+        })}
       </nav>
 
       <div className="mt-6 shrink-0 pt-5">
