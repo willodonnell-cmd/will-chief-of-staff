@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { CaptureShellControl } from "@/components/capture/capture-shell-control";
-import { desktopExternalLinks, desktopPrimaryNav, desktopSecondaryNav } from "@/lib/navigation";
+import { desktopPrimaryNav, desktopSecondaryNav } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 function SidebarLink({
