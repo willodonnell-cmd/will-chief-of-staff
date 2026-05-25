@@ -2,6 +2,7 @@ import type { Route } from "next";
 import type { ComponentType } from "react";
 import {
   BookOpen,
+  BookUser,
   BriefcaseBusiness,
   Inbox,
   SlidersHorizontal,
@@ -18,6 +19,12 @@ export type NavItem = {
   icon: ComponentType<{ className?: string }>;
   shortLabel?: string;
   isCapture?: boolean;
+};
+
+export type ExternalNavItem = {
+  label: string;
+  href: string;
+  icon: ComponentType<{ className?: string }>;
 };
 
 export const mobileNavItems: NavItem[] = [
@@ -46,4 +53,8 @@ export const desktopPrimaryNav: NavItem[] = [
 
 export const desktopSecondaryNav: NavItem[] = [
   { label: "Capture", href: "/capture", icon: CaptureMicrophoneIcon, isCapture: true }
+];
+
+export const desktopExternalLinks: ExternalNavItem[] = [
+  { label: "Dossier", href: "https://odossier.vercel.app", icon: BookUser }
 ];

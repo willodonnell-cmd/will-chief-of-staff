@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { CaptureShellControl } from "@/components/capture/capture-shell-control";
-import { desktopPrimaryNav, desktopSecondaryNav } from "@/lib/navigation";
+import { desktopExternalLinks, desktopPrimaryNav, desktopSecondaryNav } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 function SidebarLink({
@@ -147,6 +147,26 @@ export function DesktopSidebar() {
             active={pathname === item.href}
           />
         ))}
+
+        {desktopExternalLinks.length > 0 && (
+          <div className="pt-2 border-t border-white/8 mt-2">
+            {desktopExternalLinks.map((item) => {
+              const Icon = item.icon;
+              return (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-[rgb(var(--color-shell-muted))] transition hover:bg-white/5 hover:text-white"
+                >
+                  <Icon className="h-5 w-5 text-white/70" />
+                  <span className="font-medium">{item.label}</span>
+                </a>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       <div className="mt-6 shrink-0 pt-5">
