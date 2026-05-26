@@ -16,7 +16,7 @@ const SOURCE_DIRS: Record<VaultSource, string[]> = {
   email: ["raw/email", "raw/emails"],
   plaud: ["raw/plaud"],
   teams: ["raw/chat"],
-  notes: ["cos/people", "cos/companies"]
+  notes: ["cos/people", "cos/companies", "people"]
 };
 
 const MAX_PER_SOURCE = 5;
