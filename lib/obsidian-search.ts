@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { searchSupabaseVaultPeople } from "@/lib/vault-people-search";
 
 export type VaultSource = "email" | "plaud" | "teams" | "notes";
 
@@ -55,11 +56,20 @@ function extractExcerpts(content: string, name: string): string[] {
 
 /**
  * Search the Obsidian vault for mentions of a person's name.
- * Reads OBSIDIAN_VAULT_PATH from env. Returns [] if unset.
+ *
+ * - Local (OBSIDIAN_VAULT_PATH set): walks the filesystem across all sources.
+ * - Production (no vault path): queries Supabase vault_people for notes only;
+ *   raw email/plaud/teams are local-only and not returned.
  */
 export async function searchVaultForPerson(name: string): Promise<VaultExcerpt[]> {
+  if (!name.trim()) return [];
+
   const vaultPath = process.env.OBSIDIAN_VAULT_PATH?.trim();
-  if (!vaultPath || !name.trim()) return [];
+
+  // Production: no local vault — fall back to Supabase for people profiles
+  if (!vaultPath) {
+    return searchSupabaseVaultPeople(name);
+  }
 
   const results: VaultExcerpt[] = [];
 
