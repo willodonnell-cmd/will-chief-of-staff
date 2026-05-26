@@ -113,13 +113,16 @@ export async function runPeopleResearch(
             { role: "system", content: system },
             { role: "user", content: userContent }
           ],
-          tools: [{ type: "web_search" }],
-          tool_choice: "required",
+          tools: [{ type: "web_search_preview" }],
           max_output_tokens: 1500
         })
       });
 
-      if (!response.ok) return { ok: false, error: "upstream" };
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => "(unreadable)");
+        console.error("[people-research] OpenAI error", response.status, errBody);
+        return { ok: false, error: "upstream" };
+      }
 
       const data = (await response.json()) as { output?: unknown[] };
       const combined = extractOpenAiAssistantText(data);
