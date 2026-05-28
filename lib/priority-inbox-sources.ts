@@ -615,6 +615,57 @@ export async function syncPriorityInboxSource(
   }
 }
 
+export async function getOutlookAccessTokenForActiveUser(options?: { context?: AdapterConnectionContext }) {
+  if (!isOutlookConfigured()) {
+    return {
+      ok: false as const,
+      status: 503 as const,
+      error: "Outlook integration is not configured. Set Microsoft OAuth credentials and OUTLOOK_TOKEN_ENCRYPTION_KEY."
+    };
+  }
+
+  const context = options?.context ?? (await getPriorityInboxContext());
+  if (!context) {
+    return {
+      ok: false as const,
+      status: 401 as const,
+      error: "No active app user could be resolved for Outlook connection."
+    };
+  }
+
+  if ("error" in context) {
+    return {
+      ok: false as const,
+      status: 403 as const,
+      error: context.error
+    };
+  }
+
+  const { row, summary } = await priorityInboxSourceAdapters.outlook.getConnectionSummary(context);
+  if (!row || summary.state !== "connected") {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      error: summary.statusLabel
+    };
+  }
+
+  try {
+    const ensured = await ensureOutlookAccessToken(context, row);
+    return {
+      ok: true as const,
+      accessToken: ensured.accessToken,
+      accountLabel: summary.accountLabel ?? null
+    };
+  } catch (error) {
+    return {
+      ok: false as const,
+      status: 500 as const,
+      error: error instanceof Error ? error.message : "Outlook access token could not be loaded."
+    };
+  }
+}
+
 export async function completeOutlookConnection(params: { origin: string; code: string }) {
   const context = await getPriorityInboxContext();
   if (!context) {

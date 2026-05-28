@@ -79,9 +79,11 @@
 - Returning an item to an active state clears stale handled/dismissed disposition metadata on the inbox row, while defer events now persist their defer reason in the event audit trail.
 - Outlook is the first live source adapter:
   - Microsoft identity delegated OAuth connects a user mailbox without replacing app auth
-  - Microsoft Graph ingestion is bounded, read-only, and Inbox-scoped
+  - Microsoft Graph ingestion is bounded, read-only, Inbox-scoped, and now split into reusable server-side foundation modules under `lib/microsoft/`
   - connection state and encrypted delegated tokens live in `priority_inbox_source_connections`
   - synced items persist source-specific metadata such as external message id, conversation id, received time, and native Outlook link in `priority_inbox_items`
+  - existing Outlook Priority Inbox candidate ingestion remains unchanged in behavior even though OAuth, token refresh, encrypted token handling, and raw Graph mail/profile fetches have been extracted behind a Microsoft foundation layer
+  - a canonical `WorkSignal` model now lives under `lib/work-signals/` so future Calendar, Teams, People, and file adapters can normalize into the same internal executive-intelligence shape without rewriting the Outlook sync path
 - Forwarded email is now the interim real-world intake path when live Outlook access is blocked:
   - forwarding destinations live in `priority_inbox_forwarding_configs`
   - forwarded email detail, raw content, and truthful parsing metadata live in `priority_inbox_forwarded_email_sources`
