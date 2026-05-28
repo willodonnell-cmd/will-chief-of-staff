@@ -6,13 +6,13 @@ import { readFile } from "node:fs/promises";
 import {
   LOCAL_MICROSOFT_365_FIXTURE_URL,
   parseAgentProducedMicrosoft365SignalEnvelope
-} from "../lib/microsoft-signal-intake.ts";
-import { adaptMicrosoft365SignalsToPrototypeDailyBrief } from "../lib/prototype-daily-brief.ts";
-import { runMicrosoftSignalIntakeWorkflow } from "../trigger/microsoft-signal-intake.ts";
+} from "../lib/microsoft-signal-intake";
+import { adaptMicrosoft365SignalsToPrototypeDailyBrief } from "../lib/prototype-daily-brief";
+import { runMicrosoftSignalIntakeWorkflow } from "../trigger/microsoft-signal-intake";
 
 async function loadFixtureObject() {
   const contents = await readFile(LOCAL_MICROSOFT_365_FIXTURE_URL, "utf8");
-  return JSON.parse(contents) as Record<string, unknown>;
+  return JSON.parse(contents) as { signals?: unknown[]; [key: string]: unknown };
 }
 
 test("parses the local ChatGPT Agent Microsoft 365 payload", async () => {

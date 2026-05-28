@@ -8,7 +8,7 @@ import {
   type ChiefOfStaffSignalAttention,
   type ChiefOfStaffSignalSource,
   type ChiefOfStaffSignalType
-} from "./chief-of-staff-signal.ts";
+} from "./chief-of-staff-signal";
 
 export const LOCAL_MICROSOFT_365_FIXTURE_URL = new URL(
   "../fixtures/chatgpt-agent-microsoft-365-signals.json",

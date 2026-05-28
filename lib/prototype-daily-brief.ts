@@ -1,5 +1,5 @@
-import type { ChiefOfStaffSignal } from "./chief-of-staff-signal.ts";
-import type { AgentProducedMicrosoft365SignalEnvelope } from "./microsoft-signal-intake.ts";
+import type { ChiefOfStaffSignal } from "./chief-of-staff-signal";
+import type { AgentProducedMicrosoft365SignalEnvelope } from "./microsoft-signal-intake";
 
 export type PrototypeDailyBriefInput = {
   brief: {

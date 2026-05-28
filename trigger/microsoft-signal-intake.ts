@@ -1,8 +1,8 @@
-import { loadLocalAgentProducedMicrosoft365SignalEnvelope } from "../lib/microsoft-signal-intake.ts";
+import { loadLocalAgentProducedMicrosoft365SignalEnvelope } from "../lib/microsoft-signal-intake";
 import {
   adaptMicrosoft365SignalsToPrototypeDailyBrief,
   type PrototypeDailyBriefInput
-} from "../lib/prototype-daily-brief.ts";
+} from "../lib/prototype-daily-brief";
 
 export type MicrosoftSignalIntakeWorkflowResult = {
   fixtureProducedAt: string;
