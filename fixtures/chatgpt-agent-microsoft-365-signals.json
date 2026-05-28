@@ -1,0 +1,66 @@
+{
+  "producer": "chatgpt_agent",
+  "connectorFamily": "microsoft_365",
+  "producedAt": "2026-05-28T08:15:00.000Z",
+  "tenantLabel": "Will O'Donnell Microsoft 365",
+  "signals": [
+    {
+      "id": "outlook-board-packet-scope",
+      "source": "outlook",
+      "signalType": "decision",
+      "attention": "high",
+      "title": "Board packet scope changed after hiring-brief revision",
+      "summary": "The latest Outlook thread says the narrowed hiring brief will affect the board packet unless scope is confirmed today.",
+      "owner": "Chief of staff",
+      "sourceLabel": "Outlook",
+      "occurredAt": "2026-05-28T07:45:00.000Z",
+      "dueAt": "2026-05-28T21:30:00.000Z",
+      "sourceUrl": "https://outlook.office.com/mail/deeplink/board-packet-scope",
+      "actionRequest": "Confirm whether the board packet should follow the narrowed hiring brief today.",
+      "participants": [
+        "Will O'Donnell",
+        "Recruiting lead",
+        "Finance partner"
+      ],
+      "protectedContext": false
+    },
+    {
+      "id": "teams-ops-checkin",
+      "source": "teams",
+      "signalType": "status",
+      "attention": "low",
+      "title": "Ops team marked vendor migration as quietly on track",
+      "summary": "A Teams update reports no blocker for the vendor migration this week and no direct reply needed.",
+      "owner": "Operations",
+      "sourceLabel": "Teams",
+      "occurredAt": "2026-05-28T06:40:00.000Z",
+      "dueAt": null,
+      "sourceUrl": "https://teams.microsoft.com/l/message/vendor-migration-update",
+      "actionRequest": null,
+      "participants": [
+        "Operations",
+        "Engineering"
+      ],
+      "protectedContext": false
+    },
+    {
+      "id": "calendar-board-prep",
+      "source": "calendar",
+      "signalType": "meeting",
+      "attention": "medium",
+      "title": "Board prep meeting holds a narrow decision window",
+      "summary": "The afternoon calendar block makes the hiring-brief decision time-sensitive because materials lock before the meeting starts.",
+      "owner": "Will O'Donnell",
+      "sourceLabel": "Calendar",
+      "occurredAt": "2026-05-28T05:30:00.000Z",
+      "dueAt": "2026-05-28T20:00:00.000Z",
+      "sourceUrl": "https://outlook.office.com/calendar/item/board-prep",
+      "actionRequest": "Use the board prep meeting as the cutoff for confirming the revised brief.",
+      "participants": [
+        "Will O'Donnell",
+        "Leadership team"
+      ],
+      "protectedContext": true
+    }
+  ]
+}
