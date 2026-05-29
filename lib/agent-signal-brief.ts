@@ -94,10 +94,10 @@ export function getAgentSignalBriefIntroDescription(
   source: AgentProducedMicrosoft365SignalEnvelopeSource
 ) {
   if (source === "local") {
-    return "This page renders ignored local Agent JSON produced for the handoff. It does not add live Microsoft access, connector reuse, or app-owned Outlook runtime behavior.";
+    return "Priority Inbox is rendering the local ChatGPT Agent payload saved for this workspace. The app consumes the signal handoff, but does not reuse live Microsoft access or connector tokens.";
   }
 
-  return "This page renders the sanitized fixture fallback. It does not add live Microsoft access, connector reuse, or app-owned Outlook runtime behavior.";
+  return "Priority Inbox is rendering the sanitized fixture fallback because no local Agent payload is available yet.";
 }
 
 export function getQuietItemsFallbackDetail() {

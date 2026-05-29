@@ -13,7 +13,9 @@ Use `npm run verify` for normal repo verification. It runs `npm test`, `npm run 
 
 `npm run validate:agent-signals` is separate and intentionally strict. It depends on a real local payload at `.local/agent-signals.json`.
 
-On `/agent-signal-brief`, `Create Task` and `Create Note` open the existing `/capture` flow with an editable draft prefilled from the selected signal. The draft is suggested only; it is not auto-saved.
+On `/inbox`, `Create Task` and `Create Note` open the existing `/capture` flow with an editable draft prefilled from the selected signal. The draft is suggested only; it is not auto-saved.
+
+For a known-good local walkthrough, use [agent_signal_demo_script.md](./agent_signal_demo_script.md).
 
 ## Operator Flow
 
@@ -21,7 +23,7 @@ On `/agent-signal-brief`, `Create Task` and `Create Note` open the existing `/ca
 2. Save the JSON-only result to `.local/agent-signals.json`.
 3. Run `npm run verify`.
 4. Run `npm run validate:agent-signals`.
-5. Open `/agent-signal-brief`.
+5. Open `/inbox`.
 6. Confirm `Payload source` says `Local Agent JSON`.
 
 `npm run validate:agent-signals` is expected to fail if `.local/agent-signals.json` does not exist yet. That failure is a prompt to save a local payload first, not a signal to use the fixture instead. If the payload exists but fails validation, use the repair prompt in `docs/chatgpt_agent_signal_prompt.md` and rerun validation.

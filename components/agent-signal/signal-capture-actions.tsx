@@ -36,7 +36,7 @@ export function SignalCaptureActions({ signal }: SignalCaptureActionsProps) {
 
   function handleCreate(pattern: "task" | "note") {
     const handoffId = storeSignalCaptureHandoff(signal, pattern);
-    router.push(`/capture?from=%2Fagent-signal-brief&handoff=${encodeURIComponent(handoffId)}`);
+    router.push(`/capture?from=%2Finbox&handoff=${encodeURIComponent(handoffId)}`);
   }
 
   return (

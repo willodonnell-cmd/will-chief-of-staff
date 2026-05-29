@@ -208,5 +208,5 @@ Invalid JSON:
 1. Run the prompt above in ChatGPT Agent.
 2. Save the JSON-only response to `.local/agent-signals.json`.
 3. Run `npm run validate:agent-signals`.
-4. Open `/agent-signal-brief`.
+4. Open `/inbox`.
 5. Confirm `Payload source` says `Local Agent JSON`.
