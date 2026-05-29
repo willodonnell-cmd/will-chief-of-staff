@@ -13,7 +13,13 @@ import type {
   TaskPriority
 } from "@/lib/blackhawk-capture-model";
 import { formatTaskPriorityLabel } from "@/lib/blackhawk-capture-model";
+import type { NoteFields, TaskFields } from "@/lib/blackhawk-capture-model";
 import { CaptureMicrophoneIcon } from "@/components/icons/capture-microphone-icon";
+import {
+  isSignalCaptureHandoff,
+  SIGNAL_CAPTURE_HANDOFF_STORAGE_PREFIX,
+  type SignalCaptureContext
+} from "@/lib/signal-capture-drafts";
 import { cn } from "@/lib/utils";
 
 type CaptureDraft = {
@@ -41,6 +47,7 @@ type FeedbackState =
       message: string;
       draft?: CaptureDraft;
       queueId?: string;
+      sourceContext?: SignalCaptureContext | null;
     }
   | null;
 
@@ -225,14 +232,35 @@ function flattenTaskIntoNoteBody(task: CaptureDraft["task"]) {
 
 type CaptureFlowProps = {
   initialFrom?: string | null;
+  initialHandoffKey?: string | null;
   categories: TaskCategoryOption[];
   commonCategories: TaskCategoryOption[];
   captureSettings: TaskCaptureSettings;
   initiatives: InitiativeOption[];
 };
 
+function toDraftNote(note: NoteFields): CaptureDraft["note"] {
+  return {
+    title: note.title,
+    body: note.body,
+    linkedInitiativeId: note.linkedInitiativeId
+  };
+}
+
+function toDraftTask(task: TaskFields): CaptureDraft["task"] {
+  return {
+    description: task.description,
+    nextStep: task.nextStep,
+    desiredOutcome: task.desiredOutcome,
+    priority: task.priority,
+    categoryId: task.categoryId,
+    linkedInitiativeId: task.linkedInitiativeId
+  };
+}
+
 export function CaptureFlow({
   initialFrom,
+  initialHandoffKey,
   categories,
   commonCategories,
   captureSettings,
@@ -247,12 +275,14 @@ export function CaptureFlow({
   const [showMoreCategories, setShowMoreCategories] = useState(false);
   const [showNextStep, setShowNextStep] = useState(captureSettings.expandNextStepByDefault);
   const [showDesiredOutcome, setShowDesiredOutcome] = useState(captureSettings.expandDesiredOutcomeByDefault);
+  const [signalContext, setSignalContext] = useState<SignalCaptureContext | null>(null);
   const [noteInitiativeQuery, setNoteInitiativeQuery] = useState("");
   const [taskInitiativeQuery, setTaskInitiativeQuery] = useState("");
   const summaryRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const recognitionBaseValueRef = useRef("");
   const syncInProgressRef = useRef(false);
+  const appliedHandoffRef = useRef(false);
 
   useEffect(() => {
     const rememberedPattern =
@@ -278,6 +308,55 @@ export function CaptureFlow({
   useEffect(() => {
     setTaskInitiativeQuery(initiativeLabel(initiatives, draft.task.linkedInitiativeId));
   }, [draft.task.linkedInitiativeId, initiatives]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !initialHandoffKey || appliedHandoffRef.current) {
+      return;
+    }
+
+    const raw = window.sessionStorage.getItem(
+      `${SIGNAL_CAPTURE_HANDOFF_STORAGE_PREFIX}:${initialHandoffKey}`
+    );
+    if (!raw) {
+      appliedHandoffRef.current = true;
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!isSignalCaptureHandoff(parsed)) {
+        appliedHandoffRef.current = true;
+        return;
+      }
+
+      setDraft({
+        pattern: parsed.pattern,
+        privacy: parsed.privacy,
+        privateContext: parsed.privateContext,
+        note: toDraftNote(parsed.note),
+        task: toDraftTask(parsed.task)
+      });
+      setSignalContext(parsed.sourceContext);
+      setShowNextStep(Boolean(parsed.task.nextStep.trim()) || captureSettings.expandNextStepByDefault);
+      setShowDesiredOutcome(
+        Boolean(parsed.task.desiredOutcome.trim()) || captureSettings.expandDesiredOutcomeByDefault
+      );
+      setFeedback({
+        kind: "status",
+        message: "Drafted from Agent signal. Review and save only if it should become a task or note.",
+        sourceContext: parsed.sourceContext
+      });
+      rememberPattern(parsed.pattern);
+    } catch {
+      // Ignore malformed handoff drafts and fall back to the normal capture composer.
+    } finally {
+      appliedHandoffRef.current = true;
+    }
+  }, [
+    captureSettings.expandDesiredOutcomeByDefault,
+    captureSettings.expandNextStepByDefault,
+    initialHandoffKey
+  ]);
 
   function rememberPattern(pattern: CapturePattern) {
     if (typeof window !== "undefined") {
@@ -559,7 +638,8 @@ export function CaptureFlow({
         setFeedback({
           kind: "save-failed",
           message: `${result.message} You can keep editing or save locally pending sync.`,
-          draft: savedDraft
+          draft: savedDraft,
+          sourceContext: signalContext
         });
         return;
       }
@@ -567,7 +647,8 @@ export function CaptureFlow({
       setFeedback({
         kind: "saved",
         message: `Captured ${savedDraft.pattern} in ${inheritedContext.name}.`,
-        draft: savedDraft
+        draft: savedDraft,
+        sourceContext: signalContext
       });
       setDraft((current) => ({
         ...defaultDraft,
@@ -581,6 +662,7 @@ export function CaptureFlow({
       if (savedDraft.pattern !== "task") {
         setTaskInitiativeQuery("");
       }
+      setSignalContext(null);
       void syncQueuedCaptures();
     } finally {
       setIsPending(false);
@@ -606,8 +688,10 @@ export function CaptureFlow({
       kind: "queued",
       message: "Saved locally only, not yet synced to Supabase.",
       draft: failedDraft,
-      queueId: queuedCapture.id
+      queueId: queuedCapture.id,
+      sourceContext: signalContext
     });
+    setSignalContext(null);
   }
 
   function handleUndo() {
@@ -619,6 +703,7 @@ export function CaptureFlow({
       removeQueuedCapture(feedback.queueId);
     }
 
+    setSignalContext(feedback.sourceContext ?? null);
     restoreDraft(feedback.draft);
     setFeedback(null);
   }
@@ -632,6 +717,7 @@ export function CaptureFlow({
       removeQueuedCapture(feedback.queueId);
     }
 
+    setSignalContext(feedback.sourceContext ?? null);
     restoreDraft(feedback.draft);
   }
 
@@ -786,6 +872,37 @@ export function CaptureFlow({
               ) : null}
               <p className="mt-3 text-sm text-text-muted">
                 {selectedTaskCategory ? `${selectedTaskCategory.name} selected.` : "If you save without choosing, Blackhawk assigns TBD."}
+              </p>
+            </div>
+          ) : null}
+
+          {signalContext ? (
+            <div className="rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
+              <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">
+                {signalContext.heading}
+              </p>
+              <p className="mt-3 text-sm font-medium text-text">{signalContext.signalTitle}</p>
+              <div className="mt-3 space-y-2 text-sm leading-6 text-text-muted">
+                {signalContext.entries.map((entry) => (
+                  <p key={`${entry.label}-${entry.value}`} className="break-words">
+                    <span className="font-medium text-text">{entry.label}:</span>{" "}
+                    {entry.href ? (
+                      <a
+                        href={entry.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-text transition hover:text-text-muted"
+                      >
+                        {entry.value}
+                      </a>
+                    ) : (
+                      entry.value
+                    )}
+                  </p>
+                ))}
+              </div>
+              <p className="mt-3 text-sm text-text-muted">
+                This context is here to guide the draft. You still decide what gets saved.
               </p>
             </div>
           ) : null}

@@ -1,4 +1,7 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   CHIEF_OF_STAFF_SIGNAL_ATTENTION,
@@ -10,9 +13,14 @@ import {
   type ChiefOfStaffSignalType
 } from "./chief-of-staff-signal";
 
-export const LOCAL_MICROSOFT_365_FIXTURE_URL = new URL(
-  "../fixtures/chatgpt-agent-microsoft-365-signals.json",
-  import.meta.url
+export const LOCAL_MICROSOFT_365_FIXTURE_URL = pathToFileURL(
+  join(process.cwd(), "fixtures", "chatgpt-agent-microsoft-365-signals.json")
+);
+
+export const LOCAL_MICROSOFT_365_AGENT_PAYLOAD_PATH = join(
+  process.cwd(),
+  ".local",
+  "agent-signals.json"
 );
 
 export type AgentProducedMicrosoft365SignalEnvelope = {
@@ -21,6 +29,13 @@ export type AgentProducedMicrosoft365SignalEnvelope = {
   producedAt: string;
   tenantLabel: string;
   signals: ChiefOfStaffSignal[];
+};
+
+export type AgentProducedMicrosoft365SignalEnvelopeSource = "local" | "fixture";
+
+export type AgentProducedMicrosoft365SignalEnvelopeLoadResult = {
+  envelope: AgentProducedMicrosoft365SignalEnvelope;
+  source: AgentProducedMicrosoft365SignalEnvelopeSource;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -157,7 +172,34 @@ export function parseAgentProducedMicrosoft365SignalEnvelope(
   };
 }
 
+async function fileExists(path: string) {
+  try {
+    await access(path, fsConstants.F_OK);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+export async function loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource(): Promise<AgentProducedMicrosoft365SignalEnvelopeLoadResult> {
+  const hasLocalPayload = await fileExists(LOCAL_MICROSOFT_365_AGENT_PAYLOAD_PATH);
+  const source: AgentProducedMicrosoft365SignalEnvelopeSource = hasLocalPayload
+    ? "local"
+    : "fixture";
+  const payload = hasLocalPayload
+    ? await readFile(LOCAL_MICROSOFT_365_AGENT_PAYLOAD_PATH, "utf8")
+    : await readFile(LOCAL_MICROSOFT_365_FIXTURE_URL, "utf8");
+  return {
+    envelope: parseAgentProducedMicrosoft365SignalEnvelope(JSON.parse(payload) as unknown),
+    source
+  };
+}
+
 export async function loadLocalAgentProducedMicrosoft365SignalEnvelope() {
-  const payload = await readFile(LOCAL_MICROSOFT_365_FIXTURE_URL, "utf8");
-  return parseAgentProducedMicrosoft365SignalEnvelope(JSON.parse(payload) as unknown);
+  const { envelope } = await loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource();
+  return envelope;
 }

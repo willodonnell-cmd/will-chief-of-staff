@@ -1,4 +1,5 @@
 import type { ChiefOfStaffSignal } from "./chief-of-staff-signal";
+import { sanitizeDisplayText } from "./agent-signal-brief";
 import type { AgentProducedMicrosoft365SignalEnvelope } from "./microsoft-signal-intake";
 
 export type PrototypeDailyBriefInput = {
@@ -97,12 +98,12 @@ function formatHighFocusDecision(signal: ChiefOfStaffSignal) {
 }
 
 function summarizeQuietItem(signal: ChiefOfStaffSignal) {
-  const detailParts = [`${signal.sourceLabel} · ${toDisplayDate(signal.occurredAt)}`];
+  const sourceLabel = sanitizeDisplayText(signal.sourceLabel) || "Source";
+  const detailParts = [`${sourceLabel} · ${toDisplayDate(signal.occurredAt)}`];
+  const supportingText = sanitizeDisplayText(signal.actionRequest ?? signal.summary);
 
-  if (signal.actionRequest) {
-    detailParts.push(signal.actionRequest);
-  } else {
-    detailParts.push(signal.summary);
+  if (supportingText) {
+    detailParts.push(supportingText);
   }
 
   return detailParts.join(" · ");
@@ -122,21 +123,30 @@ export function adaptMicrosoft365SignalsToPrototypeDailyBrief(
     .sort(compareSignals)
     .slice(0, 3)
     .map((signal) => ({
-      label: signal.title,
+      label: sanitizeDisplayText(signal.title) || signal.title,
       detail: summarizeQuietItem(signal)
     }));
-  const sourceLabels = [...new Set(envelope.signals.map((signal) => signal.sourceLabel))];
+  const sourceLabels = [
+    ...new Set(
+      envelope.signals
+        .map((signal) => sanitizeDisplayText(signal.sourceLabel))
+        .filter((sourceLabel) => sourceLabel.length > 0)
+    )
+  ];
+  const displaySourceSummary = sourceLabels.length > 0 ? sourceLabels.join(", ") : "the provided sources";
 
   return {
     brief: {
       slug: "today",
-      highFocusTitle: highFocus?.title ?? "No foreground signal is active right now.",
+      highFocusTitle: sanitizeDisplayText(highFocus?.title ?? "") || "No foreground signal is active right now.",
       highFocusSummary:
-        highFocus?.summary ??
+        sanitizeDisplayText(highFocus?.summary ?? "") ||
         "The Microsoft signal intake returned structured output, but nothing currently requires foreground attention.",
-      highFocusOwner: highFocus?.owner ?? "Chief of staff",
+      highFocusOwner: sanitizeDisplayText(highFocus?.owner ?? "") || "Chief of staff",
       highFocusTiming: highFocus ? formatHighFocusTiming(highFocus) : "No active deadline",
-      highFocusDecision: highFocus ? formatHighFocusDecision(highFocus) : "No attention needed now.",
+      highFocusDecision:
+        sanitizeDisplayText(highFocus ? formatHighFocusDecision(highFocus) : "") ||
+        "No attention needed now.",
       quietPanelEyebrow: "Microsoft 365 background",
       quietPanelTitle:
         quietItems.length > 0
@@ -165,7 +175,7 @@ export function adaptMicrosoft365SignalsToPrototypeDailyBrief(
       {
         eyebrow: "Signal intake",
         title: `${envelope.signals.length} structured Microsoft signals ready`,
-        body: `ChatGPT Agent produced structured output from ${sourceLabels.join(", ")} at ${toDisplayDate(envelope.producedAt)}. The app can consume this brief input and does not reuse connector tokens.`
+        body: `ChatGPT Agent produced structured output from ${displaySourceSummary} at ${toDisplayDate(envelope.producedAt)}. The app can consume this brief input and does not reuse connector tokens.`
       }
     ],
     sourceSignals: envelope.signals

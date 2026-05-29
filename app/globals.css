@@ -493,6 +493,32 @@ select {
     @apply min-w-0 lg:w-full lg:max-w-[14.5rem] lg:justify-self-end;
   }
 
+  .text-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .line-clamp-4 {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+  }
+
+  .line-clamp-5 {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 5;
+  }
+
   @keyframes research-loader-spin {
     to {
       transform: rotate(360deg);

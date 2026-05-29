@@ -1,15 +1,48 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-
+import { SignalCaptureActions } from "@/components/agent-signal/signal-capture-actions";
 import { PageIntro } from "@/components/shell/page-intro";
 import { GlanceChip } from "@/components/today/glance-chip";
 import { QuietPanel } from "@/components/today/quiet-panel";
 import { SupportNote } from "@/components/today/support-note";
+import type { CSSProperties } from "react";
+import {
+  getDisplaySourceHref,
+  getAgentSignalBriefIntroDescription,
+  getConnectorHealthEmptyStateDetail,
+  getEmptySourceGroupDetail,
+  getQuietItemsFallbackDetail,
+  isConnectorHealthSignal,
+  sanitizeDisplayText
+} from "@/lib/agent-signal-brief";
 import type { ChiefOfStaffSignal, ChiefOfStaffSignalSource } from "@/lib/chief-of-staff-signal";
-import { parseAgentProducedMicrosoft365SignalEnvelope } from "@/lib/microsoft-signal-intake";
+import { loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource } from "@/lib/microsoft-signal-intake";
 import { adaptMicrosoft365SignalsToPrototypeDailyBrief } from "@/lib/prototype-daily-brief";
 
 const SOURCE_ORDER: ChiefOfStaffSignalSource[] = ["outlook", "teams", "calendar"];
+const ANYWHERE_TEXT_STYLE: CSSProperties = {
+  overflowWrap: "anywhere",
+  wordBreak: "break-word"
+};
+const CLAMP_3_TEXT_STYLE: CSSProperties = {
+  ...ANYWHERE_TEXT_STYLE,
+  display: "-webkit-box",
+  overflow: "hidden",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 3
+};
+const CLAMP_4_TEXT_STYLE: CSSProperties = {
+  ...ANYWHERE_TEXT_STYLE,
+  display: "-webkit-box",
+  overflow: "hidden",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 4
+};
+const CLAMP_5_TEXT_STYLE: CSSProperties = {
+  ...ANYWHERE_TEXT_STYLE,
+  display: "-webkit-box",
+  overflow: "hidden",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 5
+};
 
 function formatTimestamp(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -55,72 +88,71 @@ function formatAttention(signal: ChiefOfStaffSignal) {
   return "pill-live";
 }
 
-function isConnectorHealthSignal(signal: ChiefOfStaffSignal) {
-  if (signal.signalType !== "status") {
-    return false;
-  }
-
-  const normalizedTitle = signal.title.toLowerCase();
-  const normalizedActionRequest = signal.actionRequest?.toLowerCase() ?? "";
-
-  return (
-    normalizedTitle.includes("could not be inspected") ||
-    normalizedActionRequest.includes("reauthorize") ||
-    normalizedActionRequest.includes("refresh")
-  );
-}
-
 function SignalCard({ signal }: { signal: ChiefOfStaffSignal }) {
+  const displayTitle = sanitizeDisplayText(signal.title) || signal.title;
+  const displaySummary = sanitizeDisplayText(signal.summary) || signal.summary;
+  const displayActionRequest = signal.actionRequest
+    ? sanitizeDisplayText(signal.actionRequest) || signal.actionRequest
+    : null;
+  const sourceHref = getDisplaySourceHref(signal.sourceUrl);
+  const canCreateCapture = !isConnectorHealthSignal(signal);
+
   return (
-    <article className="rounded-[1.35rem] border border-line/70 bg-white/70 p-4">
-      <div className="flex flex-wrap items-center gap-2">
+    <article className="min-w-0 overflow-hidden rounded-[1.35rem] border border-line/70 bg-white/70 p-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className={`pill ${formatAttention(signal)}`}>{signal.attention}</span>
         <span className="chip">{formatSignalType(signal.signalType)}</span>
         {signal.protectedContext ? <span className="chip">Protected</span> : null}
       </div>
 
-      <h4 className="mt-4 text-base font-medium leading-6 text-text">{signal.title}</h4>
-      <p className="mt-2 text-sm leading-6 text-text-muted">{signal.summary}</p>
+      <h4 className="mt-4 text-base font-medium leading-6 text-text" style={CLAMP_3_TEXT_STYLE}>
+        {displayTitle}
+      </h4>
+      <p className="mt-2 text-sm leading-6 text-text-muted" style={CLAMP_5_TEXT_STYLE}>
+        {displaySummary}
+      </p>
 
-      <div className="mt-5 space-y-3 border-t border-line/60 pt-4 text-sm text-text-muted">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <span className="rounded-full border border-line/70 bg-white/78 px-3 py-1.5 text-text-muted">
+      <div className="mt-5 min-w-0 space-y-3 border-t border-line/60 pt-4 text-sm text-text-muted">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <span
+            className="rounded-full border border-line/70 bg-white/78 px-3 py-1.5 text-text-muted"
+            style={ANYWHERE_TEXT_STYLE}
+          >
             {signal.owner}
           </span>
           <span>Occurred {formatTimestamp(signal.occurredAt)}</span>
           <span>{signal.dueAt ? `Due ${formatTimestamp(signal.dueAt)}` : "No explicit deadline"}</span>
         </div>
-        <p>
+        <p style={ANYWHERE_TEXT_STYLE}>
           <span className="font-medium text-text">Participants:</span>{" "}
           {signal.participants.length > 0 ? signal.participants.join(", ") : "None listed"}
         </p>
-        {signal.actionRequest ? (
-          <p>
-            <span className="font-medium text-text">Action request:</span> {signal.actionRequest}
+        {displayActionRequest ? (
+          <p style={ANYWHERE_TEXT_STYLE}>
+            <span className="font-medium text-text">Action request:</span> {displayActionRequest}
           </p>
         ) : null}
       </div>
 
-      {signal.sourceUrl ? (
-        <a
-          href={signal.sourceUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-4 inline-block text-sm font-medium text-text transition hover:text-text-muted"
-        >
-          Open source →
-        </a>
-      ) : null}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        {sourceHref ? (
+          <a
+            href={sourceHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block text-sm font-medium text-text transition hover:text-text-muted"
+          >
+            Open source →
+          </a>
+        ) : null}
+        {canCreateCapture ? <SignalCaptureActions signal={signal} /> : null}
+      </div>
     </article>
   );
 }
 
 export default async function AgentSignalBriefPage() {
-  const rawFixture = await readFile(
-    join(process.cwd(), "fixtures", "chatgpt-agent-microsoft-365-signals.json"),
-    "utf8"
-  );
-  const envelope = parseAgentProducedMicrosoft365SignalEnvelope(JSON.parse(rawFixture) as unknown);
+  const { envelope, source } = await loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource();
   const dailyBrief = adaptMicrosoft365SignalsToPrototypeDailyBrief(envelope);
   const connectorHealthSignals = dailyBrief.sourceSignals.filter(isConnectorHealthSignal);
   const quietItems =
@@ -129,8 +161,7 @@ export default async function AgentSignalBriefPage() {
       : [
           {
             label: "No background signals are waiting right now.",
-            detail:
-              "The local sanitized fixture currently resolves into a single foreground brief without additional quiet items."
+            detail: getQuietItemsFallbackDetail()
           }
         ];
   const signalsBySource = SOURCE_ORDER.map((source) => ({
@@ -145,7 +176,7 @@ export default async function AgentSignalBriefPage() {
       <PageIntro
         eyebrow="Local viewer"
         title="Agent Signal Brief"
-        description="This page renders the sanitized ChatGPT Agent Microsoft 365 fixture only. It does not add live Microsoft access, connector reuse, or app-owned Outlook runtime behavior."
+        description={getAgentSignalBriefIntroDescription(source)}
       />
 
       <section className="grid gap-3 sm:grid-cols-3">
@@ -155,35 +186,47 @@ export default async function AgentSignalBriefPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.24fr_0.86fr]">
-        <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
+        <section className="refined-b min-w-0 overflow-hidden rounded-[1.9rem] p-5 md:p-7">
           <div className="brief-layout gap-5">
             <div className="brief-main">
               <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Current brief</p>
-              <h2 className="mt-3 text-[1.55rem] font-semibold leading-tight tracking-[-0.02em] text-text md:text-[1.8rem]">
+              <h2
+                className="mt-3 max-w-full text-[1.28rem] font-semibold leading-[1.24] tracking-[-0.02em] text-text md:text-[1.55rem]"
+                style={CLAMP_4_TEXT_STYLE}
+              >
                 {dailyBrief.brief.highFocusTitle}
               </h2>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-text-muted md:text-[0.98rem]">
+              <p
+                className="mt-3 max-w-3xl text-sm leading-6 text-text-muted md:text-[0.98rem]"
+                style={ANYWHERE_TEXT_STYLE}
+              >
                 {dailyBrief.brief.highFocusSummary}
               </p>
 
-              <div className="mt-5 rounded-[1.35rem] border border-line/70 bg-white/66 px-4 py-4">
+              <div className="mt-5 min-w-0 rounded-[1.35rem] border border-line/70 bg-white/66 px-4 py-4">
                 <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Recommended action</p>
-                <p className="mt-3 text-sm leading-6 text-text-muted">{dailyBrief.brief.highFocusDecision}</p>
+                <p className="mt-3 text-sm leading-6 text-text-muted" style={ANYWHERE_TEXT_STYLE}>
+                  {dailyBrief.brief.highFocusDecision}
+                </p>
               </div>
             </div>
 
             <div className="brief-side space-y-3">
-              <div className="rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
+              <div className="min-w-0 rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
                 <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Owner</p>
-                <p className="mt-3 text-sm font-medium text-text">{dailyBrief.brief.highFocusOwner}</p>
+                <p className="mt-3 text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
+                  {dailyBrief.brief.highFocusOwner}
+                </p>
               </div>
-              <div className="rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
+              <div className="min-w-0 rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
                 <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Timing</p>
-                <p className="mt-3 text-sm font-medium text-text">{dailyBrief.brief.highFocusTiming}</p>
+                <p className="mt-3 text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
+                  {dailyBrief.brief.highFocusTiming}
+                </p>
               </div>
-              <div className="rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
-                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Fixture scope</p>
-                <p className="mt-3 text-sm leading-6 text-text-muted">
+              <div className="min-w-0 rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
+                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Payload scope</p>
+                <p className="mt-3 text-sm leading-6 text-text-muted" style={ANYWHERE_TEXT_STYLE}>
                   {envelope.signals.length} signals across {populatedSourceCount} active sources.
                 </p>
               </div>
@@ -199,18 +242,28 @@ export default async function AgentSignalBriefPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
-        <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
-          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Fixture metadata</p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+        <section className="min-w-0 rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
+          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Payload metadata</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+            <div className="min-w-0 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Payload source</p>
+              <p className="mt-3 text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
+                {source === "local" ? "Local Agent JSON" : "Sanitized fixture"}
+              </p>
+            </div>
+            <div className="min-w-0 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Tenant</p>
-              <p className="mt-3 text-sm font-medium text-text">{envelope.tenantLabel}</p>
+              <p className="mt-3 text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
+                {envelope.tenantLabel}
+              </p>
             </div>
-            <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+            <div className="min-w-0 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Produced at</p>
-              <p className="mt-3 text-sm font-medium text-text">{formatTimestamp(envelope.producedAt)}</p>
+              <p className="mt-3 text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
+                {formatTimestamp(envelope.producedAt)}
+              </p>
             </div>
-            <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+            <div className="min-w-0 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Signal count</p>
               <p className="mt-3 text-sm font-medium text-text">{envelope.signals.length}</p>
             </div>
@@ -232,21 +285,26 @@ export default async function AgentSignalBriefPage() {
             <div className="mt-5 space-y-3">
               {connectorHealthSignals.length > 0 ? (
                 connectorHealthSignals.map((signal) => (
-                  <div key={signal.id} className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-                    <p className="text-sm font-medium text-text">{signal.title}</p>
-                    <p className="mt-2 text-sm leading-6 text-text-muted">{signal.summary}</p>
+                  <div key={signal.id} className="min-w-0 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+                    <p className="text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
+                      {sanitizeDisplayText(signal.title) || signal.title}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-text-muted" style={ANYWHERE_TEXT_STYLE}>
+                      {sanitizeDisplayText(signal.summary) || signal.summary}
+                    </p>
                     {signal.actionRequest ? (
-                      <p className="mt-2 text-sm leading-6 text-text-muted">
-                        <span className="font-medium text-text">Action request:</span> {signal.actionRequest}
+                      <p className="mt-2 text-sm leading-6 text-text-muted" style={ANYWHERE_TEXT_STYLE}>
+                        <span className="font-medium text-text">Action request:</span>{" "}
+                        {sanitizeDisplayText(signal.actionRequest) || signal.actionRequest}
                       </p>
                     ) : null}
                   </div>
                 ))
               ) : (
                 <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-                  <p className="text-sm font-medium text-text">No connector reauthorization or refresh issues surfaced.</p>
+                  <p className="text-sm font-medium text-text">No connector health issues surfaced.</p>
                   <p className="mt-2 text-sm leading-6 text-text-muted">
-                    The sanitized fixture does not currently include status signals that indicate connector inspection gaps or reauthorization needs.
+                    {getConnectorHealthEmptyStateDetail()}
                   </p>
                 </div>
               )}
@@ -268,9 +326,9 @@ export default async function AgentSignalBriefPage() {
 
         <div className="grid gap-4 xl:grid-cols-3">
           {signalsBySource.map((group) => (
-            <section key={group.source} className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
+            <section key={group.source} className="min-w-0 rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
               <div className="flex items-center justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">{group.heading}</p>
                   <h4 className="mt-2 text-lg font-medium tracking-[-0.01em] text-text">
                     {group.signals.length} signals
@@ -284,9 +342,9 @@ export default async function AgentSignalBriefPage() {
                   group.signals.map((signal) => <SignalCard key={signal.id} signal={signal} />)
                 ) : (
                   <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-                    <p className="text-sm font-medium text-text">No {group.heading} signals in this fixture.</p>
+                    <p className="text-sm font-medium text-text">{getEmptySourceGroupDetail(group.heading)}</p>
                     <p className="mt-2 text-sm leading-6 text-text-muted">
-                      The viewer stays empty here until the local sanitized payload includes that source.
+                      The viewer stays empty here until this payload includes that source.
                     </p>
                   </div>
                 )}

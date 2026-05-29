@@ -7,8 +7,10 @@
     "build": "next build",
     "start": "next start",
     "test": "tsx --test tests/*.test.ts",
-    "lint": "eslint . --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "lint": "eslint app components lib scripts tests trigger middleware.ts next.config.ts tailwind.config.ts --ext .ts,.tsx",
+    "verify": "npm test && npm run lint && npm run build && npm run typecheck",
+    "typecheck": "tsc --noEmit",
+    "validate:agent-signals": "tsx scripts/validate-agent-signals.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
