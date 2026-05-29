@@ -1,13 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { PageIntro } from "@/components/shell/page-intro";
 import { GlanceChip } from "@/components/today/glance-chip";
 import { QuietPanel } from "@/components/today/quiet-panel";
 import { SupportNote } from "@/components/today/support-note";
 import type { ChiefOfStaffSignal, ChiefOfStaffSignalSource } from "@/lib/chief-of-staff-signal";
 import { parseAgentProducedMicrosoft365SignalEnvelope } from "@/lib/microsoft-signal-intake";
 import { adaptMicrosoft365SignalsToPrototypeDailyBrief } from "@/lib/prototype-daily-brief";
-import { PageIntro } from "@/components/shell/page-intro";
 
 const SOURCE_ORDER: ChiefOfStaffSignalSource[] = ["outlook", "teams", "calendar"];
 
@@ -72,27 +72,24 @@ function isConnectorHealthSignal(signal: ChiefOfStaffSignal) {
 
 function SignalCard({ signal }: { signal: ChiefOfStaffSignal }) {
   return (
-    <article className="rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.62)] p-4">
+    <article className="rounded-[1.35rem] border border-line/70 bg-white/70 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className={`pill ${formatAttention(signal)}`}>{signal.attention}</span>
         <span className="chip">{formatSignalType(signal.signalType)}</span>
         {signal.protectedContext ? <span className="chip">Protected</span> : null}
       </div>
 
-      <h4 className="mt-4 text-sm font-medium text-text">{signal.title}</h4>
+      <h4 className="mt-4 text-base font-medium leading-6 text-text">{signal.title}</h4>
       <p className="mt-2 text-sm leading-6 text-text-muted">{signal.summary}</p>
 
-      <div className="mt-4 space-y-2 text-sm text-text-muted">
-        <p>
-          <span className="font-medium text-text">Owner:</span> {signal.owner}
-        </p>
-        <p>
-          <span className="font-medium text-text">Occurred:</span> {formatTimestamp(signal.occurredAt)}
-        </p>
-        <p>
-          <span className="font-medium text-text">Due:</span>{" "}
-          {signal.dueAt ? formatTimestamp(signal.dueAt) : "No explicit deadline"}
-        </p>
+      <div className="mt-5 space-y-3 border-t border-line/60 pt-4 text-sm text-text-muted">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="rounded-full border border-line/70 bg-white/78 px-3 py-1.5 text-text-muted">
+            {signal.owner}
+          </span>
+          <span>Occurred {formatTimestamp(signal.occurredAt)}</span>
+          <span>{signal.dueAt ? `Due ${formatTimestamp(signal.dueAt)}` : "No explicit deadline"}</span>
+        </div>
         <p>
           <span className="font-medium text-text">Participants:</span>{" "}
           {signal.participants.length > 0 ? signal.participants.join(", ") : "None listed"}
@@ -126,11 +123,22 @@ export default async function AgentSignalBriefPage() {
   const envelope = parseAgentProducedMicrosoft365SignalEnvelope(JSON.parse(rawFixture) as unknown);
   const dailyBrief = adaptMicrosoft365SignalsToPrototypeDailyBrief(envelope);
   const connectorHealthSignals = dailyBrief.sourceSignals.filter(isConnectorHealthSignal);
+  const quietItems =
+    dailyBrief.quietItems.length > 0
+      ? dailyBrief.quietItems
+      : [
+          {
+            label: "No background signals are waiting right now.",
+            detail:
+              "The local sanitized fixture currently resolves into a single foreground brief without additional quiet items."
+          }
+        ];
   const signalsBySource = SOURCE_ORDER.map((source) => ({
     source,
     heading: formatSourceHeading(source),
     signals: dailyBrief.sourceSignals.filter((signal) => signal.source === source)
   }));
+  const populatedSourceCount = signalsBySource.filter((group) => group.signals.length > 0).length;
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -140,113 +148,122 @@ export default async function AgentSignalBriefPage() {
         description="This page renders the sanitized ChatGPT Agent Microsoft 365 fixture only. It does not add live Microsoft access, connector reuse, or app-owned Outlook runtime behavior."
       />
 
-      <section className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
-        <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
-          <p className="section-label">Source metadata</p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <div className="rounded-[1.25rem] border border-line/70 bg-[rgba(255,255,255,0.62)] px-4 py-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Tenant</p>
-              <p className="mt-3 text-sm font-medium text-text">{envelope.tenantLabel}</p>
-            </div>
-            <div className="rounded-[1.25rem] border border-line/70 bg-[rgba(255,255,255,0.62)] px-4 py-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Produced at</p>
-              <p className="mt-3 text-sm font-medium text-text">{formatTimestamp(envelope.producedAt)}</p>
-            </div>
-            <div className="rounded-[1.25rem] border border-line/70 bg-[rgba(255,255,255,0.62)] px-4 py-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Signal count</p>
-              <p className="mt-3 text-sm font-medium text-text">{envelope.signals.length}</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
-          <p className="section-label">Support notes</p>
-          <div className="mt-5 grid gap-4">
-            {dailyBrief.supportNotes.map((note) => (
-              <SupportNote
-                key={`${note.eyebrow}-${note.title}`}
-                eyebrow={note.eyebrow}
-                title={note.title}
-                body={note.body}
-              />
-            ))}
-          </div>
-        </section>
-      </section>
-
       <section className="grid gap-3 sm:grid-cols-3">
         {dailyBrief.glanceItems.map((item) => (
           <GlanceChip key={item.label} label={item.label} value={item.value} tone={item.tone} />
         ))}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.28fr_0.92fr]">
+      <section className="grid gap-4 xl:grid-cols-[1.24fr_0.86fr]">
         <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
-          <p className="section-label">High focus</p>
-          <h3 className="mt-3 text-[1.35rem] font-semibold leading-snug tracking-[-0.01em] text-text md:text-[1.5rem]">
-            {dailyBrief.brief.highFocusTitle}
-          </h3>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-text-muted">
-            {dailyBrief.brief.highFocusSummary}
-          </p>
+          <div className="brief-layout gap-5">
+            <div className="brief-main">
+              <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Current brief</p>
+              <h2 className="mt-3 text-[1.55rem] font-semibold leading-tight tracking-[-0.02em] text-text md:text-[1.8rem]">
+                {dailyBrief.brief.highFocusTitle}
+              </h2>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-text-muted md:text-[0.98rem]">
+                {dailyBrief.brief.highFocusSummary}
+              </p>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-2">
-            <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Owner</p>
-              <p className="mt-3 text-sm font-medium text-text">{dailyBrief.brief.highFocusOwner}</p>
+              <div className="mt-5 rounded-[1.35rem] border border-line/70 bg-white/66 px-4 py-4">
+                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Recommended action</p>
+                <p className="mt-3 text-sm leading-6 text-text-muted">{dailyBrief.brief.highFocusDecision}</p>
+              </div>
             </div>
-            <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Timing</p>
-              <p className="mt-3 text-sm font-medium text-text">{dailyBrief.brief.highFocusTiming}</p>
-            </div>
-          </div>
 
-          <div className="mt-4 rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.62)] px-4 py-4">
-            <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Decision</p>
-            <p className="mt-3 text-sm leading-6 text-text-muted">{dailyBrief.brief.highFocusDecision}</p>
+            <div className="brief-side space-y-3">
+              <div className="rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
+                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Owner</p>
+                <p className="mt-3 text-sm font-medium text-text">{dailyBrief.brief.highFocusOwner}</p>
+              </div>
+              <div className="rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
+                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Timing</p>
+                <p className="mt-3 text-sm font-medium text-text">{dailyBrief.brief.highFocusTiming}</p>
+              </div>
+              <div className="rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
+                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Fixture scope</p>
+                <p className="mt-3 text-sm leading-6 text-text-muted">
+                  {envelope.signals.length} signals across {populatedSourceCount} active sources.
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
         <QuietPanel
           eyebrow={dailyBrief.brief.quietPanelEyebrow}
           title={dailyBrief.brief.quietPanelTitle}
-          items={dailyBrief.quietItems}
+          items={quietItems}
         />
       </section>
 
-      <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
-        <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Connector health</p>
-        <div className="mt-5 space-y-3">
-          {connectorHealthSignals.length > 0 ? (
-            connectorHealthSignals.map((signal) => (
-              <div
-                key={signal.id}
-                className="rounded-[1.25rem] border border-line/70 bg-[rgba(255,255,255,0.62)] px-4 py-4"
-              >
-                <p className="text-sm font-medium text-text">{signal.title}</p>
-                <p className="mt-2 text-sm leading-6 text-text-muted">{signal.summary}</p>
-                {signal.actionRequest ? (
-                  <p className="mt-2 text-sm leading-6 text-text-muted">
-                    <span className="font-medium text-text">Action request:</span> {signal.actionRequest}
-                  </p>
-                ) : null}
-              </div>
-            ))
-          ) : (
-            <div className="rounded-[1.25rem] border border-line/70 bg-[rgba(255,255,255,0.62)] px-4 py-4">
-              <p className="text-sm font-medium text-text">No connector reauthorization or refresh issues surfaced.</p>
-              <p className="mt-2 text-sm leading-6 text-text-muted">
-                The sanitized fixture does not currently include status signals that indicate connector inspection gaps or reauthorization needs.
-              </p>
+      <section className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
+        <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
+          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Fixture metadata</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+            <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Tenant</p>
+              <p className="mt-3 text-sm font-medium text-text">{envelope.tenantLabel}</p>
             </div>
-          )}
-        </div>
+            <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Produced at</p>
+              <p className="mt-3 text-sm font-medium text-text">{formatTimestamp(envelope.producedAt)}</p>
+            </div>
+            <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Signal count</p>
+              <p className="mt-3 text-sm font-medium text-text">{envelope.signals.length}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          {dailyBrief.supportNotes.map((note) => (
+            <SupportNote
+              key={`${note.eyebrow}-${note.title}`}
+              eyebrow={note.eyebrow}
+              title={note.title}
+              body={note.body}
+            />
+          ))}
+
+          <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
+            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Connector health</p>
+            <div className="mt-5 space-y-3">
+              {connectorHealthSignals.length > 0 ? (
+                connectorHealthSignals.map((signal) => (
+                  <div key={signal.id} className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+                    <p className="text-sm font-medium text-text">{signal.title}</p>
+                    <p className="mt-2 text-sm leading-6 text-text-muted">{signal.summary}</p>
+                    {signal.actionRequest ? (
+                      <p className="mt-2 text-sm leading-6 text-text-muted">
+                        <span className="font-medium text-text">Action request:</span> {signal.actionRequest}
+                      </p>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+                  <p className="text-sm font-medium text-text">No connector reauthorization or refresh issues surfaced.</p>
+                  <p className="mt-2 text-sm leading-6 text-text-muted">
+                    The sanitized fixture does not currently include status signals that indicate connector inspection gaps or reauthorization needs.
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+        </section>
       </section>
 
       <section className="space-y-4">
         <div>
-          <p className="section-label">Source signals</p>
-          <h3 className="section-title mt-2">Outlook, Teams, and Calendar signals</h3>
+          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Source signals</p>
+          <h3 className="mt-2 text-[1.2rem] font-semibold leading-snug tracking-[-0.01em] text-text md:text-[1.35rem]">
+            Outlook, Teams, and Calendar signals
+          </h3>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-text-muted">
+            Signals stay grouped by source so the route reads like the rest of the app: one brief first, supporting context second, detailed cards last.
+          </p>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-3">
@@ -255,7 +272,9 @@ export default async function AgentSignalBriefPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">{group.heading}</p>
-                  <h4 className="mt-2 text-base font-medium text-text">{group.signals.length} signals</h4>
+                  <h4 className="mt-2 text-lg font-medium tracking-[-0.01em] text-text">
+                    {group.signals.length} signals
+                  </h4>
                 </div>
                 <span className="chip">{group.heading}</span>
               </div>
@@ -264,7 +283,7 @@ export default async function AgentSignalBriefPage() {
                 {group.signals.length > 0 ? (
                   group.signals.map((signal) => <SignalCard key={signal.id} signal={signal} />)
                 ) : (
-                  <div className="rounded-[1.25rem] border border-line/70 bg-[rgba(255,255,255,0.62)] px-4 py-4">
+                  <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
                     <p className="text-sm font-medium text-text">No {group.heading} signals in this fixture.</p>
                     <p className="mt-2 text-sm leading-6 text-text-muted">
                       The viewer stays empty here until the local sanitized payload includes that source.
