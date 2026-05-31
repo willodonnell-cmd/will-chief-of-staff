@@ -20,6 +20,17 @@ function formatCounts<TKey extends string>(keys: readonly TKey[], counts: Record
   return keys.map((key) => `${key}=${counts[key]}`).join(" ");
 }
 
+function formatSourceCoverage(envelope: Awaited<ReturnType<typeof parseAgentProducedMicrosoft365SignalEnvelope>>) {
+  if (!envelope.sourceCoverage || Object.keys(envelope.sourceCoverage).length === 0) {
+    return "Source coverage: not provided";
+  }
+
+  return `Source coverage: ${CHIEF_OF_STAFF_SIGNAL_SOURCES.map((source) => {
+    const entry = envelope.sourceCoverage?.[source];
+    return `${source}=${entry?.status ?? "unknown"}`;
+  }).join(" ")}`;
+}
+
 async function main() {
   const payload = await readFile(LOCAL_MICROSOFT_365_AGENT_PAYLOAD_PATH, "utf8");
   const envelope = parseAgentProducedMicrosoft365SignalEnvelope(JSON.parse(payload) as unknown);
@@ -42,6 +53,7 @@ async function main() {
       `Tenant: ${envelope.tenantLabel}`,
       `Signal count: ${envelope.signals.length}`,
       `By source: ${formatCounts(CHIEF_OF_STAFF_SIGNAL_SOURCES, countsBySource)}`,
+      formatSourceCoverage(envelope),
       `By attention: ${formatCounts(CHIEF_OF_STAFF_SIGNAL_ATTENTION, countsByAttention)}`
     ].join("\n") + "\n"
   );

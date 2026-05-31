@@ -1,8 +1,29 @@
+import {
+  deriveAgentHandoffSourceStatus,
+  type AgentHandoffSourceStatus
+} from "@/lib/agent-handoff-source-status";
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 import { listTodayTasks, type LibraryItemSummary } from "@/lib/capture-library";
+import {
+  mapChiefOfStaffSignalToExecutiveSignal,
+  mapLibraryItemToExecutiveSignal,
+  mapPriorityInboxItemToExecutiveSignal
+} from "@/lib/executive-work-adapters";
 import { listInitiativeOptions } from "@/lib/initiatives";
+import { loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource } from "@/lib/microsoft-signal-intake";
 import { listPriorityInboxItems } from "@/lib/priority-inbox-store";
 import type { PriorityInboxRecommendedAction } from "@/lib/priority-inbox";
+import {
+  loadTodayCalendarSignalsWithStatus,
+  resolveTodayMicrosoftSourceMode,
+  shouldSuppressAgentCalendarSignal,
+  type TodayCalendarSourceStatus,
+  type TodayMicrosoftSourceMode
+} from "@/lib/today-calendar-signals";
+import {
+  buildTodayExecutiveLeverageViewModel,
+  type TodayExecutiveLeverageViewModel
+} from "@/lib/today-executive-leverage";
 
 type TaskRadarItem = {
   id: string;
@@ -39,6 +60,10 @@ export type TodayPageData = {
     overdue: TaskRadarItem[];
     dueSoon: TaskRadarItem[];
   };
+  calendarSourceStatus?: TodayCalendarSourceStatus;
+  microsoftSourceMode?: TodayMicrosoftSourceMode;
+  agentHandoffSourceStatus?: AgentHandoffSourceStatus;
+  executiveLeverage?: TodayExecutiveLeverageViewModel;
 };
 
 function recommendedActionLabel(action: PriorityInboxRecommendedAction): string {
@@ -96,11 +121,57 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     return null;
   }
 
-  const [inboxItems, initiatives, taskSections] = await Promise.all([
+  const [inboxItems, initiatives, taskSections, agentEnvelopeResult, liveCalendarResult] = await Promise.all([
     listPriorityInboxItems(),
     listInitiativeOptions(),
-    listTodayTasks()
+    listTodayTasks(),
+    loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource().catch(() => null),
+    loadTodayCalendarSignalsWithStatus()
   ]);
+  const agentSignalEnvelope = agentEnvelopeResult?.envelope ?? null;
+  const liveCalendarSignals = liveCalendarResult.signals;
+
+  const taskSignals = [...taskSections.overdue, ...taskSections.dueSoon];
+  const mappedAgentSignals = (agentSignalEnvelope?.signals ?? []).map((signal) =>
+    mapChiefOfStaffSignalToExecutiveSignal(signal)
+  );
+  const filteredAgentSignals = mappedAgentSignals.filter(
+    (signal) => !shouldSuppressAgentCalendarSignal(signal, liveCalendarSignals)
+  );
+  const hasAgentHandoff = Boolean(agentSignalEnvelope);
+  const executiveSignals = [
+    ...inboxItems.map((item) => mapPriorityInboxItemToExecutiveSignal(item)),
+    ...taskSignals.map((item) => mapLibraryItemToExecutiveSignal(item)),
+    ...liveCalendarSignals,
+    ...filteredAgentSignals
+  ];
+  const executiveLeverage = buildTodayExecutiveLeverageViewModel({
+    executiveSignals,
+    initiatives,
+    generatedAt: new Date().toISOString()
+  });
+  const calendarSourceStatus: TodayCalendarSourceStatus = {
+    ...liveCalendarResult.status,
+    liveCalendarVisibleCount: executiveLeverage.meetingSourceAttribution.liveCalendarVisibleCount,
+    liveCalendarSurfacedAboveCount: executiveLeverage.meetingSourceAttribution.liveCalendarSurfacedAboveCount
+  };
+  const microsoftSourceMode = resolveTodayMicrosoftSourceMode({
+    hasAgentHandoff,
+    calendarSourceStatus,
+    liveCalendarSignalCount: liveCalendarSignals.length
+  });
+  const agentHandoffSourceStatus = deriveAgentHandoffSourceStatus({
+    envelope: agentSignalEnvelope
+        ? {
+          producer: agentSignalEnvelope.producer,
+          connectorFamily: agentSignalEnvelope.connectorFamily,
+          producedAt: agentSignalEnvelope.producedAt,
+          sourceCoverage: agentSignalEnvelope.sourceCoverage,
+          signals: agentSignalEnvelope.signals
+        }
+      : null,
+    source: agentEnvelopeResult?.source ?? "missing"
+  });
 
   const highPriorityItems = inboxItems.filter((item) => item.visibleState === "high_priority");
   const needsReviewItems = inboxItems.filter((item) => item.visibleState === "needs_review");
@@ -171,6 +242,10 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     highFocus,
     quietPanel,
     inboxSummary,
+    calendarSourceStatus,
+    microsoftSourceMode,
+    agentHandoffSourceStatus,
+    executiveLeverage,
     taskSections: {
       overdue: taskSections.overdue.map((item) => mapTodayTaskItem(item, "overdue")),
       dueSoon: taskSections.dueSoon.map((item) => mapTodayTaskItem(item, "dueSoon"))

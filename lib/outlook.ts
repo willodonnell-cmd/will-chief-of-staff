@@ -1,6 +1,8 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 
-const OUTLOOK_SCOPES = ["openid", "profile", "email", "offline_access", "User.Read", "Mail.Read"] as const;
+// Adding Calendars.Read expands delegated consent. Existing Outlook connections may need
+// to reconnect so Microsoft grants the updated scope set.
+const OUTLOOK_SCOPES = ["openid", "profile", "email", "offline_access", "User.Read", "Mail.Read", "Calendars.Read"] as const;
 const OUTLOOK_GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 const OUTLOOK_FETCH_TIMEOUT_MS = 15_000;
 
@@ -21,6 +23,20 @@ type OutlookProfileResponse = {
 
 type OutlookMessagesResponse = {
   value: OutlookMessage[];
+};
+
+type OutlookGraphDateTimeTimeZone = {
+  dateTime?: string | null;
+  timeZone?: string | null;
+};
+
+type OutlookGraphEmailAddress = {
+  name?: string | null;
+  address?: string | null;
+};
+
+type OutlookCalendarViewResponse = {
+  value: OutlookCalendarGraphEvent[];
 };
 
 type OutlookGraphError = {
@@ -52,6 +68,54 @@ export type OutlookMessage = {
       address?: string | null;
     } | null;
   } | null;
+};
+
+type OutlookCalendarGraphEvent = {
+  id: string;
+  subject?: string | null;
+  bodyPreview?: string | null;
+  start?: OutlookGraphDateTimeTimeZone | null;
+  end?: OutlookGraphDateTimeTimeZone | null;
+  isCancelled?: boolean;
+  isAllDay?: boolean;
+  isOnlineMeeting?: boolean;
+  location?: {
+    displayName?: string | null;
+  } | null;
+  organizer?: {
+    emailAddress?: OutlookGraphEmailAddress | null;
+  } | null;
+  attendees?: Array<{
+    type?: "required" | "optional" | "resource" | null;
+    emailAddress?: OutlookGraphEmailAddress | null;
+  }> | null;
+  importance?: "low" | "normal" | "high";
+  sensitivity?: "normal" | "personal" | "private" | "confidential" | null;
+  showAs?: "free" | "tentative" | "busy" | "oof" | "workingElsewhere" | "unknown" | null;
+  webLink?: string | null;
+};
+
+export type OutlookCalendarViewEvent = {
+  id: string;
+  subject: string | null;
+  bodyPreview: string | null;
+  startAt: string | null;
+  endAt: string | null;
+  isCancelled: boolean;
+  isAllDay: boolean;
+  isOnlineMeeting: boolean;
+  locationDisplayName: string | null;
+  organizerName: string | null;
+  organizerEmail: string | null;
+  attendees: Array<{
+    name: string | null;
+    email: string | null;
+    type: "required" | "optional" | "resource" | null;
+  }>;
+  importance: "low" | "normal" | "high" | null;
+  sensitivity: "normal" | "personal" | "private" | "confidential" | null;
+  showAs: "free" | "tentative" | "busy" | "oof" | "workingElsewhere" | "unknown" | null;
+  webLink: string | null;
 };
 
 export type OutlookTokenSet = {
@@ -144,12 +208,68 @@ function mapTokenResponse(response: OutlookOAuthTokenResponse): OutlookTokenSet 
   };
 }
 
+function normalizeOutlookDateTime(value: OutlookGraphDateTimeTimeZone | null | undefined) {
+  const dateTime = value?.dateTime?.trim();
+  if (!dateTime) {
+    return null;
+  }
+
+  const timeZone = value?.timeZone?.trim() ?? "";
+  const withZone =
+    /(?:z|[+-]\d{2}:\d{2})$/i.test(dateTime) || !timeZone || timeZone.toUpperCase() === "UTC"
+      ? (/(?:z|[+-]\d{2}:\d{2})$/i.test(dateTime) ? dateTime : `${dateTime}Z`)
+      : dateTime;
+  const parsed = Date.parse(withZone);
+  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
+}
+
+function mapCalendarViewEvent(event: OutlookCalendarGraphEvent): OutlookCalendarViewEvent {
+  return {
+    id: event.id,
+    subject: event.subject?.trim() || null,
+    bodyPreview: event.bodyPreview?.replace(/\s+/g, " ").trim() || null,
+    startAt: normalizeOutlookDateTime(event.start),
+    endAt: normalizeOutlookDateTime(event.end),
+    isCancelled: event.isCancelled ?? false,
+    isAllDay: event.isAllDay ?? false,
+    isOnlineMeeting: event.isOnlineMeeting ?? false,
+    locationDisplayName: event.location?.displayName?.trim() || null,
+    organizerName: event.organizer?.emailAddress?.name?.trim() || null,
+    organizerEmail: event.organizer?.emailAddress?.address?.trim() || null,
+    attendees:
+      event.attendees?.map((attendee) => ({
+        name: attendee.emailAddress?.name?.trim() || null,
+        email: attendee.emailAddress?.address?.trim() || null,
+        type: attendee.type ?? null
+      })) ?? [],
+    importance: event.importance ?? null,
+    sensitivity: event.sensitivity ?? null,
+    showAs: event.showAs ?? null,
+    webLink: event.webLink?.trim() || null
+  };
+}
+
 export function isOutlookConfigured() {
   return Boolean(getOutlookClientId() && getOutlookClientSecret() && getOutlookEncryptionKey());
 }
 
 export function getOutlookScopes() {
   return [...OUTLOOK_SCOPES];
+}
+
+export function hasOutlookCalendarScope(scopes: string[] | string | null | undefined) {
+  if (!scopes) {
+    return false;
+  }
+
+  const normalizedScopes = Array.isArray(scopes)
+    ? scopes
+    : scopes
+        .split(/[\s,]+/)
+        .map((scope) => scope.trim())
+        .filter(Boolean);
+
+  return normalizedScopes.some((scope) => scope.toLowerCase() === "calendars.read");
 }
 
 export function getOutlookConnectHref(nextPath = "/inbox") {
@@ -259,6 +379,51 @@ export async function listOutlookInboxMessages(accessToken: string, top = 25): P
   );
 
   return response.value ?? [];
+}
+
+export async function listOutlookCalendarViewEvents(
+  accessToken: string,
+  options?: {
+    startDateTime?: string | Date;
+    endDateTime?: string | Date;
+    top?: number;
+  }
+): Promise<OutlookCalendarViewEvent[]> {
+  const startDateTime =
+    options?.startDateTime instanceof Date
+      ? options.startDateTime
+      : options?.startDateTime
+        ? new Date(options.startDateTime)
+        : new Date();
+  const endDateTime =
+    options?.endDateTime instanceof Date
+      ? options.endDateTime
+      : options?.endDateTime
+        ? new Date(options.endDateTime)
+        : new Date(startDateTime.getTime() + 48 * 60 * 60 * 1000);
+  const top = Math.max(1, Math.min(options?.top ?? 50, 50));
+
+  const query = new URLSearchParams({
+    startDateTime: startDateTime.toISOString(),
+    endDateTime: endDateTime.toISOString(),
+    $select:
+      "id,subject,bodyPreview,start,end,isCancelled,isAllDay,isOnlineMeeting,location,organizer,attendees,importance,sensitivity,showAs,webLink",
+    $orderby: "start/dateTime",
+    $top: `${top}`
+  });
+
+  const response = await fetchJson<OutlookCalendarViewResponse>(
+    `${OUTLOOK_GRAPH_BASE_URL}/me/calendarView?${query.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Prefer: 'outlook.timezone="UTC"'
+      }
+    },
+    "Microsoft calendar fetch failed"
+  );
+
+  return (response.value ?? []).map(mapCalendarViewEvent);
 }
 
 export function encryptOutlookSecret(value: string) {

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 type GlanceChipProps = {
   label: string;
   value: string;
+  detail?: string;
   tone?: "default" | "quiet" | "protected";
   href?: string;
 };
@@ -18,25 +19,26 @@ const chipClass = (tone: GlanceChipProps["tone"]) =>
     tone === "protected" && "border-accent-red/18 bg-[rgba(125,35,31,0.08)] hover:bg-[rgba(125,35,31,0.12)]"
   );
 
-const inner = (label: string, value: string) => (
+const inner = (label: string, value: string, detail?: string) => (
   <>
     <p className="section-label">{label}</p>
     <p className="mt-3 text-2xl font-medium tracking-[-0.03em] text-text">{value}</p>
+    {detail ? <p className="mt-2 text-sm leading-5 text-text-muted">{detail}</p> : null}
   </>
 );
 
-export function GlanceChip({ label, value, tone = "default", href }: GlanceChipProps) {
+export function GlanceChip({ label, value, detail, tone = "default", href }: GlanceChipProps) {
   if (href) {
     return (
       <Link href={href as Route} className={chipClass(tone)}>
-        {inner(label, value)}
+        {inner(label, value, detail)}
       </Link>
     );
   }
 
   return (
     <div className={chipClass(tone)}>
-      {inner(label, value)}
+      {inner(label, value, detail)}
     </div>
   );
 }

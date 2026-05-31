@@ -13,6 +13,10 @@ import {
   isConnectorHealthSignal,
   sanitizeDisplayText
 } from "@/lib/agent-signal-brief";
+import {
+  deriveAgentHandoffSourceStatus,
+  getMicrosoftSourceModeLabel
+} from "@/lib/agent-handoff-source-status";
 import type { ChiefOfStaffSignal, ChiefOfStaffSignalSource } from "@/lib/chief-of-staff-signal";
 import { loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource } from "@/lib/microsoft-signal-intake";
 import { adaptMicrosoft365SignalsToPrototypeDailyBrief } from "@/lib/prototype-daily-brief";
@@ -153,6 +157,10 @@ function SignalCard({ signal }: { signal: ChiefOfStaffSignal }) {
 
 export default async function InboxPage() {
   const { envelope, source } = await loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource();
+  const agentSourceTrustStatus = deriveAgentHandoffSourceStatus({
+    envelope,
+    source
+  });
   const dailyBrief = adaptMicrosoft365SignalsToPrototypeDailyBrief(envelope);
   const connectorHealthSignals = dailyBrief.sourceSignals.filter(isConnectorHealthSignal);
   const quietItems =
@@ -178,6 +186,18 @@ export default async function InboxPage() {
         title="Priority Inbox"
         description={getAgentSignalBriefIntroDescription(source)}
       />
+
+      <section className="rounded-[1.35rem] border border-line/70 bg-white/68 px-4 py-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <p className="section-label">Microsoft source</p>
+            <p className="mt-1 text-sm font-medium text-text">
+              {getMicrosoftSourceModeLabel("agent_handoff")}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-text-muted">{agentSourceTrustStatus.summary}</p>
+          </div>
+        </div>
+      </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
         {dailyBrief.glanceItems.map((item) => (

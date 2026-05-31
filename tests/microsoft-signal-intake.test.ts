@@ -5,6 +5,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import {
+  deriveAgentHandoffSourceStatus,
+  getMicrosoftSourceModeLabel
+} from "../lib/agent-handoff-source-status";
+import {
   getDisplaySourceHref,
   isConnectorHealthSignal,
   sanitizeDisplayText,
@@ -20,7 +24,8 @@ import {
   LOCAL_MICROSOFT_365_FIXTURE_URL,
   loadLocalAgentProducedMicrosoft365SignalEnvelope,
   loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource,
-  parseAgentProducedMicrosoft365SignalEnvelope
+  parseAgentProducedMicrosoft365SignalEnvelope,
+  type Microsoft365SourceCoverage
 } from "../lib/microsoft-signal-intake";
 import {
   CHIEF_OF_STAFF_SIGNAL_ATTENTION,
@@ -82,6 +87,32 @@ function buildSignal(overrides: Partial<ChiefOfStaffSignal>): ChiefOfStaffSignal
   };
 }
 
+function buildSourceCoverage(
+  overrides: Partial<Microsoft365SourceCoverage> = {}
+): Microsoft365SourceCoverage {
+  return {
+    outlook: {
+      status: "included",
+      checkedAt: "2026-05-28T08:10:00.000Z",
+      signalCount: 1,
+      reason: "Outlook was reviewed and produced one signal."
+    },
+    calendar: {
+      status: "empty",
+      checkedAt: "2026-05-28T08:08:00.000Z",
+      signalCount: 0,
+      reason: "Calendar was checked and had no relevant signals."
+    },
+    teams: {
+      status: "permission_denied",
+      checkedAt: "2026-05-28T08:06:00.000Z",
+      signalCount: 0,
+      reason: "Teams scope was denied."
+    },
+    ...overrides
+  };
+}
+
 test("parses the local ChatGPT Agent Microsoft 365 payload", async () => {
   const fixture = await loadFixtureObject();
   const envelope = parseAgentProducedMicrosoft365SignalEnvelope(fixture);
@@ -91,10 +122,33 @@ test("parses the local ChatGPT Agent Microsoft 365 payload", async () => {
   assert.equal(envelope.connectorFamily, "microsoft_365");
   assert.equal(typeof envelope.tenantLabel, "string");
   assert.notEqual(envelope.tenantLabel.trim(), "");
+  assert.deepEqual(envelope.sourceCoverage, {
+    outlook: {
+      status: "included",
+      checkedAt: "2026-05-28T08:10:00.000Z",
+      signalCount: 1,
+      reason: "Thread review produced one high-leverage decision signal."
+    },
+    calendar: {
+      status: "included",
+      checkedAt: "2026-05-28T08:08:00.000Z",
+      signalCount: 1,
+      reason: "Upcoming board prep meeting produced one consequential meeting signal."
+    },
+    teams: {
+      status: "included",
+      checkedAt: "2026-05-28T08:06:00.000Z",
+      signalCount: 1,
+      reason: "Recent Teams activity produced one status signal."
+    }
+  });
   assert.ok(envelope.signals.length > 0);
   assert.ok(
     envelope.signals.some((signal) => CHIEF_OF_STAFF_SIGNAL_SOURCES.includes(signal.source))
   );
+  assert.ok(envelope.signals.some((signal) => signal.source === "outlook"));
+  assert.ok(envelope.signals.some((signal) => signal.source === "teams"));
+  assert.ok(envelope.signals.some((signal) => signal.source === "calendar"));
 
   for (const signal of envelope.signals) {
     assert.ok(CHIEF_OF_STAFF_SIGNAL_SOURCES.includes(signal.source));
@@ -117,6 +171,69 @@ test("parses the local ChatGPT Agent Microsoft 365 payload", async () => {
   assert.equal(typeof dailyBrief.brief.highFocusTitle, "string");
   assert.notEqual(dailyBrief.brief.highFocusTitle.trim(), "");
   assert.equal(dailyBrief.sourceSignals.length, envelope.signals.length);
+});
+
+test("envelope without sourceCoverage still validates", async () => {
+  const fixture = await loadFixtureObject();
+  delete fixture.sourceCoverage;
+
+  const envelope = parseAgentProducedMicrosoft365SignalEnvelope(fixture);
+
+  assert.equal(envelope.sourceCoverage, undefined);
+});
+
+test("envelope with valid sourceCoverage validates", async () => {
+  const fixture = await loadFixtureObject();
+  fixture.sourceCoverage = buildSourceCoverage();
+
+  const envelope = parseAgentProducedMicrosoft365SignalEnvelope(fixture);
+
+  assert.equal(envelope.sourceCoverage?.outlook?.status, "included");
+  assert.equal(envelope.sourceCoverage?.calendar?.status, "empty");
+  assert.equal(envelope.sourceCoverage?.teams?.status, "permission_denied");
+});
+
+test("invalid sourceCoverage status fails validation", async () => {
+  const fixture = await loadFixtureObject();
+  fixture.sourceCoverage = {
+    ...buildSourceCoverage(),
+    calendar: {
+      status: "partial"
+    }
+  } as unknown;
+
+  assert.throws(() => parseAgentProducedMicrosoft365SignalEnvelope(fixture), {
+    message:
+      "sourceCoverage.calendar.status must be one of: included, empty, skipped, unavailable, permission_denied, error, unknown."
+  });
+});
+
+test("unknown sourceCoverage key fails validation", async () => {
+  const fixture = await loadFixtureObject();
+  fixture.sourceCoverage = {
+    ...buildSourceCoverage(),
+    sharepoint: {
+      status: "included"
+    }
+  };
+
+  assert.throws(() => parseAgentProducedMicrosoft365SignalEnvelope(fixture), {
+    message: "sourceCoverage.sharepoint is not supported."
+  });
+});
+
+test("negative sourceCoverage signalCount fails validation", async () => {
+  const fixture = await loadFixtureObject();
+  fixture.sourceCoverage = buildSourceCoverage({
+    calendar: {
+      status: "empty",
+      signalCount: -1
+    }
+  });
+
+  assert.throws(() => parseAgentProducedMicrosoft365SignalEnvelope(fixture), {
+    message: "sourceCoverage.calendar.signalCount must be a non-negative number."
+  });
 });
 
 test("rejects a payload when a required field is missing", async () => {
@@ -188,6 +305,282 @@ test("executes the local microsoft signal intake workflow end to end", async () 
   assert.equal(result.dailyBrief.supportNotes.length, 1);
   assert.equal(result.dailyBrief.sourceSignals.length, result.signalCount);
   assert.match(result.dailyBrief.supportNotes[0]?.body ?? "", /does not reuse connector tokens/i);
+});
+
+test("derives local agent handoff source-trust status", async () => {
+  const fixture = await loadFixtureObject();
+  const envelope = parseAgentProducedMicrosoft365SignalEnvelope(fixture);
+  const status = deriveAgentHandoffSourceStatus({
+    envelope,
+    source: "local",
+    now: "2026-05-28T09:15:00.000Z"
+  });
+
+  assert.equal(status.available, true);
+  assert.equal(status.mode, "local");
+  assert.equal(status.producer, "chatgpt_agent");
+  assert.equal(status.connectorFamily, "microsoft_365");
+  assert.equal(status.isFixture, false);
+  assert.equal(status.isStale, false);
+  assert.equal(status.ageLabel, "1 hr ago");
+  assert.deepEqual(status.sourcesPresent, {
+    outlook: true,
+    calendar: true,
+    teams: true
+  });
+  assert.deepEqual(status.signalCountsBySource, {
+    outlook: 1,
+    calendar: 1,
+    teams: 1
+  });
+  assert.equal(status.hasExplicitSourceCoverage, true);
+  assert.equal(status.sourceCoverageBySource.outlook.status, "included");
+  assert.equal(status.sourceCoverageBySource.calendar.status, "included");
+  assert.equal(status.sourceCoverageBySource.teams.status, "included");
+  assert.equal(status.diagnosticCount, 0);
+  assert.deepEqual(status.missingSources, []);
+  assert.match(status.summary, /local handoff/i);
+  assert.match(status.summary, /Outlook included/i);
+  assert.match(status.summary, /Calendar included/i);
+  assert.match(status.summary, /Teams included/i);
+});
+
+test("labels fixture agent handoff status as fallback not live data", async () => {
+  const fixture = await loadFixtureObject();
+  const envelope = parseAgentProducedMicrosoft365SignalEnvelope(fixture);
+  const status = deriveAgentHandoffSourceStatus({
+    envelope,
+    source: "fixture",
+    now: "2026-05-31T09:15:00.000Z"
+  });
+
+  assert.equal(status.mode, "fixture");
+  assert.equal(status.isFixture, true);
+  assert.match(status.summary, /fixture fallback/i);
+  assert.match(status.summary, /not live data/i);
+});
+
+test("marks agent handoff stale when producedAt is older than threshold", async () => {
+  const fixture = await loadFixtureObject();
+  const envelope = parseAgentProducedMicrosoft365SignalEnvelope(fixture);
+  const status = deriveAgentHandoffSourceStatus({
+    envelope,
+    source: "local",
+    now: "2026-05-31T09:15:00.000Z"
+  });
+
+  assert.equal(status.isStale, true);
+  assert.match(status.summary, /stale/i);
+});
+
+test("handles missing producedAt safely", () => {
+  const status = deriveAgentHandoffSourceStatus({
+    envelope: {
+      producer: "chatgpt_agent",
+      connectorFamily: "microsoft_365",
+      producedAt: null,
+      sourceCoverage: buildSourceCoverage({
+        outlook: {
+          status: "included",
+          signalCount: 1
+        }
+      }),
+      signals: [buildSignal({ source: "outlook" })]
+    },
+    source: "local"
+  });
+
+  assert.equal(status.producedAt, null);
+  assert.equal(status.ageLabel, null);
+  assert.equal(status.isStale, false);
+  assert.match(status.summary, /freshness unknown/i);
+});
+
+test("counts connector-health diagnostics and missing source families", () => {
+  const status = deriveAgentHandoffSourceStatus({
+    envelope: {
+      producer: "chatgpt_agent",
+      connectorFamily: "microsoft_365",
+      producedAt: "2026-05-31T08:00:00.000Z",
+      sourceCoverage: buildSourceCoverage({
+        outlook: {
+          status: "included",
+          checkedAt: "2026-05-31T07:58:00.000Z",
+          signalCount: 1
+        },
+        calendar: {
+          status: "empty",
+          checkedAt: "2026-05-31T07:56:00.000Z",
+          signalCount: 0,
+          reason: "No relevant calendar items."
+        },
+        teams: {
+          status: "permission_denied",
+          checkedAt: "2026-05-31T07:55:00.000Z",
+          signalCount: 0,
+          reason: "Teams permission was denied."
+        }
+      }),
+      signals: [
+        buildSignal({
+          source: "outlook",
+          title: "Outlook connector review was unavailable",
+          summary: "The Outlook connector could not be reviewed during this run."
+        })
+      ]
+    },
+    source: "local",
+    now: "2026-05-31T09:00:00.000Z"
+  });
+
+  assert.deepEqual(status.signalCountsBySource, {
+    outlook: 1,
+    calendar: 0,
+    teams: 0
+  });
+  assert.deepEqual(status.missingSources, []);
+  assert.equal(status.diagnosticCount, 1);
+  assert.equal(status.sourceCoverageBySource.calendar.status, "empty");
+  assert.equal(status.sourceCoverageBySource.teams.status, "permission_denied");
+  assert.match(status.summary, /Calendar checked, no relevant signals/i);
+  assert.match(status.summary, /Teams permission denied/i);
+  assert.match(status.summary, /1 connector-health diagnostic included/i);
+});
+
+test("explicit empty source is not treated as missing", () => {
+  const status = deriveAgentHandoffSourceStatus({
+    envelope: {
+      producer: "chatgpt_agent",
+      connectorFamily: "microsoft_365",
+      producedAt: "2026-05-31T08:00:00.000Z",
+      sourceCoverage: buildSourceCoverage({
+        outlook: {
+          status: "included",
+          signalCount: 1
+        },
+        calendar: {
+          status: "empty",
+          signalCount: 0
+        },
+        teams: {
+          status: "skipped",
+          signalCount: 0
+        }
+      }),
+      signals: [buildSignal({ source: "outlook" })]
+    },
+    source: "local"
+  });
+
+  assert.deepEqual(status.missingSources, []);
+  assert.equal(status.sourceCoverageBySource.calendar.status, "empty");
+  assert.match(status.summary, /Calendar checked, no relevant signals/i);
+});
+
+test("explicit permission denied source is surfaced distinctly", () => {
+  const status = deriveAgentHandoffSourceStatus({
+    envelope: {
+      producer: "chatgpt_agent",
+      connectorFamily: "microsoft_365",
+      producedAt: "2026-05-31T08:00:00.000Z",
+      sourceCoverage: buildSourceCoverage({
+        teams: {
+          status: "permission_denied",
+          signalCount: 0,
+          reason: "Graph scope was denied."
+        }
+      }),
+      signals: []
+    },
+    source: "local"
+  });
+
+  assert.equal(status.sourceCoverageBySource.teams.status, "permission_denied");
+  assert.match(status.summary, /Teams permission denied/i);
+});
+
+test("today source-trust status uses sourceCoverage when present", () => {
+  const status = deriveAgentHandoffSourceStatus({
+    envelope: {
+      producer: "chatgpt_agent",
+      connectorFamily: "microsoft_365",
+      producedAt: "2026-05-31T08:00:00.000Z",
+      sourceCoverage: buildSourceCoverage({
+        outlook: {
+          status: "included",
+          signalCount: 1
+        },
+        calendar: {
+          status: "empty",
+          signalCount: 0,
+          reason: "No relevant meetings."
+        },
+        teams: {
+          status: "skipped",
+          signalCount: 0,
+          reason: "Teams was intentionally skipped."
+        }
+      }),
+      signals: [buildSignal({ source: "outlook" })]
+    },
+    source: "local"
+  });
+
+  assert.match(status.summary, /Calendar checked, no relevant signals/i);
+  assert.match(status.summary, /Teams skipped/i);
+});
+
+test("absent sourceCoverage falls back to signal-presence inference", () => {
+  const status = deriveAgentHandoffSourceStatus({
+    envelope: {
+      producer: "chatgpt_agent",
+      connectorFamily: "microsoft_365",
+      producedAt: "2026-05-31T08:00:00.000Z",
+      signals: [buildSignal({ source: "outlook" })]
+    },
+    source: "local"
+  });
+
+  assert.equal(status.hasExplicitSourceCoverage, false);
+  assert.equal(status.sourceCoverageBySource.outlook.status, "included");
+  assert.equal(status.sourceCoverageBySource.outlook.inferred, true);
+  assert.equal(status.sourceCoverageBySource.calendar.status, "unknown");
+  assert.deepEqual(status.missingSources, ["Calendar", "Teams"]);
+  assert.match(status.summary, /Calendar coverage unknown/i);
+});
+
+test("fixture sourceCoverage aligns with fixture signal counts", async () => {
+  const fixture = await loadFixtureObject();
+  const envelope = parseAgentProducedMicrosoft365SignalEnvelope(fixture);
+
+  const actualCounts = envelope.signals.reduce(
+    (counts, signal) => {
+      counts[signal.source] += 1;
+      return counts;
+    },
+    { outlook: 0, calendar: 0, teams: 0 }
+  );
+
+  assert.equal(envelope.sourceCoverage?.outlook?.signalCount, actualCounts.outlook);
+  assert.equal(envelope.sourceCoverage?.calendar?.signalCount, actualCounts.calendar);
+  assert.equal(envelope.sourceCoverage?.teams?.signalCount, actualCounts.teams);
+});
+
+test("handles missing agent handoff safely", () => {
+  const status = deriveAgentHandoffSourceStatus({
+    envelope: null,
+    source: "missing"
+  });
+
+  assert.equal(status.available, false);
+  assert.equal(status.mode, "missing");
+  assert.equal(status.summary, "Agent Microsoft 365 brief · missing");
+});
+
+test("formats microsoft source mode labels", () => {
+  assert.equal(getMicrosoftSourceModeLabel("agent_handoff"), "Agent handoff");
+  assert.equal(getMicrosoftSourceModeLabel("graph_oauth"), "Graph OAuth");
+  assert.equal(getMicrosoftSourceModeLabel("mixed"), "Mixed");
 });
 
 test("classifies unavailable connector status signals as connector health", () => {

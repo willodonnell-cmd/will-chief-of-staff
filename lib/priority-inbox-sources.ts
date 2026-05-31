@@ -5,6 +5,7 @@ import {
   exchangeOutlookCodeForTokens,
   fetchOutlookProfile,
   getOutlookConnectHref,
+  hasOutlookCalendarScope,
   isOutlookConfigured,
   listOutlookInboxMessages,
   refreshOutlookAccessToken,
@@ -59,6 +60,29 @@ type PriorityInboxSourceAdapter = {
   source: "outlook";
   getConnectionSummary: (context: AdapterConnectionContext) => Promise<AdapterConnectionSummary>;
   sync: (context: AdapterConnectionContext, row: SourceConnectionRow) => Promise<number>;
+};
+
+export type OutlookAccessTokenResult =
+  | {
+      ok: true;
+      accessToken: string;
+      accountLabel: string | null;
+      scopes: string[];
+    }
+  | {
+      ok: false;
+      error: string;
+      requiresReconnect?: boolean;
+    };
+
+export type OutlookSourceConnectionStatus = {
+  connected: boolean;
+  hasCalendarScope: boolean;
+  delegatedScopes: string[];
+  connectHref: string;
+  accountLabel: string | null;
+  state: PriorityInboxSourceConnectionSummary["state"];
+  statusLabel: string;
 };
 
 const PRIORITY_INBOX_SOURCE_CONNECTION_SELECT = `
@@ -228,6 +252,12 @@ async function ensureOutlookAccessToken(context: AdapterConnectionContext, row: 
     accessToken: refreshedTokens.accessToken,
     row: nextRow
   };
+}
+
+function hasRequiredOutlookScopes(row: SourceConnectionRow, requiredScopes: string[]) {
+  const delegatedScopes = row.delegated_scopes ?? [];
+  const normalizedScopes = new Set(delegatedScopes.map((scope) => scope.toLowerCase()));
+  return requiredScopes.every((scope) => normalizedScopes.has(scope.toLowerCase()));
 }
 
 function coalesceSenderName(message: OutlookMessage) {
@@ -522,6 +552,115 @@ export async function getPriorityInboxSourceConnectionSummary(source: "outlook")
   }
 
   return (await priorityInboxSourceAdapters[source].getConnectionSummary(context)).summary;
+}
+
+export async function getOutlookSourceConnectionStatusForCurrentUser(): Promise<OutlookSourceConnectionStatus> {
+  const connectHref = getOutlookConnectHref();
+
+  if (!isOutlookConfigured()) {
+    return {
+      connected: false,
+      hasCalendarScope: false,
+      delegatedScopes: [],
+      connectHref,
+      accountLabel: null,
+      state: "not_configured",
+      statusLabel: "Outlook integration is not configured yet."
+    };
+  }
+
+  const context = await getPriorityInboxContext();
+  if (!context || "error" in context) {
+    return {
+      connected: false,
+      hasCalendarScope: false,
+      delegatedScopes: [],
+      connectHref,
+      accountLabel: null,
+      state: "disconnected",
+      statusLabel: "Outlook is not connected."
+    };
+  }
+
+  try {
+    const row = await getSourceConnectionRow(context, "outlook");
+    const summary = toConnectionSummary(row);
+    const delegatedScopes = row?.delegated_scopes ?? [];
+
+    return {
+      connected: summary.state === "connected",
+      hasCalendarScope: hasOutlookCalendarScope(delegatedScopes),
+      delegatedScopes,
+      connectHref,
+      accountLabel: row?.external_account_email ?? row?.external_account_label ?? null,
+      state: summary.state,
+      statusLabel: summary.statusLabel
+    };
+  } catch (error) {
+    const summary = toConnectionSummaryFromError(error);
+    return {
+      connected: false,
+      hasCalendarScope: false,
+      delegatedScopes: [],
+      connectHref,
+      accountLabel: null,
+      state: summary.state,
+      statusLabel: summary.statusLabel
+    };
+  }
+}
+
+export async function getOutlookAccessTokenForCurrentUser(
+  requiredScopes: string[] = []
+): Promise<OutlookAccessTokenResult> {
+  const context = await getPriorityInboxContext();
+  if (!context) {
+    return {
+      ok: false,
+      error: "No active app user could be resolved for Outlook access."
+    };
+  }
+
+  if ("error" in context) {
+    return {
+      ok: false,
+      error: context.error
+    };
+  }
+
+  const { row, summary } = await outlookAdapter.getConnectionSummary(context);
+  if (!row || summary.state !== "connected") {
+    return {
+      ok: false,
+      error: summary.statusLabel,
+      requiresReconnect: summary.state === "needs_reauth"
+    };
+  }
+
+  if (requiredScopes.length > 0 && !hasRequiredOutlookScopes(row, requiredScopes)) {
+    return {
+      ok: false,
+      error: `Reconnect Outlook to grant ${requiredScopes.join(", ")} access.`,
+      requiresReconnect: true
+    };
+  }
+
+  try {
+    const ensured = await ensureOutlookAccessToken(context, row);
+    return {
+      ok: true,
+      accessToken: ensured.accessToken,
+      accountLabel: row.external_account_email ?? row.external_account_label ?? null,
+      scopes: ensured.row.delegated_scopes ?? row.delegated_scopes ?? []
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Outlook access token could not be loaded.";
+    return {
+      ok: false,
+      error: message,
+      requiresReconnect: message.toLowerCase().includes("refresh token") || message.toLowerCase().includes("reconnect")
+    };
+  }
 }
 
 export async function shouldAutoSyncPriorityInboxSource(source: "outlook") {

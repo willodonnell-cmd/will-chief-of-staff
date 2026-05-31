@@ -3,6 +3,26 @@
   "connectorFamily": "microsoft_365",
   "producedAt": "2026-05-28T08:15:00.000Z",
   "tenantLabel": "Will O'Donnell Microsoft 365",
+  "sourceCoverage": {
+    "outlook": {
+      "status": "included",
+      "checkedAt": "2026-05-28T08:10:00.000Z",
+      "signalCount": 1,
+      "reason": "Thread review produced one high-leverage decision signal."
+    },
+    "calendar": {
+      "status": "included",
+      "checkedAt": "2026-05-28T08:08:00.000Z",
+      "signalCount": 1,
+      "reason": "Upcoming board prep meeting produced one consequential meeting signal."
+    },
+    "teams": {
+      "status": "included",
+      "checkedAt": "2026-05-28T08:06:00.000Z",
+      "signalCount": 1,
+      "reason": "Recent Teams activity produced one status signal."
+    }
+  },
   "signals": [
     {
       "id": "outlook-board-packet-scope",

@@ -13,6 +13,30 @@ import {
   type ChiefOfStaffSignalType
 } from "./chief-of-staff-signal";
 
+export const MICROSOFT_365_SOURCE_COVERAGE_STATUSES = [
+  "included",
+  "empty",
+  "skipped",
+  "unavailable",
+  "permission_denied",
+  "error",
+  "unknown"
+] as const;
+
+export type Microsoft365SourceCoverageStatus =
+  (typeof MICROSOFT_365_SOURCE_COVERAGE_STATUSES)[number];
+
+export type Microsoft365SourceCoverageEntry = {
+  status: Microsoft365SourceCoverageStatus;
+  checkedAt?: string;
+  signalCount?: number;
+  reason?: string;
+};
+
+export type Microsoft365SourceCoverage = Partial<
+  Record<ChiefOfStaffSignalSource, Microsoft365SourceCoverageEntry>
+>;
+
 export const LOCAL_MICROSOFT_365_FIXTURE_URL = pathToFileURL(
   join(process.cwd(), "fixtures", "chatgpt-agent-microsoft-365-signals.json")
 );
@@ -28,6 +52,7 @@ export type AgentProducedMicrosoft365SignalEnvelope = {
   connectorFamily: "microsoft_365";
   producedAt: string;
   tenantLabel: string;
+  sourceCoverage?: Microsoft365SourceCoverage;
   signals: ChiefOfStaffSignal[];
 };
 
@@ -88,6 +113,18 @@ function asIsoTimestamp(value: unknown, path: string): string {
   return normalized;
 }
 
+function asOptionalNonNegativeNumber(value: unknown, path: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || Number.isNaN(value) || value < 0) {
+    throw new Error(`${path} must be a non-negative number.`);
+  }
+
+  return value;
+}
+
 function asEnum<TValue extends string>(
   value: unknown,
   allowed: readonly TValue[],
@@ -144,6 +181,60 @@ function parseChiefOfStaffSignal(input: unknown, index: number): ChiefOfStaffSig
   };
 }
 
+function parseSourceCoverageEntry(
+  input: unknown,
+  path: string
+): Microsoft365SourceCoverageEntry {
+  if (!isRecord(input)) {
+    throw new Error(`${path} must be an object.`);
+  }
+
+  const entry: Microsoft365SourceCoverageEntry = {
+    status: asEnum<Microsoft365SourceCoverageStatus>(
+      input.status,
+      MICROSOFT_365_SOURCE_COVERAGE_STATUSES,
+      `${path}.status`
+    )
+  };
+
+  if (input.checkedAt !== undefined) {
+    entry.checkedAt = asIsoTimestamp(input.checkedAt, `${path}.checkedAt`);
+  }
+
+  if (input.signalCount !== undefined) {
+    entry.signalCount = asOptionalNonNegativeNumber(input.signalCount, `${path}.signalCount`);
+  }
+
+  if (input.reason !== undefined) {
+    entry.reason = asNonEmptyString(input.reason, `${path}.reason`);
+  }
+
+  return entry;
+}
+
+function parseSourceCoverage(input: unknown): Microsoft365SourceCoverage {
+  if (!isRecord(input)) {
+    throw new Error("sourceCoverage must be an object.");
+  }
+
+  for (const key of Object.keys(input)) {
+    if (!CHIEF_OF_STAFF_SIGNAL_SOURCES.includes(key as ChiefOfStaffSignalSource)) {
+      throw new Error(`sourceCoverage.${key} is not supported.`);
+    }
+  }
+
+  const sourceCoverage: Microsoft365SourceCoverage = {};
+
+  for (const source of CHIEF_OF_STAFF_SIGNAL_SOURCES) {
+    const entry = input[source];
+    if (entry !== undefined) {
+      sourceCoverage[source] = parseSourceCoverageEntry(entry, `sourceCoverage.${source}`);
+    }
+  }
+
+  return sourceCoverage;
+}
+
 export function parseAgentProducedMicrosoft365SignalEnvelope(
   input: unknown
 ): AgentProducedMicrosoft365SignalEnvelope {
@@ -168,6 +259,8 @@ export function parseAgentProducedMicrosoft365SignalEnvelope(
     connectorFamily: "microsoft_365",
     producedAt: asIsoTimestamp(input.producedAt, "producedAt"),
     tenantLabel: asNonEmptyString(input.tenantLabel, "tenantLabel"),
+    sourceCoverage:
+      input.sourceCoverage === undefined ? undefined : parseSourceCoverage(input.sourceCoverage),
     signals: input.signals.map((signal, index) => parseChiefOfStaffSignal(signal, index))
   };
 }
