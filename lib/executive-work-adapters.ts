@@ -792,23 +792,61 @@ function librarySummaryText(item: LibraryItemSummary | LibraryItemDetail) {
   return compactText([item.note?.body, item.preview].join(" "));
 }
 
+function splitStructuredValues(value: string | null | undefined) {
+  return dedupeStrings(
+    (value ?? "")
+      .split(/\r?\n|,|;/)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  );
+}
+
 export function mapLibraryItemToExecutiveSignal(
   item: LibraryItemSummary | LibraryItemDetail
 ): ExecutiveSignal {
   const category = item.task?.categoryName ?? null;
   const priority = mapLibraryPriorityToExecutivePriority(item.task?.priority ?? null);
-  const classification = classifyExecutiveWork({
-    title: item.title,
-    summary: item.preview,
-    body: librarySummaryText(item),
-    sourceType: "library",
-    category,
-    existingType: item.type
-  });
+  const metadata = item.captureMetadata;
+  const classification = item.executiveWorkType
+    ? {
+        workType: item.executiveWorkType,
+        confidence: 0.99,
+        evidenceSnippets: [evidence("capture type", item.captureTypeLabel)],
+        recommendedAction: defaultActionForWorkType(item.executiveWorkType)
+      }
+    : classifyExecutiveWork({
+        title: item.title,
+        summary: item.preview,
+        body: librarySummaryText(item),
+        sourceType: "library",
+        category,
+        existingType: item.type
+      });
   const relatedInitiatives = dedupeStrings([
     item.note?.linkedInitiativeTitle ?? null,
     item.task?.linkedInitiativeTitle ?? null
   ]);
+  const relatedPersons = dedupeStrings([
+    ...(metadata?.relatedPerson ? [metadata.relatedPerson] : []),
+    ...splitStructuredValues(metadata?.peopleInvolved)
+  ]);
+  const relatedCompanies = dedupeStrings([
+    metadata?.companyOrCounterparty ?? null,
+    metadata?.relatedCompany ?? null
+  ]);
+  const nextStep =
+    item.task?.nextStep ??
+    metadata?.nextAction ??
+    metadata?.followUps ??
+    null;
+  const desiredOutcome =
+    item.task?.desiredOutcome ??
+    metadata?.expectedOutcome ??
+    metadata?.strategicRelevance ??
+    null;
+  const waitingOn =
+    metadata?.waitingOn ??
+    (classification.workType === "delegation" && item.task?.nextStep ? item.task.nextStep : null);
 
   return {
     id: item.id,
@@ -817,24 +855,21 @@ export function mapLibraryItemToExecutiveSignal(
     source_type: "library",
     source_origin: "library",
     source_id: item.id,
-    source_label: item.type === "task" ? "Library task" : "Library note",
+    source_label: `Library ${item.captureTypeLabel.toLowerCase()}`,
     source_received_at: item.capturedAt,
     work_type: classification.workType,
     priority,
     category,
-    status: item.status,
-    related_persons: [],
-    related_companies: [],
+    status: metadata?.status ?? item.status,
+    related_persons: relatedPersons,
+    related_companies: relatedCompanies,
     related_initiatives: relatedInitiatives,
     recommended_action: mapLibraryRecommendedAction(item, classification.workType),
-    next_step: item.task?.nextStep ?? null,
-    desired_outcome: item.task?.desiredOutcome ?? null,
-    owner: null,
-    delegated_to: null,
-    waiting_on:
-      classification.workType === "delegation" && item.task?.nextStep
-        ? item.task.nextStep
-        : null,
+    next_step: nextStep,
+    desired_outcome: desiredOutcome,
+    owner: metadata?.owner ?? null,
+    delegated_to: metadata?.delegatedTo ?? null,
+    waiting_on: waitingOn,
     due_at: item.task?.dueAt ?? item.dueAt ?? null,
     confidence: classification.confidence,
     evidence_snippets: classification.evidenceSnippets,

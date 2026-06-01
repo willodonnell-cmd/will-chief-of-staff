@@ -9,8 +9,10 @@ import {
   computeTaskDisplayTitle,
   type BlackhawkCaptureInput as CaptureInput,
   type CapturePattern,
-  type CapturePrivacy
+  type CapturePrivacy,
+  type ExecutiveCaptureMetadata
 } from "@/lib/blackhawk-capture-model";
+import type { ExecutiveWorkType } from "@/lib/executive-work";
 
 export type { CaptureInput };
 
@@ -23,6 +25,9 @@ type CaptureRecord = {
   follow_up: string | null;
   private_context: string | null;
   captured_at: string;
+  due_at?: string | null;
+  executive_work_type?: ExecutiveWorkType | null;
+  capture_metadata?: ExecutiveCaptureMetadata | null;
 };
 
 type CaptureWriteError = {
@@ -41,6 +46,9 @@ export type SavedCapture = {
   followUp: string;
   privateContext: string;
   capturedAt: string;
+  dueAt: string | null;
+  executiveWorkType: ExecutiveWorkType | null;
+  executiveMetadata: ExecutiveCaptureMetadata | null;
 };
 
 export type SaveCaptureResult =
@@ -69,7 +77,10 @@ function mapCapture(record: CaptureRecord): SavedCapture {
     summary: record.summary,
     followUp: record.follow_up ?? "",
     privateContext: record.private_context ?? "",
-    capturedAt: record.captured_at
+    capturedAt: record.captured_at,
+    dueAt: record.due_at ?? null,
+    executiveWorkType: record.executive_work_type ?? null,
+    executiveMetadata: record.capture_metadata ?? null
   };
 }
 
@@ -156,7 +167,9 @@ function shouldRetryLegacyCaptureInsert(error: CaptureWriteError | null | undefi
     errorText.includes('column "note_body" of relation "captures" does not exist') ||
     errorText.includes('column "task_description" of relation "captures" does not exist') ||
     errorText.includes('column "task_category_id" of relation "captures" does not exist') ||
-    errorText.includes('column "linked_initiative_id" of relation "captures" does not exist')
+    errorText.includes('column "linked_initiative_id" of relation "captures" does not exist') ||
+    errorText.includes('column "executive_work_type" of relation "captures" does not exist') ||
+    errorText.includes('column "capture_metadata" of relation "captures" does not exist')
   );
 }
 
@@ -198,6 +211,7 @@ function buildOriginalContent(input: CaptureInput, context: CaptureInsertContext
 
 function buildCaptureInsertPayload(input: CaptureInput, context: CaptureInsertContext, includeLibraryFields: boolean) {
   const legacy = buildLegacySummary(input);
+  const dueAt = input.pattern === "task" ? input.task.dueAt ?? input.dueAt ?? null : input.dueAt ?? null;
   const basePayload = {
     source_path: input.sourcePath,
     pattern: input.pattern,
@@ -228,8 +242,10 @@ function buildCaptureInsertPayload(input: CaptureInput, context: CaptureInsertCo
     task_desired_outcome: input.pattern === "task" ? input.task.desiredOutcome.trim() || null : null,
     task_category_id: input.pattern === "task" ? context.taskCategoryId : null,
     linked_initiative_id: context.linkedInitiativeId,
-    due_at: input.pattern === "task" ? input.task.dueAt ?? null : null,
+    due_at: dueAt,
     priority: input.pattern === "task" ? input.task.priority : null,
+    executive_work_type: input.executiveWorkType ?? null,
+    capture_metadata: input.executiveMetadata ?? {},
     save_state: "saved" as const
   };
 }
@@ -429,7 +445,9 @@ export async function saveCapture(input: CaptureInput): Promise<SaveCaptureResul
       user_id: user.id,
       ...buildCaptureInsertPayload(input, insertContext, true)
     })
-    .select("id, source_path, pattern, privacy, summary, follow_up, private_context, captured_at")
+    .select(
+      "id, source_path, pattern, privacy, summary, follow_up, private_context, captured_at, due_at, executive_work_type, capture_metadata"
+    )
     .single<CaptureRecord>();
 
   if (error && shouldRetryLegacyCaptureInsert(error)) {

@@ -92,6 +92,7 @@ function formatDateTimeLocal(value: string | null) {
 function metadataRows(item: LibraryItemDetail) {
   const rows = [
     { label: "Type", value: item.type === "task" ? "Task" : "Note" },
+    { label: "Capture", value: item.captureTypeLabel },
     { label: "Status", value: item.type === "task" && item.status === "completed" ? "Completed" : item.status === "archived" ? "Archived" : "Active" },
     { label: "Captured", value: formatTimestamp(item.capturedAt) },
     { label: "Last active", value: formatTimestamp(item.lastActiveAt) }

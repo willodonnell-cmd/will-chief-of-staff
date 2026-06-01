@@ -9,10 +9,15 @@ import {
   buildTaskWorkingContent,
   computeNoteDisplayTitle,
   computeTaskDisplayTitle,
+  getExecutiveCaptureTypeLabel,
+  isExecutiveCaptureType,
   isTaskPriority,
+  type ExecutiveCaptureMetadata,
+  type ExecutiveCaptureType,
   type TaskFields,
   type TaskPriority
 } from "@/lib/blackhawk-capture-model";
+import type { ExecutiveWorkType } from "@/lib/executive-work";
 import {
   getLocalPriorityInboxLibraryItem,
   listLocalPriorityInboxLibraryItems,
@@ -149,6 +154,8 @@ type CaptureRow = {
   deleted_at: string | null;
   due_at: string | null;
   priority?: LibraryTaskPriority | null;
+  executive_work_type?: ExecutiveWorkType | null;
+  capture_metadata?: ExecutiveCaptureMetadata | null;
   save_state: CaptureSaveState;
   save_state_detail: string | null;
   priority_inbox_item_id?: string | null;
@@ -187,6 +194,8 @@ type OwnedCaptureRow = {
   linked_initiative_id: string | null;
   due_at: string | null;
   priority: LibraryTaskPriority | null;
+  executive_work_type: ExecutiveWorkType | null;
+  capture_metadata: ExecutiveCaptureMetadata | null;
   archived_at: string | null;
   completed_at: string | null;
   deleted_at: string | null;
@@ -224,6 +233,10 @@ export type LibraryNoteData = {
 export type LibraryItemSummary = {
   id: string;
   type: LibraryItemType;
+  captureType: ExecutiveCaptureType;
+  captureTypeLabel: string;
+  executiveWorkType: ExecutiveWorkType | null;
+  captureMetadata: ExecutiveCaptureMetadata | null;
   title: string;
   preview: string;
   sourcePath: string | null;
@@ -316,6 +329,8 @@ const CAPTURE_LIBRARY_SELECT = `
   deleted_at,
   due_at,
   priority,
+  executive_work_type,
+  capture_metadata,
   save_state,
   save_state_detail,
   priority_inbox_item_id,
@@ -376,6 +391,8 @@ const CAPTURE_LIBRARY_CURL_SELECT = [
   "deleted_at",
   "due_at",
   "priority",
+  "executive_work_type",
+  "capture_metadata",
   "save_state",
   "save_state_detail",
   "priority_inbox_item_id",
@@ -395,6 +412,19 @@ function isRecord(value: unknown): value is JsonRecord {
 
 function mapJsonRecord(value: unknown): JsonRecord | null {
   return isRecord(value) ? value : null;
+}
+
+function mapExecutiveCaptureMetadata(value: unknown): ExecutiveCaptureMetadata | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const captureType = typeof value.captureType === "string" ? value.captureType : null;
+  if (!isExecutiveCaptureType(captureType)) {
+    return null;
+  }
+
+  return value as ExecutiveCaptureMetadata;
 }
 
 function logCaptureLibrary(message: string, details?: Record<string, unknown>) {
@@ -560,6 +590,17 @@ function mapRowType(row: Pick<CaptureRow, "type" | "pattern">): LibraryItemType 
   return row.type ?? row.pattern;
 }
 
+function mapRowCaptureType(
+  row: Pick<CaptureRow, "type" | "pattern" | "capture_metadata">
+): ExecutiveCaptureType {
+  const captureType = mapExecutiveCaptureMetadata(row.capture_metadata)?.captureType ?? null;
+  if (captureType) {
+    return captureType;
+  }
+
+  return mapRowType(row);
+}
+
 function getTaskStatus(completedAt: string | null): LibraryTaskStatus {
   return completedAt ? "completed" : "active";
 }
@@ -644,6 +685,8 @@ function localLibraryRecordToCaptureRow(record: LocalPriorityInboxLibraryRecord)
     deleted_at: record.deleted_at,
     due_at: record.due_at,
     priority: record.priority,
+    executive_work_type: null,
+    capture_metadata: null,
     save_state: record.save_state,
     save_state_detail: record.save_state_detail,
     priority_inbox_item_id: record.priority_inbox_item_id,
@@ -666,6 +709,8 @@ function displayTitleForOrigin(row: RelatedCaptureRow) {
 
 function mapLibrarySummary(row: CaptureRow): LibraryItemSummary {
   const type = mapRowType(row);
+  const captureType = mapRowCaptureType(row);
+  const captureMetadata = mapExecutiveCaptureMetadata(row.capture_metadata);
   const status = getLibraryStatus(row);
   const saveStateDetail = row.save_state_detail ?? "";
   const priority = isLibraryTaskPriority(row.priority) ? row.priority : null;
@@ -686,6 +731,10 @@ function mapLibrarySummary(row: CaptureRow): LibraryItemSummary {
   return {
     id: row.id,
     type,
+    captureType,
+    captureTypeLabel: getExecutiveCaptureTypeLabel(captureType),
+    executiveWorkType: row.executive_work_type ?? null,
+    captureMetadata,
     title: type === "task" ? taskTitle : noteTitle,
     preview:
       type === "task"
@@ -1532,7 +1581,7 @@ async function getOwnedCapture(captureId: string) {
   const { data, error } = await client
     .from("captures")
     .select(
-      "id, user_id, source_path, privacy, private_context, type, title, note_title, note_body, task_description, task_next_step, task_desired_outcome, task_category_id, linked_initiative_id, due_at, priority, archived_at, completed_at, deleted_at"
+      "id, user_id, source_path, privacy, private_context, type, title, note_title, note_body, task_description, task_next_step, task_desired_outcome, task_category_id, linked_initiative_id, due_at, priority, executive_work_type, capture_metadata, archived_at, completed_at, deleted_at"
     )
     .eq("user_id", user.id)
     .eq("id", captureId)
@@ -2159,6 +2208,45 @@ export async function listTodayTasks(now = Date.now()): Promise<{
     overdue,
     dueSoon
   };
+}
+
+export async function listActiveExecutiveCaptureItems(limit = 24): Promise<LibraryItemSummary[]> {
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
+    return [];
+  }
+
+  const { client, user } = resolved;
+  let data: CaptureRow[] | null = null;
+  let error: CaptureLibraryQueryError | null = null;
+
+  try {
+    const response = await withSupabaseTimeout(
+      client
+        .from("captures")
+        .select(CAPTURE_LIBRARY_SELECT)
+        .eq("user_id", user.id)
+        .is("deleted_at", null)
+        .is("archived_at", null)
+        .not("executive_work_type", "is", null)
+        .order("last_active_at", { ascending: false })
+        .limit(limit)
+        .returns<CaptureRow[]>()
+    );
+
+    data = response.data;
+    error = response.error;
+  } catch (requestError) {
+    error = {
+      message: requestError instanceof Error ? requestError.message : "Unknown executive capture query error."
+    };
+  }
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map(mapLibrarySummary);
 }
 
 export async function appendLibraryItemUpdate(input: {

@@ -1,7 +1,28 @@
+import type { ExecutiveWorkType } from "@/lib/executive-work";
+
 export type CapturePattern = "note" | "task";
 export type CapturePrivacy = "open" | "protected" | "hybrid";
 export type TaskPriority = "high" | "medium" | "low";
 export type TaskCategoryStatus = "active" | "inactive";
+export const EXECUTIVE_CAPTURE_TYPES = [
+  "note",
+  "task",
+  "decision",
+  "opportunity",
+  "waiting_on",
+  "meeting_note"
+] as const;
+
+export type ExecutiveCaptureType = (typeof EXECUTIVE_CAPTURE_TYPES)[number];
+
+export const EXECUTIVE_CAPTURE_TYPE_LABELS: Record<ExecutiveCaptureType, string> = {
+  note: "Note",
+  task: "Task",
+  decision: "Decision",
+  opportunity: "Opportunity",
+  waiting_on: "Waiting On",
+  meeting_note: "Meeting Note"
+};
 
 export type TaskCategoryOption = {
   id: string;
@@ -23,6 +44,35 @@ export type InitiativeOption = {
   status: string;
 };
 
+export type ExecutiveCaptureMetadata = {
+  captureType: ExecutiveCaptureType;
+  companyOrCounterparty?: string | null;
+  strategicRelevance?: string | null;
+  owner?: string | null;
+  status?: string | null;
+  nextAction?: string | null;
+  relatedCompany?: string | null;
+  relatedOpportunity?: string | null;
+  relatedPerson?: string | null;
+  decisionQuestion?: string | null;
+  recommendation?: string | null;
+  optionsTradeoffs?: string | null;
+  risks?: string | null;
+  deadline?: string | null;
+  peopleInvolved?: string | null;
+  waitingOn?: string | null;
+  expectedOutcome?: string | null;
+  delegatedTo?: string | null;
+  lastTouch?: string | null;
+  followUpAt?: string | null;
+  meetingTitle?: string | null;
+  meetingAt?: string | null;
+  attendees?: string | null;
+  decisions?: string | null;
+  followUps?: string | null;
+  waitingOnItems?: string | null;
+};
+
 export type NoteFields = {
   title: string;
   body: string;
@@ -39,21 +89,24 @@ export type TaskFields = {
   dueAt?: string | null;
 };
 
+type BaseCaptureInput = {
+  sourcePath: string | null;
+  privacy: CapturePrivacy;
+  privateContext: string;
+  dueAt?: string | null;
+  executiveWorkType?: ExecutiveWorkType | null;
+  executiveMetadata?: ExecutiveCaptureMetadata | null;
+};
+
 export type BlackhawkCaptureInput =
-  | {
-      sourcePath: string | null;
+  | (BaseCaptureInput & {
       pattern: "note";
-      privacy: CapturePrivacy;
-      privateContext: string;
       note: NoteFields;
-    }
-  | {
-      sourcePath: string | null;
+    })
+  | (BaseCaptureInput & {
       pattern: "task";
-      privacy: CapturePrivacy;
-      privateContext: string;
       task: TaskFields;
-    };
+    });
 
 export type TaskComposerPrefill = {
   description: string;
@@ -66,6 +119,45 @@ export type TaskComposerPrefill = {
 
 export function isTaskPriority(value: string | null | undefined): value is TaskPriority {
   return value === "high" || value === "medium" || value === "low";
+}
+
+export function isExecutiveCaptureType(value: string | null | undefined): value is ExecutiveCaptureType {
+  return typeof value === "string" && EXECUTIVE_CAPTURE_TYPES.includes(value as ExecutiveCaptureType);
+}
+
+export function getExecutiveCaptureTypeLabel(value: ExecutiveCaptureType) {
+  return EXECUTIVE_CAPTURE_TYPE_LABELS[value];
+}
+
+export function capturePatternForExecutiveType(value: ExecutiveCaptureType): CapturePattern {
+  switch (value) {
+    case "task":
+    case "waiting_on":
+      return "task";
+    case "note":
+    case "decision":
+    case "opportunity":
+    case "meeting_note":
+    default:
+      return "note";
+  }
+}
+
+export function executiveWorkTypeForCaptureType(value: ExecutiveCaptureType): ExecutiveWorkType | null {
+  switch (value) {
+    case "decision":
+      return "decision";
+    case "opportunity":
+      return "opportunity";
+    case "waiting_on":
+      return "delegation";
+    case "meeting_note":
+      return "meeting";
+    case "note":
+    case "task":
+    default:
+      return null;
+  }
 }
 
 export function formatTaskPriorityLabel(priority: TaskPriority) {

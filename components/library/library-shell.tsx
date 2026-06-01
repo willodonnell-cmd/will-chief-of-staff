@@ -247,7 +247,7 @@ function NoteRow({ item, currentPath }: { item: LibraryItemSummary; currentPath:
     <Link href={noteHref(item, currentPath)} className="block rounded-[1.55rem] border border-line/70 bg-[rgba(255,255,255,0.66)] p-4 transition hover:-translate-y-px hover:bg-white/78">
       <article className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">
-          <span>Note</span>
+          <span>{item.captureTypeLabel}</span>
           <span>{item.status === "archived" ? "Archived" : "Active"}</span>
           {item.localOnly ? <span>Local only</span> : null}
           {item.note?.linkedInitiativeTitle ? <span>{item.note.linkedInitiativeTitle}</span> : null}
@@ -276,6 +276,7 @@ function TaskRow({ item, currentPath }: { item: LibraryItemSummary; currentPath:
     <Link href={noteHref(item, currentPath)} className="block rounded-[1.55rem] border border-line/70 bg-[rgba(255,255,255,0.66)] p-4 transition hover:-translate-y-px hover:bg-white/78">
       <article className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">
+          <span>{item.captureTypeLabel}</span>
           <span>{formatTaskPriorityLabel(item.task.priority ?? "medium")}</span>
           <span>{item.task.categoryIsFallback ? "Needs Categorization" : item.task.categoryName}</span>
           {item.status === "completed" ? <span>Completed</span> : null}

@@ -3,7 +3,11 @@ import {
   type AgentHandoffSourceStatus
 } from "@/lib/agent-handoff-source-status";
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
-import { listTodayTasks, type LibraryItemSummary } from "@/lib/capture-library";
+import {
+  listActiveExecutiveCaptureItems,
+  listTodayTasks,
+  type LibraryItemSummary
+} from "@/lib/capture-library";
 import {
   mapChiefOfStaffSignalToExecutiveSignal,
   mapLibraryItemToExecutiveSignal,
@@ -121,17 +125,23 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     return null;
   }
 
-  const [inboxItems, initiatives, taskSections, agentEnvelopeResult, liveCalendarResult] = await Promise.all([
+  const [inboxItems, initiatives, taskSections, executiveCaptureItems, agentEnvelopeResult, liveCalendarResult] =
+    await Promise.all([
     listPriorityInboxItems(),
     listInitiativeOptions(),
     listTodayTasks(),
+    listActiveExecutiveCaptureItems(),
     loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource().catch(() => null),
     loadTodayCalendarSignalsWithStatus()
-  ]);
+    ]);
   const agentSignalEnvelope = agentEnvelopeResult?.envelope ?? null;
   const liveCalendarSignals = liveCalendarResult.signals;
 
   const taskSignals = [...taskSections.overdue, ...taskSections.dueSoon];
+  const taskSignalIds = new Set(taskSignals.map((item) => item.id));
+  const executiveCaptureSignals = executiveCaptureItems
+    .filter((item) => !taskSignalIds.has(item.id))
+    .map((item) => mapLibraryItemToExecutiveSignal(item));
   const mappedAgentSignals = (agentSignalEnvelope?.signals ?? []).map((signal) =>
     mapChiefOfStaffSignalToExecutiveSignal(signal)
   );
@@ -142,6 +152,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
   const executiveSignals = [
     ...inboxItems.map((item) => mapPriorityInboxItemToExecutiveSignal(item)),
     ...taskSignals.map((item) => mapLibraryItemToExecutiveSignal(item)),
+    ...executiveCaptureSignals,
     ...liveCalendarSignals,
     ...filteredAgentSignals
   ];

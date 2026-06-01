@@ -17,6 +17,7 @@ import {
   isExecutiveWorkType,
   normalizeExecutivePriority
 } from "../lib/executive-work";
+import { isExecutiveCaptureType } from "../lib/blackhawk-capture-model";
 import {
   getOutlookScopes,
   hasOutlookCalendarScope,
@@ -28,6 +29,10 @@ function buildLibraryTask(overrides: Partial<LibraryItemSummary> = {}): LibraryI
   return {
     id: "capture-1",
     type: "task",
+    captureType: "task",
+    captureTypeLabel: "Task",
+    executiveWorkType: null,
+    captureMetadata: null,
     title: "Follow up with Amelia on board prep",
     preview: "Next Step: confirm the narrowed board-prep framing.",
     sourcePath: "/capture",
@@ -66,6 +71,10 @@ function buildLibraryNote(overrides: Partial<LibraryItemSummary> = {}): LibraryI
   return {
     id: "capture-note-1",
     type: "note",
+    captureType: "note",
+    captureTypeLabel: "Note",
+    executiveWorkType: null,
+    captureMetadata: null,
     title: "Harbinger conversation notes",
     preview: "Conversation notes and rough ideas for later retrieval.",
     sourcePath: "/capture",
@@ -195,6 +204,8 @@ test("maps executive work type labels", () => {
   assert.equal(getExecutiveWorkTypeLabel("decision"), "Decision / Governance");
   assert.equal(isExecutiveWorkType("meeting"), true);
   assert.equal(isExecutiveWorkType("unknown"), false);
+  assert.equal(isExecutiveCaptureType("meeting_note"), true);
+  assert.equal(isExecutiveCaptureType("unknown"), false);
 });
 
 test("normalizes priorities and exposes action labels", () => {
@@ -277,6 +288,92 @@ test("maps library notes conservatively", () => {
   assert.equal(signal.work_type, "reference");
   assert.equal(signal.recommended_action, "review");
   assert.equal(signal.priority, null);
+});
+
+test("maps explicit decision captures into executive decision signals", () => {
+  const signal = mapLibraryItemToExecutiveSignal(
+    buildLibraryNote({
+      captureType: "decision",
+      captureTypeLabel: "Decision",
+      executiveWorkType: "decision",
+      captureMetadata: {
+        captureType: "decision",
+        decisionQuestion: "Should we approve the board-prep direction?",
+        recommendation: "Approve the narrowed path.",
+        peopleInvolved: "Amelia Hart, Will O'Donnell"
+      },
+      title: "Should we approve the board-prep direction?"
+    })
+  );
+
+  assert.equal(signal.work_type, "decision");
+  assert.equal(signal.recommended_action, "decide");
+  assert.deepEqual(signal.related_persons, ["Amelia Hart", "Will O'Donnell"]);
+});
+
+test("maps explicit opportunity captures into opportunity signals", () => {
+  const signal = mapLibraryItemToExecutiveSignal(
+    buildLibraryNote({
+      captureType: "opportunity",
+      captureTypeLabel: "Opportunity",
+      executiveWorkType: "opportunity",
+      captureMetadata: {
+        captureType: "opportunity",
+        companyOrCounterparty: "Harbinger",
+        strategicRelevance: "High-leverage strategic fit.",
+        nextAction: "Set a diligence call."
+      },
+      title: "Harbinger follow-up"
+    })
+  );
+
+  assert.equal(signal.work_type, "opportunity");
+  assert.equal(signal.next_step, "Set a diligence call.");
+  assert.deepEqual(signal.related_companies, ["Harbinger"]);
+});
+
+test("maps explicit waiting-on captures into delegation signals", () => {
+  const signal = mapLibraryItemToExecutiveSignal(
+    buildLibraryTask({
+      captureType: "waiting_on",
+      captureTypeLabel: "Waiting On",
+      executiveWorkType: "delegation",
+      task: {
+        ...buildLibraryTask().task!,
+        desiredOutcome: "Final budget numbers"
+      },
+      captureMetadata: {
+        captureType: "waiting_on",
+        waitingOn: "Finance",
+        expectedOutcome: "Final budget numbers",
+        delegatedTo: "CFO chief of staff"
+      }
+    })
+  );
+
+  assert.equal(signal.work_type, "delegation");
+  assert.equal(signal.waiting_on, "Finance");
+  assert.equal(signal.delegated_to, "CFO chief of staff");
+  assert.equal(signal.desired_outcome, "Final budget numbers");
+});
+
+test("maps explicit meeting-note captures into meeting signals", () => {
+  const signal = mapLibraryItemToExecutiveSignal(
+    buildLibraryNote({
+      captureType: "meeting_note",
+      captureTypeLabel: "Meeting Note",
+      executiveWorkType: "meeting",
+      captureMetadata: {
+        captureType: "meeting_note",
+        attendees: "Will O'Donnell, Amelia Hart",
+        decisions: "Narrow the board-prep packet."
+      },
+      title: "Board prep sync"
+    })
+  );
+
+  assert.equal(signal.work_type, "meeting");
+  assert.equal(signal.recommended_action, "prepare");
 });
 
 test("maps priority inbox items into executive signals", () => {
