@@ -193,6 +193,16 @@ test("envelope with valid sourceCoverage validates", async () => {
   assert.equal(envelope.sourceCoverage?.teams?.status, "permission_denied");
 });
 
+test("signal category metadata is preserved when present", async () => {
+  const fixture = await loadFixtureObject();
+  const signal = fixture.signals?.[0] as Record<string, unknown>;
+  signal.category = "IC";
+
+  const envelope = parseAgentProducedMicrosoft365SignalEnvelope(fixture);
+
+  assert.equal(envelope.signals[0]?.category, "IC");
+});
+
 test("invalid sourceCoverage status fails validation", async () => {
   const fixture = await loadFixtureObject();
   fixture.sourceCoverage = {
@@ -682,6 +692,23 @@ test("builds a task capture draft from a signal", () => {
     draft.sourceContext.entries.find((entry) => entry.label === "Source URL")?.href,
     "https://outlook.office365.com/owa/?ItemID=abc123&exvsurl=1&viewmodel=ReadMessageItem"
   );
+});
+
+test("capture draft creation tolerates optional category metadata", () => {
+  const signal = buildSignal({
+    source: "outlook",
+    category: "IC",
+    title: "Investment Committee package follow-up",
+    summary: "Committee traffic should still create a normal capture draft.",
+    actionRequest: "Review whether Will needs to respond."
+  });
+
+  const taskDraft = buildTaskCaptureDraftFromSignal(signal);
+  const noteDraft = buildNoteCaptureDraftFromSignal(signal);
+
+  assert.equal(taskDraft.task.description, "Investment Committee package follow-up");
+  assert.equal(taskDraft.task.priority, "medium");
+  assert.match(noteDraft.note.body, /Committee traffic should still create a normal capture draft\./);
 });
 
 test("builds a note capture draft from a signal", () => {
