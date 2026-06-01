@@ -10,6 +10,7 @@ import {
   createTaskFromNote,
   deleteLibraryItem,
   setLibraryTaskCompletion,
+  updateExecutiveLibraryItemDetails,
   unarchiveLibraryItem,
   updateLibraryTaskDetails,
   updateLibraryItemWorkingCopy
@@ -68,6 +69,55 @@ export async function updateTaskDetailsAction(formData: FormData) {
 
   revalidateLibraryPaths(captureId);
   redirect(withFlash(redirectTo, result.ok ? "notice" : "error", result.ok ? "task-details-saved" : result.error) as Route);
+}
+
+export async function updateExecutiveDetailsAction(formData: FormData) {
+  const captureId = String(formData.get("captureId") ?? "");
+  const redirectTo = sanitizeLibraryPath(formData.get("redirectTo"), `/library/${captureId}`);
+  const mode = String(formData.get("mode") ?? "");
+  const result = await updateExecutiveLibraryItemDetails({
+    captureId,
+    mode:
+      mode === "decision" || mode === "opportunity" || mode === "waiting_on" || mode === "meeting_note"
+        ? mode
+        : "decision",
+    title: String(formData.get("title") ?? ""),
+    body: String(formData.get("body") ?? ""),
+    description: String(formData.get("description") ?? ""),
+    nextStep: String(formData.get("nextStep") ?? ""),
+    desiredOutcome: String(formData.get("desiredOutcome") ?? ""),
+    taskStatus: String(formData.get("taskStatus") ?? ""),
+    dueAt: String(formData.get("dueAt") ?? ""),
+    priority: String(formData.get("priority") ?? ""),
+    categoryId: String(formData.get("categoryId") ?? "") || null,
+    linkedInitiativeId: String(formData.get("linkedInitiativeId") ?? "") || null,
+    metadataStatus: String(formData.get("metadataStatus") ?? ""),
+    companyOrCounterparty: String(formData.get("companyOrCounterparty") ?? ""),
+    strategicRelevance: String(formData.get("strategicRelevance") ?? ""),
+    owner: String(formData.get("owner") ?? ""),
+    nextAction: String(formData.get("nextAction") ?? ""),
+    relatedCompany: String(formData.get("relatedCompany") ?? ""),
+    relatedOpportunity: String(formData.get("relatedOpportunity") ?? ""),
+    relatedPerson: String(formData.get("relatedPerson") ?? ""),
+    decisionQuestion: String(formData.get("decisionQuestion") ?? ""),
+    recommendation: String(formData.get("recommendation") ?? ""),
+    optionsTradeoffs: String(formData.get("optionsTradeoffs") ?? ""),
+    risks: String(formData.get("risks") ?? ""),
+    peopleInvolved: String(formData.get("peopleInvolved") ?? ""),
+    waitingOn: String(formData.get("waitingOn") ?? ""),
+    expectedOutcome: String(formData.get("expectedOutcome") ?? ""),
+    delegatedTo: String(formData.get("delegatedTo") ?? ""),
+    lastTouch: String(formData.get("lastTouch") ?? ""),
+    meetingTitle: String(formData.get("meetingTitle") ?? ""),
+    meetingAt: String(formData.get("meetingAt") ?? ""),
+    attendees: String(formData.get("attendees") ?? ""),
+    decisions: String(formData.get("decisions") ?? ""),
+    followUps: String(formData.get("followUps") ?? ""),
+    waitingOnItems: String(formData.get("waitingOnItems") ?? "")
+  });
+
+  revalidateLibraryPaths(captureId);
+  redirect(withFlash(redirectTo, result.ok ? "notice" : "error", result.ok ? "executive-details-saved" : result.error) as Route);
 }
 
 export async function createTaskFromNoteAction(formData: FormData) {

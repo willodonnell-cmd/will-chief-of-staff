@@ -9,6 +9,7 @@ import {
   buildTaskWorkingContent,
   computeNoteDisplayTitle,
   computeTaskDisplayTitle,
+  formatTaskPriorityLabel,
   getExecutiveCaptureTypeLabel,
   isExecutiveCaptureType,
   isTaskPriority,
@@ -18,6 +19,11 @@ import {
   type TaskPriority
 } from "@/lib/blackhawk-capture-model";
 import type { ExecutiveWorkType } from "@/lib/executive-work";
+import {
+  mergeExecutiveCaptureMetadata,
+  resolveLibraryItemEditorMode,
+  type LibraryItemEditorMode
+} from "@/lib/library-executive-edit";
 import {
   getLocalPriorityInboxLibraryItem,
   listLocalPriorityInboxLibraryItems,
@@ -237,6 +243,12 @@ export type LibraryItemSummary = {
   captureTypeLabel: string;
   executiveWorkType: ExecutiveWorkType | null;
   captureMetadata: ExecutiveCaptureMetadata | null;
+  priority?: LibraryTaskPriority | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  categoryIsFallback?: boolean;
+  linkedInitiativeId?: string | null;
+  linkedInitiativeTitle?: string | null;
   title: string;
   preview: string;
   sourcePath: string | null;
@@ -425,6 +437,147 @@ function mapExecutiveCaptureMetadata(value: unknown): ExecutiveCaptureMetadata |
   }
 
   return value as ExecutiveCaptureMetadata;
+}
+
+function resolveOwnedCaptureEditorMode(
+  capture: Pick<OwnedCaptureRow, "type" | "executive_work_type" | "capture_metadata">
+): LibraryItemEditorMode {
+  return resolveLibraryItemEditorMode({
+    type: capture.type ?? "note",
+    captureType: mapExecutiveCaptureMetadata(capture.capture_metadata)?.captureType ?? null,
+    executiveWorkType: capture.executive_work_type
+  });
+}
+
+function normalizeOptionalText(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? trimmed : null;
+}
+
+function firstNonEmptyText(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const trimmed = value?.trim() ?? "";
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return null;
+}
+
+function formatWorkingContentSection(label: string, value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? `${label}:\n${trimmed}` : null;
+}
+
+function buildExecutiveNoteWorkingContent(input: {
+  captureType: "decision" | "opportunity" | "meeting_note";
+  title: string;
+  body: string | null;
+  metadata: ExecutiveCaptureMetadata;
+  linkedInitiativeTitle?: string | null;
+  dueAt?: string | null;
+  priority?: LibraryTaskPriority | null;
+}) {
+  const sections =
+    input.captureType === "decision"
+      ? [
+          formatWorkingContentSection("Decision Question", input.metadata.decisionQuestion ?? input.title),
+          formatWorkingContentSection("Recommendation", input.metadata.recommendation),
+          formatWorkingContentSection("Options / Tradeoffs", input.metadata.optionsTradeoffs),
+          formatWorkingContentSection("Risks", input.metadata.risks),
+          formatWorkingContentSection("People Involved", input.metadata.peopleInvolved),
+          formatWorkingContentSection("Status", input.metadata.status),
+          formatWorkingContentSection("Deadline", input.dueAt ?? input.metadata.deadline),
+          formatWorkingContentSection("Linked Initiative", input.linkedInitiativeTitle),
+          formatWorkingContentSection("Context", input.body)
+        ]
+      : input.captureType === "opportunity"
+        ? [
+            formatWorkingContentSection("Title", input.title),
+            formatWorkingContentSection("Company / Counterparty", input.metadata.companyOrCounterparty),
+            formatWorkingContentSection("Why It Matters", input.metadata.strategicRelevance),
+            formatWorkingContentSection("Next Action", input.metadata.nextAction),
+            formatWorkingContentSection("Owner", input.metadata.owner),
+            formatWorkingContentSection("Status", input.metadata.status),
+            formatWorkingContentSection("Related Company", input.metadata.relatedCompany),
+            formatWorkingContentSection("Related Person", input.metadata.relatedPerson),
+            formatWorkingContentSection("Priority", input.priority ? formatTaskPriorityLabel(input.priority) : null),
+            formatWorkingContentSection("Linked Initiative", input.linkedInitiativeTitle),
+            formatWorkingContentSection("Context", input.body)
+          ]
+        : [
+            formatWorkingContentSection("Meeting Title", input.metadata.meetingTitle ?? input.title),
+            formatWorkingContentSection("Meeting At", input.metadata.meetingAt),
+            formatWorkingContentSection("Attendees", input.metadata.attendees),
+            formatWorkingContentSection("Notes", input.body),
+            formatWorkingContentSection("Decisions", input.metadata.decisions),
+            formatWorkingContentSection("Follow Ups", input.metadata.followUps),
+            formatWorkingContentSection("Waiting On", input.metadata.waitingOnItems),
+            formatWorkingContentSection("Related Company", input.metadata.relatedCompany),
+            formatWorkingContentSection("Related Person", input.metadata.relatedPerson),
+            formatWorkingContentSection("Linked Initiative", input.linkedInitiativeTitle)
+          ];
+
+  return sections.filter((section): section is string => Boolean(section)).join("\n\n").trim();
+}
+
+function buildExecutiveTaskWorkingContent(input: {
+  description: string;
+  nextStep: string;
+  desiredOutcome: string;
+  priority: LibraryTaskPriority;
+  categoryName: string | null;
+  linkedInitiativeTitle: string | null;
+  dueAt: string | null;
+  metadata: ExecutiveCaptureMetadata;
+}) {
+  const sections = [
+    buildTaskWorkingContent(
+      {
+        description: input.description,
+        nextStep: input.nextStep,
+        desiredOutcome: input.desiredOutcome,
+        priority: input.priority,
+        categoryId: null,
+        linkedInitiativeId: null,
+        dueAt: input.dueAt
+      },
+      {
+        categoryName: input.categoryName,
+        initiativeTitle: input.linkedInitiativeTitle
+      }
+    ),
+    formatWorkingContentSection("Waiting On", input.metadata.waitingOn),
+    formatWorkingContentSection("Expected Outcome", input.metadata.expectedOutcome),
+    formatWorkingContentSection("Delegated To", input.metadata.delegatedTo),
+    formatWorkingContentSection("Last Touch", input.metadata.lastTouch),
+    formatWorkingContentSection("Related Opportunity", input.metadata.relatedOpportunity)
+  ];
+
+  return sections.filter((section): section is string => Boolean(section)).join("\n\n").trim();
+}
+
+function parseOptionalTaskPriority(value: string | null | undefined) {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!normalized) {
+    return {
+      ok: true as const,
+      value: null
+    };
+  }
+
+  if (isTaskPriority(normalized)) {
+    return {
+      ok: true as const,
+      value: normalized
+    };
+  }
+
+  return {
+    ok: false as const,
+    error: "Task priority must be High, Medium, or Low."
+  };
 }
 
 function logCaptureLibrary(message: string, details?: Record<string, unknown>) {
@@ -735,6 +888,12 @@ function mapLibrarySummary(row: CaptureRow): LibraryItemSummary {
     captureTypeLabel: getExecutiveCaptureTypeLabel(captureType),
     executiveWorkType: row.executive_work_type ?? null,
     captureMetadata,
+    priority,
+    categoryId: row.task_category_id,
+    categoryName: row.task_category?.name ?? null,
+    categoryIsFallback: row.task_category ? row.task_category.is_fallback : undefined,
+    linkedInitiativeId: row.linked_initiative_id,
+    linkedInitiativeTitle: row.linked_initiative?.title ?? null,
     title: type === "task" ? taskTitle : noteTitle,
     preview:
       type === "task"
@@ -2019,6 +2178,453 @@ export async function updateLibraryTaskDetails(input: {
   return {
     ok: true
   };
+}
+
+export async function updateExecutiveLibraryItemDetails(input: {
+  captureId: string;
+  mode: "decision" | "opportunity" | "waiting_on" | "meeting_note";
+  title?: string | null;
+  body?: string | null;
+  description?: string | null;
+  nextStep?: string | null;
+  desiredOutcome?: string | null;
+  taskStatus?: string | null;
+  dueAt?: string | null;
+  priority?: string | null;
+  categoryId?: string | null;
+  linkedInitiativeId?: string | null;
+  metadataStatus?: string | null;
+  companyOrCounterparty?: string | null;
+  strategicRelevance?: string | null;
+  owner?: string | null;
+  nextAction?: string | null;
+  relatedCompany?: string | null;
+  relatedOpportunity?: string | null;
+  relatedPerson?: string | null;
+  decisionQuestion?: string | null;
+  recommendation?: string | null;
+  optionsTradeoffs?: string | null;
+  risks?: string | null;
+  peopleInvolved?: string | null;
+  waitingOn?: string | null;
+  expectedOutcome?: string | null;
+  delegatedTo?: string | null;
+  lastTouch?: string | null;
+  meetingTitle?: string | null;
+  meetingAt?: string | null;
+  attendees?: string | null;
+  decisions?: string | null;
+  followUps?: string | null;
+  waitingOnItems?: string | null;
+}): Promise<LibraryMutationResult> {
+  const owned = await getOwnedCapture(input.captureId);
+  if (!owned.ok) {
+    return owned;
+  }
+
+  const currentMode = resolveOwnedCaptureEditorMode(owned.capture);
+  if (currentMode !== input.mode) {
+    return {
+      ok: false,
+      error: "This item no longer matches the requested executive editor."
+    };
+  }
+
+  let initiativeId: string | null = null;
+  let initiativeTitle: string | null = null;
+  if (input.linkedInitiativeId) {
+    const { data } = await owned.client
+      .from("initiatives")
+      .select("id, title")
+      .eq("user_id", owned.user.id)
+      .eq("id", input.linkedInitiativeId)
+      .maybeSingle<{ id: string; title: string }>();
+
+    initiativeId = data?.id ?? null;
+    initiativeTitle = data?.title ?? null;
+  }
+
+  const now = new Date().toISOString();
+
+  if (input.mode === "decision") {
+    if ((owned.capture.type ?? "note") !== "note") {
+      return {
+        ok: false,
+        error: "Decision captures should remain note-compatible."
+      };
+    }
+
+    const decisionQuestion = normalizeOptionalText(input.decisionQuestion);
+    if (!decisionQuestion) {
+      return {
+        ok: false,
+        error: "Decision question is required."
+      };
+    }
+
+    const dueAt = parseDueAt(input.dueAt);
+    if (!dueAt.ok) {
+      return dueAt;
+    }
+
+    const priority = parseOptionalTaskPriority(input.priority);
+    if (!priority.ok) {
+      return priority;
+    }
+
+    const body = normalizeOptionalText(input.body);
+    const metadata = mergeExecutiveCaptureMetadata(owned.capture.capture_metadata, {
+      captureType: "decision",
+      decisionQuestion,
+      recommendation: normalizeOptionalText(input.recommendation),
+      optionsTradeoffs: normalizeOptionalText(input.optionsTradeoffs),
+      risks: normalizeOptionalText(input.risks),
+      deadline: dueAt.value,
+      peopleInvolved: normalizeOptionalText(input.peopleInvolved),
+      status: normalizeOptionalText(input.metadataStatus)
+    });
+    const title = computeNoteDisplayTitle(
+      decisionQuestion,
+      firstNonEmptyText(body, metadata.recommendation, metadata.optionsTradeoffs, metadata.risks, decisionQuestion) ?? ""
+    );
+    const summary = firstNonEmptyText(
+      metadata.recommendation,
+      body,
+      metadata.optionsTradeoffs,
+      metadata.risks,
+      decisionQuestion
+    );
+    const workingContent = buildExecutiveNoteWorkingContent({
+      captureType: "decision",
+      title: decisionQuestion,
+      body,
+      metadata,
+      linkedInitiativeTitle: initiativeTitle,
+      dueAt: dueAt.value,
+      priority: priority.value
+    });
+
+    const { error } = await owned.client
+      .from("captures")
+      .update({
+        title,
+        note_title: decisionQuestion,
+        note_body: body,
+        summary: summary ?? decisionQuestion,
+        follow_up: metadata.recommendation ?? null,
+        linked_initiative_id: initiativeId,
+        working_content: workingContent,
+        due_at: dueAt.value,
+        priority: priority.value,
+        capture_metadata: metadata,
+        last_active_at: now,
+        save_state: "saved",
+        save_state_detail: null
+      })
+      .eq("user_id", owned.user.id)
+      .eq("id", input.captureId);
+
+    if (error) {
+      await setCaptureSaveState(owned.user.id, input.captureId, "error", "Decision details could not be saved.");
+      return {
+        ok: false,
+        error: "Decision details could not be saved."
+      };
+    }
+
+    return { ok: true };
+  }
+
+  if (input.mode === "opportunity") {
+    if ((owned.capture.type ?? "note") !== "note") {
+      return {
+        ok: false,
+        error: "Opportunity captures should remain note-compatible."
+      };
+    }
+
+    const titleValue = normalizeOptionalText(input.title);
+    if (!titleValue) {
+      return {
+        ok: false,
+        error: "Opportunity title is required."
+      };
+    }
+
+    const priority = parseOptionalTaskPriority(input.priority);
+    if (!priority.ok) {
+      return priority;
+    }
+
+    const body = normalizeOptionalText(input.body);
+    const metadata = mergeExecutiveCaptureMetadata(owned.capture.capture_metadata, {
+      captureType: "opportunity",
+      companyOrCounterparty: normalizeOptionalText(input.companyOrCounterparty),
+      strategicRelevance: normalizeOptionalText(input.strategicRelevance),
+      owner: normalizeOptionalText(input.owner),
+      status: normalizeOptionalText(input.metadataStatus),
+      nextAction: normalizeOptionalText(input.nextAction),
+      relatedCompany: normalizeOptionalText(input.relatedCompany),
+      relatedPerson: normalizeOptionalText(input.relatedPerson)
+    });
+    const title = computeNoteDisplayTitle(
+      titleValue,
+      firstNonEmptyText(body, metadata.strategicRelevance, metadata.nextAction, titleValue) ?? ""
+    );
+    const summary = firstNonEmptyText(
+      metadata.strategicRelevance,
+      metadata.nextAction,
+      body,
+      titleValue
+    );
+    const workingContent = buildExecutiveNoteWorkingContent({
+      captureType: "opportunity",
+      title: titleValue,
+      body,
+      metadata,
+      linkedInitiativeTitle: initiativeTitle,
+      priority: priority.value
+    });
+
+    const { error } = await owned.client
+      .from("captures")
+      .update({
+        title,
+        note_title: titleValue,
+        note_body: body,
+        summary: summary ?? titleValue,
+        follow_up: metadata.nextAction ?? null,
+        linked_initiative_id: initiativeId,
+        working_content: workingContent,
+        priority: priority.value,
+        capture_metadata: metadata,
+        last_active_at: now,
+        save_state: "saved",
+        save_state_detail: null
+      })
+      .eq("user_id", owned.user.id)
+      .eq("id", input.captureId);
+
+    if (error) {
+      await setCaptureSaveState(owned.user.id, input.captureId, "error", "Opportunity details could not be saved.");
+      return {
+        ok: false,
+        error: "Opportunity details could not be saved."
+      };
+    }
+
+    return { ok: true };
+  }
+
+  if (input.mode === "meeting_note") {
+    if ((owned.capture.type ?? "note") !== "note") {
+      return {
+        ok: false,
+        error: "Meeting-note captures should remain note-compatible."
+      };
+    }
+
+    const meetingTitle = normalizeOptionalText(input.meetingTitle);
+    if (!meetingTitle) {
+      return {
+        ok: false,
+        error: "Meeting title is required."
+      };
+    }
+
+    const meetingAt = parseDueAt(input.meetingAt);
+    if (!meetingAt.ok) {
+      return {
+        ok: false,
+        error: "Meeting date could not be parsed."
+      };
+    }
+
+    const body = normalizeOptionalText(input.body);
+    const metadata = mergeExecutiveCaptureMetadata(owned.capture.capture_metadata, {
+      captureType: "meeting_note",
+      meetingTitle,
+      meetingAt: meetingAt.value,
+      attendees: normalizeOptionalText(input.attendees),
+      decisions: normalizeOptionalText(input.decisions),
+      followUps: normalizeOptionalText(input.followUps),
+      waitingOnItems: normalizeOptionalText(input.waitingOnItems),
+      relatedCompany: normalizeOptionalText(input.relatedCompany),
+      relatedPerson: normalizeOptionalText(input.relatedPerson)
+    });
+    const title = computeNoteDisplayTitle(
+      meetingTitle,
+      firstNonEmptyText(body, metadata.decisions, metadata.followUps, meetingTitle) ?? ""
+    );
+    const summary = firstNonEmptyText(body, metadata.decisions, metadata.followUps, meetingTitle);
+    const workingContent = buildExecutiveNoteWorkingContent({
+      captureType: "meeting_note",
+      title: meetingTitle,
+      body,
+      metadata,
+      linkedInitiativeTitle: initiativeTitle
+    });
+
+    const { error } = await owned.client
+      .from("captures")
+      .update({
+        title,
+        note_title: meetingTitle,
+        note_body: body,
+        summary: summary ?? meetingTitle,
+        follow_up: metadata.followUps ?? null,
+        linked_initiative_id: initiativeId,
+        working_content: workingContent,
+        capture_metadata: metadata,
+        last_active_at: now,
+        save_state: "saved",
+        save_state_detail: null
+      })
+      .eq("user_id", owned.user.id)
+      .eq("id", input.captureId);
+
+    if (error) {
+      await setCaptureSaveState(owned.user.id, input.captureId, "error", "Meeting note details could not be saved.");
+      return {
+        ok: false,
+        error: "Meeting note details could not be saved."
+      };
+    }
+
+    return { ok: true };
+  }
+
+  if ((owned.capture.type ?? "note") !== "task") {
+    return {
+      ok: false,
+      error: "Waiting-on captures should remain task-compatible."
+    };
+  }
+
+  const description = normalizeOptionalText(input.description);
+  if (!description) {
+    return {
+      ok: false,
+      error: "Waiting-on summary is required."
+    };
+  }
+
+  const taskStatus = parseTaskStatus(input.taskStatus);
+  if (!taskStatus.ok) {
+    return {
+      ok: false,
+      error: taskStatus.error
+    };
+  }
+
+  const dueAt = parseDueAt(input.dueAt);
+  if (!dueAt.ok) {
+    return dueAt;
+  }
+
+  const priority = parseTaskPriority(input.priority);
+  if (!priority.ok) {
+    return priority;
+  }
+
+  let categoryId: string | null = null;
+  let categoryName: string | null = null;
+  if (input.categoryId) {
+    const { data } = await owned.client
+      .from("task_categories")
+      .select("id, name, status, is_fallback")
+      .eq("user_id", owned.user.id)
+      .eq("id", input.categoryId)
+      .maybeSingle<CaptureTaskCategoryRow>();
+
+    if (data && data.status === "active") {
+      categoryId = data.id;
+      categoryName = data.name;
+    }
+  }
+
+  if (!categoryId) {
+    const { data } = await owned.client
+      .from("task_categories")
+      .select("id, name, status, is_fallback")
+      .eq("user_id", owned.user.id)
+      .eq("is_fallback", true)
+      .maybeSingle<CaptureTaskCategoryRow>();
+
+    categoryId = data?.id ?? null;
+    categoryName = data?.name ?? "TBD";
+  }
+
+  if (!categoryId) {
+    return {
+      ok: false,
+      error: "Task categories are not configured correctly."
+    };
+  }
+
+  const nextStep = normalizeOptionalText(input.nextStep) ?? "";
+  const desiredOutcome = normalizeOptionalText(input.expectedOutcome) ?? normalizeOptionalText(input.desiredOutcome) ?? "";
+  const lastTouch = parseDueAt(input.lastTouch);
+  if (!lastTouch.ok) {
+    return {
+      ok: false,
+      error: "Last touch date could not be parsed."
+    };
+  }
+
+  const metadata = mergeExecutiveCaptureMetadata(owned.capture.capture_metadata, {
+    captureType: "waiting_on",
+    waitingOn: normalizeOptionalText(input.waitingOn),
+    expectedOutcome: desiredOutcome || null,
+    delegatedTo: normalizeOptionalText(input.delegatedTo),
+    lastTouch: lastTouch.value,
+    followUpAt: dueAt.value,
+    relatedOpportunity: normalizeOptionalText(input.relatedOpportunity)
+  });
+  const title = computeTaskDisplayTitle(description);
+  const workingContent = buildExecutiveTaskWorkingContent({
+    description,
+    nextStep,
+    desiredOutcome,
+    priority: priority.value,
+    categoryName,
+    linkedInitiativeTitle: initiativeTitle,
+    dueAt: dueAt.value,
+    metadata
+  });
+
+  const { error } = await owned.client
+    .from("captures")
+    .update({
+      title,
+      summary: description,
+      follow_up: [nextStep, desiredOutcome].filter(Boolean).join("\n\n") || null,
+      task_description: description,
+      task_next_step: nextStep || null,
+      task_desired_outcome: desiredOutcome || null,
+      task_category_id: categoryId,
+      linked_initiative_id: initiativeId,
+      working_content: workingContent,
+      completed_at: taskStatus.value === "completed" ? owned.capture.completed_at ?? now : null,
+      due_at: dueAt.value,
+      priority: priority.value,
+      capture_metadata: metadata,
+      last_active_at: now,
+      save_state: "saved",
+      save_state_detail: null
+    })
+    .eq("user_id", owned.user.id)
+    .eq("id", input.captureId);
+
+  if (error) {
+    await setCaptureSaveState(owned.user.id, input.captureId, "error", "Waiting-on details could not be saved.");
+    return {
+      ok: false,
+      error: "Waiting-on details could not be saved."
+    };
+  }
+
+  return { ok: true };
 }
 
 export async function createTaskFromNote(input: {
