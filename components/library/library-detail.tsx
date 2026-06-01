@@ -20,6 +20,7 @@ import { resolveLibraryItemEditorMode } from "@/lib/library-executive-edit";
 import { cn } from "@/lib/utils";
 
 import { SaveStateIndicator } from "./save-state-indicator";
+import { ConfirmSubmitButton } from "./confirm-submit-button";
 
 type LibraryDetailProps = {
   item: LibraryItemDetail;
@@ -121,6 +122,20 @@ function metadataRows(item: LibraryItemDetail) {
     rows.push({ label: "Linked initiative", value: linkedInitiativeTitle });
   }
 
+  const sourceValue =
+    item.sourceLinkage?.sourceLabel ??
+    item.sourceLinkage?.source ??
+    (item.sourcePath === "/capture"
+      ? "Capture"
+      : item.sourcePath === "/inbox"
+        ? "Inbox"
+        : item.sourcePath === "/commitments"
+          ? "Commitments"
+          : null);
+  if (sourceValue) {
+    rows.push({ label: "Source", value: sourceValue });
+  }
+
   const dueAt = item.task?.dueAt ?? item.dueAt ?? null;
   if (dueAt) {
     rows.push({ label: "Due", value: formatTimestamp(dueAt) });
@@ -180,13 +195,15 @@ function DetailActions({ item, redirectTo, returnTo, isLocalOnly }: { item: Libr
     return null;
   }
 
+  const buttonClassName = "rounded-full border border-line/75 bg-white/80 px-3.5 py-2 text-xs font-medium text-text transition hover:bg-white";
+
   return (
     <div className="flex flex-wrap gap-2">
       {item.type === "task" && item.status !== "completed" ? (
         <form action={completeTaskAction}>
           <input type="hidden" name="captureId" value={item.id} />
           <input type="hidden" name="redirectTo" value={redirectTo} />
-          <button type="submit" className="rounded-full border border-line/75 bg-white/82 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+          <button type="submit" className={buttonClassName}>
             Mark complete
           </button>
         </form>
@@ -196,7 +213,7 @@ function DetailActions({ item, redirectTo, returnTo, isLocalOnly }: { item: Libr
         <form action={reopenTaskAction}>
           <input type="hidden" name="captureId" value={item.id} />
           <input type="hidden" name="redirectTo" value={redirectTo} />
-          <button type="submit" className="rounded-full border border-line/75 bg-white/82 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+          <button type="submit" className={buttonClassName}>
             Reopen
           </button>
         </form>
@@ -206,7 +223,7 @@ function DetailActions({ item, redirectTo, returnTo, isLocalOnly }: { item: Libr
         <form action={unarchiveLibraryItemAction}>
           <input type="hidden" name="captureId" value={item.id} />
           <input type="hidden" name="redirectTo" value={redirectTo} />
-          <button type="submit" className="rounded-full border border-line/75 bg-white/82 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+          <button type="submit" className={buttonClassName}>
             Restore
           </button>
         </form>
@@ -214,7 +231,7 @@ function DetailActions({ item, redirectTo, returnTo, isLocalOnly }: { item: Libr
         <form action={archiveLibraryItemAction}>
           <input type="hidden" name="captureId" value={item.id} />
           <input type="hidden" name="redirectTo" value={redirectTo} />
-          <button type="submit" className="rounded-full border border-line/75 bg-white/82 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+          <button type="submit" className={buttonClassName}>
             Archive
           </button>
         </form>
@@ -223,9 +240,12 @@ function DetailActions({ item, redirectTo, returnTo, isLocalOnly }: { item: Libr
       <form action={deleteLibraryItemAction}>
         <input type="hidden" name="captureId" value={item.id} />
         <input type="hidden" name="returnTo" value={returnTo} />
-        <button type="submit" className="rounded-full border border-line/75 bg-white/82 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+        <ConfirmSubmitButton
+          confirmMessage="Delete this item? This removes it from Library."
+          className={buttonClassName}
+        >
           Delete
-        </button>
+        </ConfirmSubmitButton>
       </form>
     </div>
   );
@@ -249,6 +269,50 @@ function categoryValue(item: LibraryItemDetail) {
 
 function dueAtValue(item: LibraryItemDetail) {
   return formatDateTimeLocal(item.task?.dueAt ?? item.dueAt ?? null);
+}
+
+function MetadataChips({ item }: { item: LibraryItemDetail }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {metadataRows(item).map((row) => (
+        <div
+          key={row.label}
+          className="inline-flex items-center gap-2 rounded-full border border-line/70 bg-white/74 px-3 py-1.5 text-xs text-text-muted"
+        >
+          <span className="text-[0.6rem] uppercase tracking-[0.18em] text-text-subtle">{row.label}</span>
+          <span className="font-medium text-text">{row.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DetailActionStrip({
+  item,
+  redirectTo,
+  returnTo,
+  isLocalOnly
+}: {
+  item: LibraryItemDetail;
+  redirectTo: string;
+  returnTo: string;
+  isLocalOnly: boolean;
+}) {
+  return (
+    <section className="rounded-[1.3rem] border border-line/75 bg-white/64 px-4 py-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="section-label">Actions</p>
+          <p className="mt-1 text-sm text-text-muted">
+            {isLocalOnly
+              ? "Editing actions stay unavailable while this item is still local-only."
+              : "Keep the item moving without letting controls dominate the page."}
+          </p>
+        </div>
+        <DetailActions item={item} redirectTo={redirectTo} returnTo={returnTo} isLocalOnly={isLocalOnly} />
+      </div>
+    </section>
+  );
 }
 
 function ExecutivePrioritySelect({ item }: { item: LibraryItemDetail }) {
@@ -424,7 +488,7 @@ function DecisionEditor({
       </div>
 
       <div className="mt-4 flex justify-end">
-        <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+        <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white">
           Save decision
         </button>
       </div>
@@ -542,7 +606,7 @@ function OpportunityEditor({
       </div>
 
       <div className="mt-4 flex justify-end">
-        <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+        <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white">
           Save opportunity
         </button>
       </div>
@@ -694,7 +758,7 @@ function WaitingOnEditor({
       </div>
 
       <div className="mt-4 flex justify-end">
-        <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+        <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white">
           Save waiting-on item
         </button>
       </div>
@@ -813,7 +877,7 @@ function MeetingNoteEditor({
       </div>
 
       <div className="mt-4 flex justify-end">
-        <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+        <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white">
           Save meeting note
         </button>
       </div>
@@ -867,27 +931,22 @@ export function LibraryDetail({
       ) : null}
 
       <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
-        <div className="brief-layout">
-          <div className="brief-main">
+        <div className="space-y-5">
+          <div className="space-y-3">
             <p className="section-label">Library detail</p>
             <h2 className="brief-title">{item.title}</h2>
-            <p className="brief-body">
+            <p className="brief-body max-w-[58rem]">
               {item.type === "note" ? item.note?.body ?? item.preview : item.task?.description ?? item.preview}
             </p>
           </div>
 
-          <div className="brief-side space-y-3">
-            {metadataRows(item).map((row) => (
-              <div key={row.label} className="rounded-[1.3rem] border border-line/75 bg-white/68 px-4 py-4">
-                <p className="section-label">{row.label}</p>
-                <p className="mt-2 text-sm font-medium leading-6 text-text">{row.value}</p>
-              </div>
-            ))}
-          </div>
+          <MetadataChips item={item} />
+
+          <DetailActionStrip item={item} redirectTo={redirectTo} returnTo={returnTo} isLocalOnly={isLocalOnly} />
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+      <section className="space-y-4">
         <div className="space-y-4">
           {editorMode === "note" && item.type === "note" && !isLocalOnly ? (
             <form action={updateWorkingContentAction} className="rounded-[1.55rem] border border-line/75 bg-white/68 p-5">
@@ -940,7 +999,7 @@ export function LibraryDetail({
               </div>
 
               <div className="mt-4 flex justify-end">
-                <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+                <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white">
                   Save note
                 </button>
               </div>
@@ -1059,7 +1118,7 @@ export function LibraryDetail({
               </div>
 
               <div className="mt-4 flex justify-end">
-                <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+                <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white">
                   Save task
                 </button>
               </div>
@@ -1172,48 +1231,12 @@ export function LibraryDetail({
               </div>
 
               <div className="mt-4 flex justify-end">
-                <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+                <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white">
                   Review and create task
                 </button>
               </div>
             </form>
           ) : null}
-
-          <details className="rounded-[1.55rem] border border-line/75 bg-white/68 p-5">
-            <summary className="cursor-pointer text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Original captured content</summary>
-            <div className="mt-4 rounded-[1.15rem] border border-line/70 bg-[rgba(255,255,255,0.56)] p-4">
-              <pre className="whitespace-pre-wrap text-sm leading-6 text-text-muted">{item.originalContent}</pre>
-            </div>
-          </details>
-
-          {(provenance.length > 0 || item.sourceLinkage) ? (
-            <details className="rounded-[1.55rem] border border-line/75 bg-white/68 p-5">
-              <summary className="cursor-pointer text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Source and provenance</summary>
-              <div className="mt-4 space-y-3">
-                {provenance.map((row) => (
-                  <div key={`${row.label}-${row.value}`} className="rounded-[1.15rem] border border-line/70 bg-[rgba(255,255,255,0.56)] px-4 py-4">
-                    <p className="section-label">{row.label}</p>
-                    {row.href ? (
-                      <Link href={row.href as Route} className="mt-2 inline-flex text-sm font-medium leading-6 text-text transition hover:text-text-muted">
-                        {row.value}
-                      </Link>
-                    ) : (
-                      <p className="mt-2 text-sm font-medium leading-6 text-text">{row.value}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </details>
-          ) : null}
-        </div>
-
-        <div className="space-y-4">
-          <section className="rounded-[1.55rem] border border-line/75 bg-white/68 p-5">
-            <p className="section-label">Actions</p>
-            <div className="mt-4">
-              <DetailActions item={item} redirectTo={redirectTo} returnTo={returnTo} isLocalOnly={isLocalOnly} />
-            </div>
-          </section>
 
           <section className="rounded-[1.55rem] border border-line/75 bg-white/68 p-5">
             <p className="section-label">Updates</p>
@@ -1235,7 +1258,7 @@ export function LibraryDetail({
                       <option value="update">Update</option>
                       <option value="comment">Comment</option>
                     </select>
-                    <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-4 py-2.5 text-sm font-medium text-text transition hover:bg-white">
+                    <button type="submit" className="rounded-full border border-line/80 bg-white/84 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white">
                       Add
                     </button>
                   </div>
@@ -1259,6 +1282,33 @@ export function LibraryDetail({
               </>
             )}
           </section>
+
+          {(provenance.length > 0 || item.sourceLinkage) ? (
+            <details className="rounded-[1.55rem] border border-line/75 bg-white/68 p-5">
+              <summary className="cursor-pointer text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Source and provenance</summary>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {provenance.map((row) => (
+                  <div key={`${row.label}-${row.value}`} className="rounded-full border border-line/70 bg-[rgba(255,255,255,0.62)] px-3 py-2 text-xs text-text-muted">
+                    <span className="text-[0.6rem] uppercase tracking-[0.18em] text-text-subtle">{row.label}</span>
+                    {row.href ? (
+                      <Link href={row.href as Route} className="ml-2 font-medium text-text transition hover:text-text-muted">
+                        {row.value}
+                      </Link>
+                    ) : (
+                      <span className="ml-2 font-medium text-text">{row.value}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+
+          <details className="rounded-[1.55rem] border border-line/75 bg-white/68 p-5">
+            <summary className="cursor-pointer text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Original captured content</summary>
+            <div className="mt-4 rounded-[1.05rem] border border-line/70 bg-[rgba(255,255,255,0.56)] p-4">
+              <pre className="whitespace-pre-wrap text-sm leading-6 text-text-muted">{item.originalContent}</pre>
+            </div>
+          </details>
         </div>
       </section>
     </div>

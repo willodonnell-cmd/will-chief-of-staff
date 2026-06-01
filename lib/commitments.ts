@@ -256,9 +256,11 @@ function postureForSections(sections: CommitmentsPageData["sections"]) {
 export async function getCommitmentsPageData(now = Date.now()): Promise<CommitmentsPageData> {
   const tasks = await listLibraryItems({
     scope: "tasks",
+    mode: "tasks",
     search: "",
     type: "task",
     status: "all",
+    priority: "all",
     due: "all",
     category: "all"
   });

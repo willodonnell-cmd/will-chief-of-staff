@@ -20,6 +20,11 @@ import {
 } from "@/lib/blackhawk-capture-model";
 import type { ExecutiveWorkType } from "@/lib/executive-work";
 import {
+  compareLibraryItemsForExecutiveView,
+  filterLibraryItems,
+  parseLibraryQueryParams
+} from "@/lib/library-filters";
+import {
   mergeExecutiveCaptureMetadata,
   resolveLibraryItemEditorMode,
   type LibraryItemEditorMode
@@ -39,12 +44,21 @@ export type LibraryItemStatus = "active" | "completed" | "archived";
 export type CaptureUpdateKind = "update" | "comment";
 export type CaptureSaveState = "saved" | "pending" | "error";
 export type LibraryScope = "library" | "tasks" | "archived";
-export type LibraryTypeFilter = "all" | LibraryItemType;
-export type LibraryStatusFilter = "all" | Exclude<LibraryItemStatus, "archived">;
+export type LibraryBrowseMode = "all" | "notes" | "tasks";
+export type LibraryTypeFilter = "all" | ExecutiveCaptureType;
+export type LibraryStatusFilter = "all" | LibraryItemStatus;
 export type LibraryDueFilter = "all" | "overdue" | "upcoming" | "none";
 export type LibraryTaskStatus = "active" | "completed";
 export type LibraryTaskPriority = "low" | "medium" | "high";
+export type LibraryPriorityFilter = "all" | LibraryTaskPriority;
 export type LibraryTaskCategoryFilter = "all" | string;
+export {
+  LIBRARY_WORK_TYPE_ORDER,
+  countLibraryItemsByWorkType,
+  getLibraryCaptureType,
+  getLibraryItemPriority,
+  groupLibraryItemsByWorkType
+} from "@/lib/library-filters";
 type JsonRecord = Record<string, unknown>;
 type CaptureLibraryDbClient =
   | NonNullable<ReturnType<typeof createSupabaseAdminClient>>
@@ -280,11 +294,25 @@ export type LibraryItemDetail = LibraryItemSummary & {
   updates: CaptureUpdateEntry[];
 };
 
+export type LibraryWorkTypeSummary = {
+  type: ExecutiveCaptureType;
+  label: string;
+  count: number;
+};
+
+export type LibraryWorkTypeGroup = {
+  type: ExecutiveCaptureType;
+  label: string;
+  items: LibraryItemSummary[];
+};
+
 export type LibraryQuery = {
   scope: LibraryScope;
+  mode: LibraryBrowseMode;
   search: string;
   type: LibraryTypeFilter;
   status: LibraryStatusFilter;
+  priority: LibraryPriorityFilter;
   due: LibraryDueFilter;
   category: LibraryTaskCategoryFilter;
 };
@@ -413,10 +441,6 @@ const CAPTURE_LIBRARY_CURL_SELECT = [
 ].join(",");
 
 const PRIORITY_INBOX_BODY_EXCERPT_LIMIT = 2_000;
-
-function firstValue(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -590,18 +614,6 @@ function logCaptureLibrary(message: string, details?: Record<string, unknown>) {
 
 function normalizeSearchText(value: string) {
   return value.trim().toLowerCase();
-}
-
-function isLibraryType(value: string | undefined): value is LibraryItemType {
-  return value === "note" || value === "task";
-}
-
-function isLibraryStatus(value: string | undefined): value is LibraryStatusFilter {
-  return value === "active" || value === "completed";
-}
-
-function isLibraryDue(value: string | undefined): value is LibraryDueFilter {
-  return value === "overdue" || value === "upcoming" || value === "none" || value === "all";
 }
 
 function isLibraryTaskStatus(value: string | undefined): value is LibraryTaskStatus {
@@ -1027,10 +1039,21 @@ function mapPriorityInboxSourceLinkage(row: CaptureRow): PriorityInboxSourceLink
   };
 }
 
+function captureMetadataSearchValues(metadata: ExecutiveCaptureMetadata | null | undefined) {
+  if (!metadata) {
+    return [];
+  }
+
+  return Object.values(metadata).filter((value): value is string => typeof value === "string");
+}
+
 function matchesSearch(row: CaptureRow, search: string) {
   if (!search) {
     return true;
   }
+
+  const captureMetadata = mapExecutiveCaptureMetadata(row.capture_metadata);
+  const sourceMetadata = mapJsonRecord(row.priority_inbox_source_metadata);
 
   const haystack = [
     row.title,
@@ -1041,8 +1064,16 @@ function matchesSearch(row: CaptureRow, search: string) {
     row.task_desired_outcome,
     row.task_category?.name,
     row.linked_initiative?.title,
+    row.priority ?? null,
+    row.executive_work_type ?? null,
+    row.source_path,
+    typeof sourceMetadata?.source === "string" ? sourceMetadata.source : null,
+    typeof sourceMetadata?.sourceLabel === "string" ? sourceMetadata.sourceLabel : null,
+    typeof sourceMetadata?.sender === "string" ? sourceMetadata.sender : null,
+    typeof sourceMetadata?.threadTitle === "string" ? sourceMetadata.threadTitle : null,
     row.original_content,
     row.working_content,
+    ...captureMetadataSearchValues(captureMetadata),
     ...(row.capture_updates ?? []).map((entry) => entry.body)
   ]
     .join("\n")
@@ -1090,15 +1121,15 @@ function inlineDueCueRank(item: LibraryItemSummary) {
 }
 
 function sortLibraryItems(items: LibraryItemSummary[], scope: LibraryScope) {
+  if (scope === "library") {
+    return [...items].sort(compareLibraryItemsForExecutiveView);
+  }
+
   if (scope === "archived") {
-    return [...items].sort(compareByLastActive);
+    return [...items].sort(compareLibraryItemsForExecutiveView);
   }
 
   return [...items].sort((left, right) => {
-    if (scope !== "tasks" && left.type !== right.type) {
-      return left.type === "task" ? -1 : 1;
-    }
-
     if (left.type !== "task" || right.type !== "task") {
       return compareByLastActive(left, right);
     }
@@ -1140,52 +1171,6 @@ function sortLibraryItems(items: LibraryItemSummary[], scope: LibraryScope) {
 
     return compareByLastActive(left, right);
   });
-}
-
-function matchesType(item: LibraryItemSummary, filter: LibraryTypeFilter) {
-  return filter === "all" ? true : item.type === filter;
-}
-
-function matchesStatus(item: LibraryItemSummary, filter: LibraryStatusFilter, scope: LibraryScope) {
-  if (scope === "archived") {
-    return item.status === "archived";
-  }
-
-  if (filter === "all") {
-    return true;
-  }
-
-  return item.status === filter;
-}
-
-function matchesDue(item: LibraryItemSummary, filter: LibraryDueFilter) {
-  if (item.type !== "task" || filter === "all") {
-    return true;
-  }
-
-  const dueAt = item.dueAt ? Date.parse(item.dueAt) : null;
-
-  if (filter === "none") {
-    return dueAt === null;
-  }
-
-  if (item.status === "completed" || dueAt === null) {
-    return false;
-  }
-
-  if (filter === "overdue") {
-    return dueAt < Date.now();
-  }
-
-  return dueAt >= Date.now();
-}
-
-function matchesCategory(item: LibraryItemSummary, filter: LibraryTaskCategoryFilter) {
-  if (item.type !== "task" || filter === "all") {
-    return true;
-  }
-
-  return item.task?.categoryId === filter;
 }
 
 function parseDueAt(value: string | null | undefined) {
@@ -1765,20 +1750,7 @@ export function parseLibraryQuery(
   raw: Record<string, string | string[] | undefined>,
   scope: LibraryScope
 ): LibraryQuery {
-  const search = firstValue(raw.search)?.trim() ?? "";
-  const type = firstValue(raw.type);
-  const status = firstValue(raw.status);
-  const due = firstValue(raw.due);
-  const category = firstValue(raw.category)?.trim() ?? "all";
-
-  return {
-    scope,
-    search,
-    type: scope === "tasks" ? "task" : isLibraryType(type) ? type : "all",
-    status: scope === "archived" ? "all" : isLibraryStatus(status) ? status : "all",
-    due: scope === "tasks" && isLibraryDue(due) ? due : "all",
-    category: scope === "tasks" && category ? category : "all"
-  };
+  return parseLibraryQueryParams(raw, scope);
 }
 
 export async function listLibraryItems(query: LibraryQuery): Promise<LibraryItemSummary[]> {
@@ -1796,9 +1768,9 @@ export async function listLibraryItems(query: LibraryQuery): Promise<LibraryItem
       .eq("user_id", user.id)
       .is("deleted_at", null);
 
-    if (query.scope === "archived") {
+    if (query.status === "archived") {
       request = request.not("archived_at", "is", null);
-    } else {
+    } else if (query.status !== "all") {
       request = request.is("archived_at", null);
     }
 
@@ -1831,7 +1803,7 @@ export async function listLibraryItems(query: LibraryQuery): Promise<LibraryItem
   if (error && shouldUseCurlCaptureLibraryFallback(error)) {
     const fallbackData = await readCapturesViaCurlFallback({
       userId: user.id,
-      archivedFilter: query.scope === "archived" ? "only" : "exclude",
+      archivedFilter: query.status === "archived" ? "only" : query.status === "all" ? "all" : "exclude",
       tasksOnly: query.scope === "tasks"
     });
 
@@ -1858,22 +1830,12 @@ export async function listLibraryItems(query: LibraryQuery): Promise<LibraryItem
   }
 
   const normalizedSearch = normalizeSearchText(query.search);
-  const remoteItems = (data ?? [])
-    .filter((row) => matchesSearch(row, normalizedSearch))
-    .map(mapLibrarySummary)
-    .filter((item) => matchesType(item, query.type))
-    .filter((item) => matchesStatus(item, query.status, query.scope))
-    .filter((item) => matchesDue(item, query.due))
-    .filter((item) => matchesCategory(item, query.category));
+  const remoteItems = (data ?? []).filter((row) => matchesSearch(row, normalizedSearch)).map(mapLibrarySummary);
   const localItems = localRecords
     .filter((record) => matchesSearch(localLibraryRecordToCaptureRow(record), normalizedSearch))
-    .map(mapLocalLibrarySummary)
-    .filter((item) => matchesType(item, query.type))
-    .filter((item) => matchesStatus(item, query.status, query.scope))
-    .filter((item) => matchesDue(item, query.due))
-    .filter((item) => matchesCategory(item, query.category));
+    .map(mapLocalLibrarySummary);
 
-  return sortLibraryItems([...remoteItems, ...localItems], query.scope);
+  return sortLibraryItems(filterLibraryItems([...remoteItems, ...localItems], query), query.scope);
 }
 
 export async function getLibraryItemDetail(captureId: string): Promise<LibraryItemDetail | null> {
@@ -2789,9 +2751,11 @@ export async function listTodayTasks(now = Date.now()): Promise<{
 }> {
   const tasks = await listLibraryItems({
     scope: "tasks",
+    mode: "tasks",
     search: "",
     type: "task",
     status: "active",
+    priority: "all",
     due: "all",
     category: "all"
   });
