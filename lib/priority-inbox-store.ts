@@ -43,7 +43,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 type JsonRecord = Record<string, unknown>;
 
-type PriorityInboxRow = {
+export type PriorityInboxRow = {
   id: string;
   user_id: string;
   source: PriorityInboxItem["source"];
@@ -245,7 +245,7 @@ function mapCreatedObject(value: unknown): PriorityInboxCreatedObject | null {
   return null;
 }
 
-function mapPriorityInboxRow(row: PriorityInboxRow): PriorityInboxItem {
+export function mapPriorityInboxRow(row: PriorityInboxRow): PriorityInboxItem {
   return {
     id: row.id,
     source: row.source,

@@ -1,8 +1,8 @@
-export type PriorityInboxSource = "outlook" | "gmail" | "teams" | "manual" | "forwarded_email";
-export type PriorityInboxSourceFilter = "all" | "email" | "teams" | "manual";
+export type PriorityInboxSource = "outlook" | "gmail" | "teams" | "calendar" | "manual" | "forwarded_email";
+export type PriorityInboxSourceFilter = "all" | "email" | "teams" | "calendar" | "manual";
 export type PriorityInboxVisibleState = "high_priority" | "needs_review" | "deferred" | "handled" | "dismissed";
 export type PriorityInboxActiveState = Extract<PriorityInboxVisibleState, "high_priority" | "needs_review">;
-export type PriorityInboxIngestionMode = "live_adapter" | "forwarded" | "manual";
+export type PriorityInboxIngestionMode = "live_adapter" | "forwarded" | "manual" | "agent_run";
 export type PriorityInboxDisposition =
   | "source_opened"
   | "deferred"
@@ -200,10 +200,10 @@ export type PriorityInboxSourceConnectionSummary = {
 };
 
 export type PriorityInboxSourceCandidate = {
-  source: Extract<PriorityInboxSource, "outlook" | "gmail" | "teams" | "forwarded_email">;
+  source: Extract<PriorityInboxSource, "outlook" | "gmail" | "teams" | "calendar" | "forwarded_email">;
   sourceLabel: string;
   sourceFamily: Exclude<PriorityInboxSourceFilter, "all" | "manual">;
-  ingestionMode?: Extract<PriorityInboxIngestionMode, "live_adapter" | "forwarded">;
+  ingestionMode?: Extract<PriorityInboxIngestionMode, "live_adapter" | "forwarded" | "agent_run">;
   sourceLink: string | null;
   externalMessageId: string;
   conversationId?: string | null;

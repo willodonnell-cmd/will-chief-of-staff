@@ -10,7 +10,11 @@
     "lint": "eslint app components lib scripts tests trigger middleware.ts next.config.ts tailwind.config.ts --ext .ts,.tsx",
     "verify": "npm test && npm run lint && npm run build && npm run typecheck",
     "typecheck": "tsc --noEmit",
-    "validate:agent-signals": "tsx scripts/validate-agent-signals.ts"
+    "validate:agent-signals": "tsx scripts/validate-agent-signals.ts",
+    "import:agent-signals:local": "tsx scripts/import-agent-signals-local.ts",
+    "import:agent-signals:fixture": "tsx scripts/import-agent-signals-fixture.ts",
+    "import:agent-signals:live-example": "tsx scripts/import-agent-signals-live-example.ts",
+    "validate:investment-committee-cycle": "tsx scripts/validate-investment-committee-cycle.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

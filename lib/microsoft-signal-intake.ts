@@ -30,7 +30,7 @@ export type Microsoft365SourceCoverageEntry = {
   status: Microsoft365SourceCoverageStatus;
   checkedAt?: string;
   signalCount?: number;
-  reason?: string;
+  reason?: string | null;
 };
 
 export type Microsoft365SourceCoverage = Partial<
@@ -52,6 +52,10 @@ export type AgentProducedMicrosoft365SignalEnvelope = {
   connectorFamily: "microsoft_365";
   producedAt: string;
   tenantLabel: string;
+  status?: "succeeded" | "failed";
+  sourcesChecked?: ChiefOfStaffSignalSource[];
+  windowStart?: string | null;
+  windowEnd?: string | null;
   sourceCoverage?: Microsoft365SourceCoverage;
   signals: ChiefOfStaffSignal[];
 };
@@ -85,6 +89,18 @@ function asOptionalNullableString(value: unknown, path: string): string | null {
   }
 
   return value;
+}
+
+function asOptionalStringArray(value: unknown, path: string): string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`${path} must be an array of strings.`);
+  }
+
+  return value.map((entry, index) => asNonEmptyString(entry, `${path}[${index}]`));
 }
 
 function asBoolean(value: unknown, path: string): boolean {
@@ -139,6 +155,18 @@ function asEnum<TValue extends string>(
   return normalized as TValue;
 }
 
+function asOptionalRecord(value: unknown, path: string) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${path} must be an object or null.`);
+  }
+
+  return value;
+}
+
 function parseChiefOfStaffSignal(input: unknown, index: number): ChiefOfStaffSignal {
   const path = `signals[${index}]`;
   if (!isRecord(input)) {
@@ -164,20 +192,33 @@ function parseChiefOfStaffSignal(input: unknown, index: number): ChiefOfStaffSig
     ),
     title: asNonEmptyString(input.title, `${path}.title`),
     summary: asNonEmptyString(input.summary, `${path}.summary`),
+    whyItMatters:
+      input.whyItMatters === undefined
+        ? null
+        : asOptionalNullableString(input.whyItMatters, `${path}.whyItMatters`),
     owner: asNonEmptyString(input.owner, `${path}.owner`),
     sourceLabel: asNonEmptyString(input.sourceLabel, `${path}.sourceLabel`),
+    sourceReference:
+      input.sourceReference === undefined
+        ? null
+        : asOptionalNullableString(input.sourceReference, `${path}.sourceReference`),
     occurredAt: asIsoTimestamp(input.occurredAt, `${path}.occurredAt`),
     dueAt: input.dueAt === undefined ? null : asOptionalNullableString(input.dueAt, `${path}.dueAt`),
     sourceUrl:
       input.sourceUrl === undefined
         ? null
         : asOptionalNullableString(input.sourceUrl, `${path}.sourceUrl`),
+    category:
+      input.category === undefined
+        ? null
+        : asOptionalNullableString(input.category, `${path}.category`),
     actionRequest:
       input.actionRequest === undefined
         ? null
         : asOptionalNullableString(input.actionRequest, `${path}.actionRequest`),
     participants: asStringArray(input.participants, `${path}.participants`),
-    protectedContext: asBoolean(input.protectedContext, `${path}.protectedContext`)
+    protectedContext: asBoolean(input.protectedContext, `${path}.protectedContext`),
+    metadata: asOptionalRecord(input.metadata, `${path}.metadata`)
   };
 }
 
@@ -206,7 +247,7 @@ function parseSourceCoverageEntry(
   }
 
   if (input.reason !== undefined) {
-    entry.reason = asNonEmptyString(input.reason, `${path}.reason`);
+    entry.reason = asOptionalNullableString(input.reason, `${path}.reason`);
   }
 
   return entry;
@@ -259,6 +300,28 @@ export function parseAgentProducedMicrosoft365SignalEnvelope(
     connectorFamily: "microsoft_365",
     producedAt: asIsoTimestamp(input.producedAt, "producedAt"),
     tenantLabel: asNonEmptyString(input.tenantLabel, "tenantLabel"),
+    status:
+      input.status === undefined
+        ? "succeeded"
+        : asEnum(input.status, ["succeeded", "failed"] as const, "status"),
+    sourcesChecked:
+      input.sourcesChecked === undefined
+        ? undefined
+        : asOptionalStringArray(input.sourcesChecked, "sourcesChecked")?.map((source, index) =>
+            asEnum(source, CHIEF_OF_STAFF_SIGNAL_SOURCES, `sourcesChecked[${index}]`)
+          ),
+    windowStart:
+      input.windowStart === undefined
+        ? null
+        : input.windowStart === null
+          ? null
+          : asIsoTimestamp(input.windowStart, "windowStart"),
+    windowEnd:
+      input.windowEnd === undefined
+        ? null
+        : input.windowEnd === null
+          ? null
+          : asIsoTimestamp(input.windowEnd, "windowEnd"),
     sourceCoverage:
       input.sourceCoverage === undefined ? undefined : parseSourceCoverage(input.sourceCoverage),
     signals: input.signals.map((signal, index) => parseChiefOfStaffSignal(signal, index))
@@ -278,8 +341,12 @@ async function fileExists(path: string) {
   }
 }
 
+export async function hasLocalAgentProducedMicrosoft365SignalPayload() {
+  return await fileExists(LOCAL_MICROSOFT_365_AGENT_PAYLOAD_PATH);
+}
+
 export async function loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource(): Promise<AgentProducedMicrosoft365SignalEnvelopeLoadResult> {
-  const hasLocalPayload = await fileExists(LOCAL_MICROSOFT_365_AGENT_PAYLOAD_PATH);
+  const hasLocalPayload = await hasLocalAgentProducedMicrosoft365SignalPayload();
   const source: AgentProducedMicrosoft365SignalEnvelopeSource = hasLocalPayload
     ? "local"
     : "fixture";

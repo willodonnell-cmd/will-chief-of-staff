@@ -31,6 +31,26 @@ export type ExecutiveWorkClassification = {
   recommendedAction: ExecutiveRecommendedAction;
 };
 
+export type InvestmentCommitteeClassificationInput = {
+  title?: string | null;
+  summary?: string | null;
+  body?: string | null;
+  sourceLabel?: string | null;
+  participants?: string[] | null;
+  owner?: string | null;
+  category?: string | null;
+  metadataText?: string | null;
+};
+
+export type InvestmentCommitteeClassification = {
+  isInvestmentCommittee: boolean;
+  routingCategory: "IC" | null;
+  categoryLabel: "IC" | null;
+  matchedCues: string[];
+  hasSusanPiCue: boolean;
+  requiresDirectWillAction: boolean;
+};
+
 export type DiagnosticSystemSignalInput = {
   title?: string | null;
   summary?: string | null;
@@ -122,8 +142,6 @@ const DECISION_KEYWORDS = [
   "approve",
   "approval",
   "board",
-  "investment committee",
-  "ic ",
   "governance",
   "authorize",
   "sign off",
@@ -253,6 +271,149 @@ const LOW_SIGNAL_CALENDAR_KEYWORDS = [
   "out of office",
   "reminder"
 ] as const;
+
+const INVESTMENT_COMMITTEE_PATTERNS = [
+  { label: "Investment Committee", pattern: /\binvestment committee\b/i },
+  { label: "Energy IC", pattern: /\benergy ic\b/i },
+  { label: "IC memo", pattern: /\bic memo\b/i },
+  { label: "IC package", pattern: /\bic package\b/i },
+  { label: "IC pre-review", pattern: /\bic pre(?:-| )review\b/i },
+  { label: "Committee questions", pattern: /\bcommittee questions?\b/i },
+  { label: "Committee comments", pattern: /\bcommittee comments?\b/i },
+  { label: "Approval package", pattern: /\bapproval package\b/i },
+  { label: "Investment memo", pattern: /\binvestment memo\b/i },
+  { label: "Capital allocation approval", pattern: /\bcapital allocation approval\b/i },
+  { label: "Approval memo", pattern: /\bapproval memo\b/i },
+  { label: "Committee scheduling", pattern: /\bcommittee schedul(?:e|ing)\b/i },
+  { label: "Committee follow-up", pattern: /\bcommittee follow(?:-| )up\b/i },
+  { label: "Q&AInvestmentCommittee", pattern: /\bq&a\s*investmentcommittee\b/i },
+  { label: "InvestmentCommittee", pattern: /\binvestmentcommittee\b/i },
+  { label: "FICM", pattern: /\bficm\b/i },
+  { label: "IICM", pattern: /\biicm\b/i },
+  {
+    label: "IC",
+    pattern:
+      /\bic\b(?=(?:\s|-)+(?:memo|package|pre(?:-| )review|questions?|comments?|meeting|schedule|scheduling|follow(?:-| )up|presentation|approve|approval))/i
+  }
+] as const;
+
+const INVESTMENT_COMMITTEE_SECONDARY_PATTERNS = [
+  /\bapproval\b/i,
+  /\bapproving\b/i,
+  /\bpackage\b/i,
+  /\bmemo\b/i,
+  /\bcommittee\b/i,
+  /\bquestions?\b/i,
+  /\bcomments?\b/i,
+  /\bficm\b/i,
+  /\biicm\b/i,
+  /\benergy ic\b/i,
+  /\binvestment committee\b/i,
+  /\bcapital allocation\b/i,
+  /\bpre(?:-| )review\b/i,
+  /\bpresentation\b/i,
+  /\bdeal team\b/i,
+  /\bq&a\s*investmentcommittee\b/i,
+  /\binvestmentcommittee\b/i
+] as const;
+
+const SUSAN_PI_PATTERN = /\bsusan pi\b/i;
+
+const DIRECT_WILL_ACTION_PATTERNS = [
+  /\bwill(?:\s+o['’]donnell)?\s+(?:needs to|must|should|has to|is expected to|is asked to)\s+(?:decide|approve|respond|prepare|present|provide input|answer|review|confirm)\b/i,
+  /\bask(?:ed)?\s+will(?:\s+o['’]donnell)?\s+to\s+(?:decide|approve|respond|prepare|present|provide input|answer|review|confirm)\b/i,
+  /\bfor\s+will(?:\s+o['’]donnell)?\s+to\s+(?:decide|approve|respond|prepare|present|provide input|answer|review|confirm)\b/i,
+  /\bwaiting on\s+will(?:\s+o['’]donnell)?\b/i,
+  /\bwill(?:\s+o['’]donnell)?\s+has not responded\b/i,
+  /\b(?:assigned|owned)\s+to\s+will(?:\s+o['’]donnell)?\b/i,
+  /\bwill(?:\s+o['’]donnell)?\s+(?:is|will be)\s+(?:presenting|speaking)\b/i,
+  /\bwill(?:\s+o['’]donnell)?\s+to\s+(?:present|speak)\b/i,
+  /\bbefore the meeting,?\s+will(?:\s+o['’]donnell)?\s+(?:needs to|must|should)\b/i
+] as const;
+
+const OWNER_ACCOUNTABILITY_PATTERNS = [
+  /\baccountable\b/i,
+  /\bowner(?:ship)?\b/i,
+  /\bresponder\b/i,
+  /\bblocker\b/i,
+  /\bpresent(?:ing|ation)?\b/i,
+  /\bspeak(?:ing)?\b/i
+] as const;
+
+function stringifyMetadata(value: unknown) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
+function matchesWillOwner(value: string | null | undefined) {
+  const normalized = normalizeText(value).replace(/[’']/g, "'");
+  return normalized === "will o'donnell" || normalized === "will odonnell";
+}
+
+function collectPatternMatches(text: string, patterns: ReadonlyArray<{ label: string; pattern: RegExp }>) {
+  return patterns.filter((entry) => entry.pattern.test(text)).map((entry) => entry.label);
+}
+
+function hasSecondaryInvestmentCommitteeCue(text: string) {
+  return INVESTMENT_COMMITTEE_SECONDARY_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function isExplicitInvestmentCommitteeCategory(value: string | null | undefined) {
+  const normalized = normalizeText(value).replace(/\s+/g, " ");
+  return normalized === "ic" || normalized === "investment committee" || normalized === "investment_committee";
+}
+
+export function classifyInvestmentCommitteeSignal(
+  input: InvestmentCommitteeClassificationInput
+): InvestmentCommitteeClassification {
+  const combined = compactText(
+    [
+      input.title,
+      input.summary,
+      input.body,
+      input.sourceLabel,
+      input.category,
+      ...(input.participants ?? []),
+      input.owner,
+      input.metadataText
+    ].join(" ")
+  );
+  const primaryMatches = collectPatternMatches(combined, INVESTMENT_COMMITTEE_PATTERNS);
+  const hasSusanPiCue = SUSAN_PI_PATTERN.test(combined);
+  const hasExplicitDirectWillActionCue = DIRECT_WILL_ACTION_PATTERNS.some((pattern) => pattern.test(combined));
+  const hasOwnerAccountabilityCue = OWNER_ACCOUNTABILITY_PATTERNS.some((pattern) => pattern.test(combined));
+  const isInvestmentCommittee =
+    primaryMatches.length > 0 ||
+    isExplicitInvestmentCommitteeCategory(input.category) ||
+    (hasSusanPiCue && hasSecondaryInvestmentCommitteeCue(combined));
+  const requiresDirectWillAction =
+    isInvestmentCommittee &&
+    (hasExplicitDirectWillActionCue || (matchesWillOwner(input.owner) && hasOwnerAccountabilityCue));
+
+  return {
+    isInvestmentCommittee,
+    routingCategory: isInvestmentCommittee ? "IC" : null,
+    categoryLabel: isInvestmentCommittee ? "IC" : null,
+    matchedCues: dedupeStrings([
+      ...primaryMatches,
+      isExplicitInvestmentCommitteeCategory(input.category) ? "Category: IC" : null,
+      hasSusanPiCue && hasSecondaryInvestmentCommitteeCue(combined) ? "Susan Pi context" : null
+    ]),
+    hasSusanPiCue,
+    requiresDirectWillAction
+  };
+}
 
 function defaultActionForWorkType(workType: ExecutiveWorkType): ExecutiveRecommendedAction {
   switch (workType) {
@@ -396,6 +557,14 @@ export function mapOutlookCalendarEventToExecutiveSignal(
   const consequential = isConsequentialOutlookCalendarEvent(event);
   const lowSignal = isLowSignalOutlookCalendarEvent(event);
   const startAt = safeIsoTimestamp(event.startAt);
+  const routing = classifyInvestmentCommitteeSignal({
+    title,
+    summary,
+    body: event.bodyPreview,
+    sourceLabel: event.locationDisplayName,
+    participants: people,
+    owner: event.organizerName
+  });
   const dueSoon =
     startAt !== null &&
     Date.parse(startAt) - Date.parse(now) <= 24 * 60 * 60 * 1000 &&
@@ -413,14 +582,22 @@ export function mapOutlookCalendarEventToExecutiveSignal(
       source_received_at: startAt,
       work_type: "noise",
       priority: "low",
+      routing_category: routing.routingCategory,
+      category_label: routing.categoryLabel,
       status: "calendar_event",
       related_persons: people,
       related_companies: [],
       related_initiatives: [],
       recommended_action: "ignore",
       due_at: startAt,
+      requires_direct_will_action: routing.requiresDirectWillAction,
       confidence: 0.72,
-      evidence_snippets: dedupeStrings([title, event.organizerName, event.showAs ?? null]),
+      evidence_snippets: dedupeStrings([
+        title,
+        event.organizerName,
+        event.showAs ?? null,
+        ...routingEvidenceSnippets(routing)
+      ]),
       href: event.webLink,
       created_at: startAt,
       updated_at: safeIsoTimestamp(event.endAt)
@@ -447,6 +624,8 @@ export function mapOutlookCalendarEventToExecutiveSignal(
     source_received_at: startAt,
     work_type: "meeting",
     priority,
+    routing_category: routing.routingCategory,
+    category_label: routing.categoryLabel,
     status: "calendar_event",
     related_persons: people,
     related_companies: [],
@@ -456,11 +635,13 @@ export function mapOutlookCalendarEventToExecutiveSignal(
     desired_outcome: event.bodyPreview ? null : "Walk into the meeting with the necessary context.",
     owner: event.organizerName ?? null,
     due_at: startAt,
+    requires_direct_will_action: routing.requiresDirectWillAction,
     confidence,
     evidence_snippets: dedupeStrings([
       title,
       event.organizerName ? evidence("organizer", event.organizerName) : null,
-      event.bodyPreview ? smartTruncateForEvidence(event.bodyPreview) : null
+      event.bodyPreview ? smartTruncateForEvidence(event.bodyPreview) : null,
+      ...routingEvidenceSnippets(routing)
     ]),
     href: event.webLink,
     created_at: startAt,
@@ -471,6 +652,18 @@ export function mapOutlookCalendarEventToExecutiveSignal(
 function smartTruncateForEvidence(value: string) {
   const cleaned = sanitizeDisplayText(value).replace(/\s+/g, " ").trim();
   return cleaned.length <= 100 ? cleaned : `${cleaned.slice(0, 97).trimEnd()}...`;
+}
+
+function routingEvidenceSnippets(routing: InvestmentCommitteeClassification) {
+  if (!routing.isInvestmentCommittee) {
+    return [];
+  }
+
+  return dedupeStrings([
+    evidence("routing", "IC"),
+    ...routing.matchedCues.map((cue) => evidence("ic cue", cue)),
+    routing.requiresDirectWillAction ? evidence("will ask", "explicit direct action") : null
+  ]);
 }
 
 export function mapPriorityInboxActionToExecutiveAction(
@@ -886,6 +1079,15 @@ export function mapPriorityInboxItemToExecutiveSignal(item: PriorityInboxItem): 
   );
   const category = item.taskPrefill?.categoryName ?? null;
   const mappedAction = mapPriorityInboxActionToExecutiveAction(item.recommendedAction);
+  const routing = classifyInvestmentCommitteeSignal({
+    title: item.threadTitle,
+    summary: item.summary,
+    body: [item.primaryLine, item.whySurfaced, ...item.supportingSignals].join(" "),
+    sourceLabel: item.sourceLabel,
+    owner: null,
+    category,
+    metadataText: stringifyMetadata(item.sourceMetadata)
+  });
   const classification = classifyExecutiveWork({
     title: item.threadTitle,
     summary: item.summary,
@@ -917,6 +1119,8 @@ export function mapPriorityInboxItemToExecutiveSignal(item: PriorityInboxItem): 
     work_type: classification.workType,
     priority,
     category,
+    routing_category: routing.routingCategory,
+    category_label: routing.categoryLabel,
     status: item.visibleState,
     related_persons: dedupeStrings([item.sender]),
     related_companies: [],
@@ -933,9 +1137,11 @@ export function mapPriorityInboxItemToExecutiveSignal(item: PriorityInboxItem): 
     waiting_on:
       item.visibleState === "deferred" ? item.deferredLabel ?? item.deferredUntil ?? null : null,
     due_at: null,
+    requires_direct_will_action: routing.requiresDirectWillAction,
     confidence: clampConfidence(Math.max(classification.confidence, 0.42)),
     evidence_snippets: dedupeStrings([
       ...classification.evidenceSnippets,
+      ...routingEvidenceSnippets(routing),
       item.whySurfaced,
       ...item.supportingSignals.slice(0, 2)
     ]),
@@ -947,6 +1153,15 @@ export function mapPriorityInboxItemToExecutiveSignal(item: PriorityInboxItem): 
 
 export function mapChiefOfStaffSignalToExecutiveSignal(signal: ChiefOfStaffSignal): ExecutiveSignal {
   const sourceType = mapAgentSignalSourceType(signal);
+  const routing = classifyInvestmentCommitteeSignal({
+    title: signal.title,
+    summary: signal.summary,
+    body: signal.actionRequest,
+    sourceLabel: signal.sourceLabel,
+    participants: signal.participants,
+    owner: signal.owner,
+    category: signal.category ?? null
+  });
   const classification = classifyExecutiveWork({
     title: signal.title,
     summary: signal.summary,
@@ -966,7 +1181,9 @@ export function mapChiefOfStaffSignalToExecutiveSignal(signal: ChiefOfStaffSigna
     source_received_at: signal.occurredAt,
     work_type: classification.workType,
     priority: mapChiefOfStaffSignalAttentionToExecutivePriority(signal.attention),
-    category: null,
+    category: signal.category ?? null,
+    routing_category: routing.routingCategory,
+    category_label: routing.categoryLabel,
     status: "active",
     related_persons: dedupeStrings(signal.participants),
     related_companies: [],
@@ -978,9 +1195,11 @@ export function mapChiefOfStaffSignalToExecutiveSignal(signal: ChiefOfStaffSigna
     delegated_to: null,
     waiting_on: null,
     due_at: signal.dueAt,
+    requires_direct_will_action: routing.requiresDirectWillAction,
     confidence: classification.confidence,
     evidence_snippets: dedupeStrings([
       ...classification.evidenceSnippets,
+      ...routingEvidenceSnippets(routing),
       evidence("source", signal.sourceLabel)
     ]),
     href: "/inbox",

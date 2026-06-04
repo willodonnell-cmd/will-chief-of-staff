@@ -1,370 +1,218 @@
-import { SignalCaptureActions } from "@/components/agent-signal/signal-capture-actions";
+import Link from "next/link";
+
+import { AgentRunPriorityInboxCard } from "@/components/inbox/agent-run-priority-inbox-card";
 import { PageIntro } from "@/components/shell/page-intro";
-import { GlanceChip } from "@/components/today/glance-chip";
-import { QuietPanel } from "@/components/today/quiet-panel";
-import { SupportNote } from "@/components/today/support-note";
-import type { CSSProperties } from "react";
 import {
-  getDisplaySourceHref,
-  getAgentSignalBriefIntroDescription,
-  getConnectorHealthEmptyStateDetail,
-  getEmptySourceGroupDetail,
-  getQuietItemsFallbackDetail,
-  isConnectorHealthSignal,
-  sanitizeDisplayText
-} from "@/lib/agent-signal-brief";
-import {
-  deriveAgentHandoffSourceStatus,
-  getMicrosoftSourceModeLabel
-} from "@/lib/agent-handoff-source-status";
-import type { ChiefOfStaffSignal, ChiefOfStaffSignalSource } from "@/lib/chief-of-staff-signal";
-import { loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource } from "@/lib/microsoft-signal-intake";
-import { adaptMicrosoft365SignalsToPrototypeDailyBrief } from "@/lib/prototype-daily-brief";
+  loadPriorityInboxPageData,
+  type AgentRunInboxState,
+  type PriorityInboxPageSourceMode
+} from "@/lib/agent-signals/load-priority-inbox-page-data";
+import type { PriorityInboxItem } from "@/lib/priority-inbox";
 
-const SOURCE_ORDER: ChiefOfStaffSignalSource[] = ["outlook", "teams", "calendar"];
-const ANYWHERE_TEXT_STYLE: CSSProperties = {
-  overflowWrap: "anywhere",
-  wordBreak: "break-word"
-};
-const CLAMP_3_TEXT_STYLE: CSSProperties = {
-  ...ANYWHERE_TEXT_STYLE,
-  display: "-webkit-box",
-  overflow: "hidden",
-  WebkitBoxOrient: "vertical",
-  WebkitLineClamp: 3
-};
-const CLAMP_4_TEXT_STYLE: CSSProperties = {
-  ...ANYWHERE_TEXT_STYLE,
-  display: "-webkit-box",
-  overflow: "hidden",
-  WebkitBoxOrient: "vertical",
-  WebkitLineClamp: 4
-};
-const CLAMP_5_TEXT_STYLE: CSSProperties = {
-  ...ANYWHERE_TEXT_STYLE,
-  display: "-webkit-box",
-  overflow: "hidden",
-  WebkitBoxOrient: "vertical",
-  WebkitLineClamp: 5
-};
+const SOURCE_ORDER = [
+  { id: "outlook", label: "Outlook" },
+  { id: "calendar", label: "Calendar" },
+  { id: "teams", label: "Teams" }
+] as const;
 
-function formatTimestamp(value: string) {
+function isDevPreviewSource(sourceMode: PriorityInboxPageSourceMode) {
+  return sourceMode === "local" || sourceMode === "fixture";
+}
+
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return "None";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "None";
+  }
+
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "America/Los_Angeles"
-  }).format(new Date(value));
+  }).format(parsed);
 }
 
-function formatSourceHeading(source: ChiefOfStaffSignalSource) {
-  switch (source) {
-    case "outlook":
-      return "Outlook";
-    case "teams":
-      return "Teams";
-    case "calendar":
-      return "Calendar";
+function stateTitle(state: AgentRunInboxState, sourceMode: PriorityInboxPageSourceMode) {
+  if (sourceMode === "local") {
+    switch (state) {
+      case "failed":
+        return "Priority Inbox is showing a failed local Agent payload.";
+      case "zero_signals":
+        return "The local Agent payload produced no accepted Priority Inbox signals.";
+      case "stale":
+        return "Priority Inbox is showing a stale local Agent payload.";
+      case "succeeded":
+      default:
+        return "Priority Inbox is showing the local Agent payload saved in this workspace.";
+    }
+  }
+
+  if (sourceMode === "fixture") {
+    switch (state) {
+      case "failed":
+        return "Priority Inbox is showing a failed checked-in Agent fixture.";
+      case "zero_signals":
+        return "The checked-in Agent fixture produced no accepted Priority Inbox signals.";
+      case "stale":
+        return "Priority Inbox is showing a stale checked-in Agent fixture.";
+      case "succeeded":
+      default:
+        return "Priority Inbox is showing the checked-in Agent fixture for localhost.";
+    }
+  }
+
+  switch (state) {
+    case "failed":
+      return "The latest Agent run failed.";
+    case "zero_signals":
+      return "The latest Agent run produced no accepted Priority Inbox signals.";
+    case "stale":
+      return "The latest Agent run is stale.";
+    case "succeeded":
+      return "Priority Inbox is showing the latest accepted Agent-produced signals.";
+    case "never_run":
+    default:
+      return "Priority Inbox has not received an Agent run yet.";
   }
 }
 
-function formatSignalType(signalType: ChiefOfStaffSignal["signalType"]) {
-  switch (signalType) {
-    case "follow_up":
-      return "Follow up";
-    case "meeting":
-      return "Meeting";
-    case "decision":
-      return "Decision";
-    case "status":
-      return "Status";
+function stateDetail(state: AgentRunInboxState, sourceMode: PriorityInboxPageSourceMode) {
+  if (sourceMode === "local") {
+    switch (state) {
+      case "failed":
+        return "This localhost view is reading `.local/agent-signals.json`, but that payload reports a failed run. Replace it with a newer Blackhawk agent payload or import a durable run.";
+      case "zero_signals":
+        return "This localhost view is reading `.local/agent-signals.json`. Everything in that payload was routed away, suppressed, or rejected, so Priority Inbox is correctly empty.";
+      case "stale":
+        return "This localhost view is using `.local/agent-signals.json`, and that payload is older than 48 hours. Replace it with a newer Blackhawk agent payload or import a durable run.";
+      case "succeeded":
+      default:
+        return "This localhost view is reading `.local/agent-signals.json`. That file remains a development fallback only and does not replace the durable database-backed inbox.";
+    }
+  }
+
+  if (sourceMode === "fixture") {
+    switch (state) {
+      case "failed":
+        return "This localhost view fell back to the checked-in Agent fixture, but that fixture reports a failed run. Replace it with a current local payload or import a durable run.";
+      case "zero_signals":
+        return "This localhost view is reading the checked-in Agent fixture. Everything in that fixture was routed away, suppressed, or rejected, so Priority Inbox is correctly empty.";
+      case "stale":
+        return "This localhost view is using the checked-in Agent fixture, and that fixture is older than 48 hours. Replace it with a fresh local payload or import a durable run.";
+      case "succeeded":
+      default:
+        return "This localhost view is using the checked-in Agent fixture because no local payload or durable Agent run is available yet. It stays read-only and clearly labeled as development data.";
+    }
+  }
+
+  switch (state) {
+    case "failed":
+      return "Fix the intake or rerun the Agent. The inbox stays honest instead of falling back to local or fixture data.";
+    case "zero_signals":
+      return "Everything in the latest run was routed away, suppressed, or rejected, so Priority Inbox is correctly empty.";
+    case "stale":
+      return "The last successful run is older than 48 hours. Review it carefully before trusting it as current.";
+    case "succeeded":
+      return "Only signals routed to Priority Inbox are shown here. Investment Committee and meta/admin signals stay out.";
+    case "never_run":
+    default:
+      return "Priority Inbox is waiting for the scheduled Blackhawk agent to POST a new payload into `/api/agent-signals/import`.";
   }
 }
 
-function formatAttention(signal: ChiefOfStaffSignal) {
-  if (signal.attention === "high") {
-    return "pill-priority";
+function sourcePanelLabel(sourceMode: PriorityInboxPageSourceMode) {
+  switch (sourceMode) {
+    case "database":
+      return "Database-backed ChatGPT Agent run";
+    case "local":
+      return "Local Agent payload fallback";
+    case "fixture":
+      return "Sanitized fixture fallback";
   }
-
-  if (signal.attention === "medium") {
-    return "pill-watch";
-  }
-
-  return "pill-live";
 }
 
-function SignalCard({ signal }: { signal: ChiefOfStaffSignal }) {
-  const displayTitle = sanitizeDisplayText(signal.title) || signal.title;
-  const displaySummary = sanitizeDisplayText(signal.summary) || signal.summary;
-  const displayActionRequest = signal.actionRequest
-    ? sanitizeDisplayText(signal.actionRequest) || signal.actionRequest
-    : null;
-  const sourceHref = getDisplaySourceHref(signal.sourceUrl);
-  const canCreateCapture = !isConnectorHealthSignal(signal);
+function sourcePanelDetail(sourceMode: PriorityInboxPageSourceMode) {
+  switch (sourceMode) {
+    case "database":
+      return "Loaded from the latest successful durable Agent run stored in Supabase. Local and fixture payloads stay fallback-only.";
+    case "local":
+      return "Loaded from `.local/agent-signals.json`. This localhost view is a fallback only and does not replace the durable database-backed inbox.";
+    case "fixture":
+      return "Loaded from `fixtures/chatgpt-agent-microsoft-365-signals.json`. This sanitized fixture is a fallback only and stays separate from durable inbox data.";
+  }
+}
 
-  return (
-    <article className="min-w-0 overflow-hidden rounded-[1.35rem] border border-line/70 bg-white/70 p-4">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className={`pill ${formatAttention(signal)}`}>{signal.attention}</span>
-        <span className="chip">{formatSignalType(signal.signalType)}</span>
-        {signal.protectedContext ? <span className="chip">Protected</span> : null}
-      </div>
-
-      <h4 className="mt-4 text-base font-medium leading-6 text-text" style={CLAMP_3_TEXT_STYLE}>
-        {displayTitle}
-      </h4>
-      <p className="mt-2 text-sm leading-6 text-text-muted" style={CLAMP_5_TEXT_STYLE}>
-        {displaySummary}
-      </p>
-
-      <div className="mt-5 min-w-0 space-y-3 border-t border-line/60 pt-4 text-sm text-text-muted">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-          <span
-            className="rounded-full border border-line/70 bg-white/78 px-3 py-1.5 text-text-muted"
-            style={ANYWHERE_TEXT_STYLE}
-          >
-            {signal.owner}
-          </span>
-          <span>Occurred {formatTimestamp(signal.occurredAt)}</span>
-          <span>{signal.dueAt ? `Due ${formatTimestamp(signal.dueAt)}` : "No explicit deadline"}</span>
-        </div>
-        <p style={ANYWHERE_TEXT_STYLE}>
-          <span className="font-medium text-text">Participants:</span>{" "}
-          {signal.participants.length > 0 ? signal.participants.join(", ") : "None listed"}
-        </p>
-        {displayActionRequest ? (
-          <p style={ANYWHERE_TEXT_STYLE}>
-            <span className="font-medium text-text">Action request:</span> {displayActionRequest}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        {sourceHref ? (
-          <a
-            href={sourceHref}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block text-sm font-medium text-text transition hover:text-text-muted"
-          >
-            Open source →
-          </a>
-        ) : null}
-        {canCreateCapture ? <SignalCaptureActions signal={signal} /> : null}
-      </div>
-    </article>
-  );
+function activeCount(items: PriorityInboxItem[]) {
+  return items.filter((item) => item.visibleState === "high_priority" || item.visibleState === "needs_review").length;
 }
 
 export default async function InboxPage() {
-  const { envelope, source } = await loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource();
-  const agentSourceTrustStatus = deriveAgentHandoffSourceStatus({
-    envelope,
-    source
-  });
-  const dailyBrief = adaptMicrosoft365SignalsToPrototypeDailyBrief(envelope);
-  const connectorHealthSignals = dailyBrief.sourceSignals.filter(isConnectorHealthSignal);
-  const quietItems =
-    dailyBrief.quietItems.length > 0
-      ? dailyBrief.quietItems
-      : [
-          {
-            label: "No background signals are waiting right now.",
-            detail: getQuietItemsFallbackDetail()
-          }
-        ];
-  const signalsBySource = SOURCE_ORDER.map((signalSource) => ({
-    source: signalSource,
-    heading: formatSourceHeading(signalSource),
-    signals: dailyBrief.sourceSignals.filter((signal) => signal.source === signalSource)
+  const { state, latestRun, items, sourceMode } = await loadPriorityInboxPageData();
+  const bySource = SOURCE_ORDER.map((source) => ({
+    ...source,
+    items: items.filter((item) => item.source === source.id)
   }));
-  const populatedSourceCount = signalsBySource.filter((group) => group.signals.length > 0).length;
 
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageIntro
         eyebrow="Priority Inbox"
         title="Priority Inbox"
-        description={getAgentSignalBriefIntroDescription(source)}
+        description="Agent-produced Outlook, Calendar, and Teams priorities that survived server-side validation, routing, and suppression."
       />
 
-      <section className="rounded-[1.35rem] border border-line/70 bg-white/68 px-4 py-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0">
-            <p className="section-label">Microsoft source</p>
-            <p className="mt-1 text-sm font-medium text-text">
-              {getMicrosoftSourceModeLabel("agent_handoff")}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-text-muted">{agentSourceTrustStatus.summary}</p>
-          </div>
-        </div>
-      </section>
-
       <section className="grid gap-3 sm:grid-cols-3">
-        {dailyBrief.glanceItems.map((item) => (
-          <GlanceChip key={item.label} label={item.label} value={item.value} tone={item.tone} />
+        {bySource.map((group) => (
+          <div key={group.id} className="rounded-[1.2rem] border border-line/70 bg-white/72 px-4 py-3">
+            <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">{group.label}</p>
+            <p className="mt-2 text-sm font-medium text-text">{group.items.length} visible items</p>
+            <p className="mt-1 text-xs text-text-subtle">{activeCount(group.items)} active</p>
+          </div>
         ))}
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1.24fr_0.86fr]">
-        <section className="refined-b min-w-0 overflow-hidden rounded-[1.9rem] p-5 md:p-7">
-          <div className="brief-layout gap-5">
-            <div className="brief-main">
-              <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Priority focus</p>
-              <h2
-                className="mt-3 max-w-full text-[1.28rem] font-semibold leading-[1.24] tracking-[-0.02em] text-text md:text-[1.55rem]"
-                style={CLAMP_4_TEXT_STYLE}
-              >
-                {dailyBrief.brief.highFocusTitle}
-              </h2>
-              <p
-                className="mt-3 max-w-3xl text-sm leading-6 text-text-muted md:text-[0.98rem]"
-                style={ANYWHERE_TEXT_STYLE}
-              >
-                {dailyBrief.brief.highFocusSummary}
-              </p>
-
-              <div className="mt-5 min-w-0 rounded-[1.35rem] border border-line/70 bg-white/66 px-4 py-4">
-                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Recommended action</p>
-                <p className="mt-3 text-sm leading-6 text-text-muted" style={ANYWHERE_TEXT_STYLE}>
-                  {dailyBrief.brief.highFocusDecision}
-                </p>
-              </div>
-            </div>
-
-            <div className="brief-side space-y-3">
-              <div className="min-w-0 rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
-                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Owner</p>
-                <p className="mt-3 text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
-                  {dailyBrief.brief.highFocusOwner}
-                </p>
-              </div>
-              <div className="min-w-0 rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
-                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Timing</p>
-                <p className="mt-3 text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
-                  {dailyBrief.brief.highFocusTiming}
-                </p>
-              </div>
-              <div className="min-w-0 rounded-[1.35rem] border border-line/75 bg-white/68 px-4 py-4">
-                <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Payload scope</p>
-                <p className="mt-3 text-sm leading-6 text-text-muted" style={ANYWHERE_TEXT_STYLE}>
-                  {envelope.signals.length} signals across {populatedSourceCount} active sources.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <QuietPanel
-          eyebrow={dailyBrief.brief.quietPanelEyebrow}
-          title={dailyBrief.brief.quietPanelTitle}
-          items={quietItems}
-        />
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
-        <section className="min-w-0 rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
-          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Payload metadata</p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-            <div className="min-w-0 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Inbox source</p>
-              <p className="mt-3 text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
-                {source === "local" ? "Local Agent payload" : "Sanitized fixture"}
-              </p>
-            </div>
-            <div className="min-w-0 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Tenant</p>
-              <p className="mt-3 text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
-                {envelope.tenantLabel}
-              </p>
-            </div>
-            <div className="min-w-0 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Produced at</p>
-              <p className="mt-3 text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
-                {formatTimestamp(envelope.producedAt)}
-              </p>
-            </div>
-            <div className="min-w-0 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Signal count</p>
-              <p className="mt-3 text-sm font-medium text-text">{envelope.signals.length}</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          {dailyBrief.supportNotes.map((note) => (
-            <SupportNote
-              key={`${note.eyebrow}-${note.title}`}
-              eyebrow={note.eyebrow}
-              title={note.title}
-              body={note.body}
-            />
-          ))}
-
-          <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
-            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Connector health</p>
-            <div className="mt-5 space-y-3">
-              {connectorHealthSignals.length > 0 ? (
-                connectorHealthSignals.map((signal) => (
-                  <div key={signal.id} className="min-w-0 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-                    <p className="text-sm font-medium text-text" style={ANYWHERE_TEXT_STYLE}>
-                      {sanitizeDisplayText(signal.title) || signal.title}
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-text-muted" style={ANYWHERE_TEXT_STYLE}>
-                      {sanitizeDisplayText(signal.summary) || signal.summary}
-                    </p>
-                    {signal.actionRequest ? (
-                      <p className="mt-2 text-sm leading-6 text-text-muted" style={ANYWHERE_TEXT_STYLE}>
-                        <span className="font-medium text-text">Action request:</span>{" "}
-                        {sanitizeDisplayText(signal.actionRequest) || signal.actionRequest}
-                      </p>
-                    ) : null}
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-                  <p className="text-sm font-medium text-text">No connector health issues surfaced.</p>
-                  <p className="mt-2 text-sm leading-6 text-text-muted">
-                    {getConnectorHealthEmptyStateDetail()}
-                  </p>
-                </div>
-              )}
-            </div>
-          </section>
-        </section>
       </section>
 
       <section className="space-y-4">
         <div>
-          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Source signals</p>
+          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">By source</p>
           <h3 className="mt-2 text-[1.2rem] font-semibold leading-snug tracking-[-0.01em] text-text md:text-[1.35rem]">
-            Outlook, Teams, and Calendar signals
+            Outlook, Calendar, and Teams priorities
           </h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-text-muted">
-            Priority Inbox groups signals by source so the route stays brief-first, then supporting context, then detailed cards.
+            Accepted signals stay grouped by source so the inbox remains an executive triage view rather than a mailbox clone.
           </p>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-3">
-          {signalsBySource.map((group) => (
-            <section key={group.source} className="min-w-0 rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
+          {bySource.map((group) => (
+            <section key={group.id} className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
               <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">{group.heading}</p>
-                  <h4 className="mt-2 text-lg font-medium tracking-[-0.01em] text-text">
-                    {group.signals.length} signals
-                  </h4>
+                <div>
+                  <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">{group.label}</p>
+                  <h4 className="mt-2 text-lg font-medium tracking-[-0.01em] text-text">{group.items.length} items</h4>
                 </div>
-                <span className="chip">{group.heading}</span>
+                <span className="rounded-full border border-line/70 bg-white/76 px-3 py-1 text-[0.72rem] uppercase tracking-[0.16em] text-text-subtle">
+                  {group.label}
+                </span>
               </div>
 
               <div className="mt-5 space-y-3">
-                {group.signals.length > 0 ? (
-                  group.signals.map((signal) => <SignalCard key={signal.id} signal={signal} />)
+                {group.items.length > 0 ? (
+                  group.items.map((item) => (
+                    <AgentRunPriorityInboxCard
+                      key={item.id}
+                      item={item}
+                      readOnly={isDevPreviewSource(sourceMode)}
+                    />
+                  ))
                 ) : (
                   <div className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-                    <p className="text-sm font-medium text-text">{getEmptySourceGroupDetail(group.heading)}</p>
+                    <p className="text-sm font-medium text-text">No accepted {group.label} priorities in the latest run.</p>
                     <p className="mt-2 text-sm leading-6 text-text-muted">
-                      The inbox stays empty here until this payload includes that source.
+                      This can mean the source had nothing qualifying, or everything from it was routed, suppressed, or rejected.
                     </p>
                   </div>
                 )}
@@ -373,6 +221,73 @@ export default async function InboxPage() {
           ))}
         </div>
       </section>
+
+      <details className="rounded-[1.3rem] border border-line/75 bg-white/74 px-4 py-4">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+          <div>
+            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Run state</p>
+            <h2 className="mt-2 text-[1.05rem] font-medium text-text">{stateTitle(state, sourceMode)}</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-text-muted">{stateDetail(state, sourceMode)}</p>
+          </div>
+          <span className="rounded-full border border-line/70 bg-white/76 px-3 py-1 text-[0.72rem] uppercase tracking-[0.16em] text-text-subtle">
+            Expand
+          </span>
+        </summary>
+
+        <div className="mt-4 rounded-[1.1rem] border border-line/70 bg-white/70 px-4 py-3">
+          <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Data source</p>
+          <p className="mt-2 text-sm font-medium text-text">{sourcePanelLabel(sourceMode)}</p>
+          <p className="mt-1 text-sm leading-6 text-text-muted">{sourcePanelDetail(sourceMode)}</p>
+        </div>
+
+        {latestRun ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-[1.1rem] border border-line/70 bg-white/72 px-4 py-3">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Latest run</p>
+              <p className="mt-2 text-sm font-medium text-text">{formatTimestamp(latestRun.completedAt)}</p>
+              <p className="mt-1 text-xs text-text-subtle">{latestRun.runStatus}</p>
+            </div>
+            <div className="rounded-[1.1rem] border border-line/70 bg-white/72 px-4 py-3">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Sources checked</p>
+              <p className="mt-2 text-sm font-medium text-text">
+                {latestRun.sourcesChecked.length > 0 ? latestRun.sourcesChecked.join(", ") : "None"}
+              </p>
+            </div>
+            <div className="rounded-[1.1rem] border border-line/70 bg-white/72 px-4 py-3">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Accepted signals</p>
+              <p className="mt-2 text-sm font-medium text-text">{latestRun.acceptedSignalCount}</p>
+              <p className="mt-1 text-xs text-text-subtle">{latestRun.totalSubmittedSignalCount} submitted</p>
+            </div>
+            <div className="rounded-[1.1rem] border border-line/70 bg-white/72 px-4 py-3">
+              <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Routed or suppressed</p>
+              <p className="mt-2 text-sm font-medium text-text">
+                {latestRun.investmentCommitteeRoutedCount + latestRun.suppressedMetaAdminCount + latestRun.suppressedLowSignalCount + latestRun.rejectedInvalidCount}
+              </p>
+              <p className="mt-1 text-xs text-text-subtle">
+                IC {latestRun.investmentCommitteeRoutedCount} · meta {latestRun.suppressedMetaAdminCount} · low {latestRun.suppressedLowSignalCount} · invalid {latestRun.rejectedInvalidCount}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {latestRun?.investmentCommitteeRoutedCount ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[1.1rem] border border-line/70 bg-white/70 px-4 py-3">
+            <p className="text-sm leading-6 text-text-muted">
+              {latestRun.investmentCommitteeRoutedCount} signal{latestRun.investmentCommitteeRoutedCount === 1 ? "" : "s"} routed to Investment Committee and kept out of Priority Inbox.
+            </p>
+            <Link
+              href="/investment-committee"
+              className="inline-flex rounded-full border border-line/75 bg-white/82 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white"
+            >
+              Open Investment Committee
+            </Link>
+          </div>
+        ) : null}
+
+        {latestRun?.errorMessage ? (
+          <p className="mt-4 text-sm leading-6 text-[rgb(125,35,31)]">{latestRun.errorMessage}</p>
+        ) : null}
+      </details>
     </div>
   );
 }

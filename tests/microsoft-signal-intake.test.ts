@@ -9,6 +9,7 @@ import {
   getMicrosoftSourceModeLabel
 } from "../lib/agent-handoff-source-status";
 import {
+  derivePriorityInboxSignalRouting,
   getDisplaySourceHref,
   isConnectorHealthSignal,
   sanitizeDisplayText,
@@ -43,10 +44,6 @@ async function loadFixtureObject() {
 
 async function removeLocalAgentPayload() {
   await rm(LOCAL_MICROSOFT_365_AGENT_PAYLOAD_PATH, { force: true });
-  await rm(dirname(LOCAL_MICROSOFT_365_AGENT_PAYLOAD_PATH), {
-    force: true,
-    recursive: true
-  });
 }
 
 async function snapshotLocalAgentPayload() {
@@ -191,6 +188,22 @@ test("envelope with valid sourceCoverage validates", async () => {
   assert.equal(envelope.sourceCoverage?.outlook?.status, "included");
   assert.equal(envelope.sourceCoverage?.calendar?.status, "empty");
   assert.equal(envelope.sourceCoverage?.teams?.status, "permission_denied");
+});
+
+test("sourceCoverage reason may be null", async () => {
+  const fixture = await loadFixtureObject();
+  fixture.sourceCoverage = buildSourceCoverage({
+    outlook: {
+      status: "included",
+      checkedAt: "2026-05-28T08:10:00.000Z",
+      signalCount: 1,
+      reason: null
+    }
+  });
+
+  const envelope = parseAgentProducedMicrosoft365SignalEnvelope(fixture);
+
+  assert.equal(envelope.sourceCoverage?.outlook?.reason, null);
 });
 
 test("signal category metadata is preserved when present", async () => {
@@ -610,6 +623,98 @@ test("does not classify ordinary business status updates as connector health", (
   });
 
   assert.equal(isConnectorHealthSignal(signal), false);
+});
+
+test("routes routine IC signals out of the default Priority Inbox view", () => {
+  const routing = derivePriorityInboxSignalRouting([
+    buildSignal({
+      id: "ic-routine",
+      source: "outlook",
+      signalType: "follow_up",
+      attention: "medium",
+      category: "IC",
+      title: "Susan Pi sent weekly IC package",
+      summary: "Weekly package and memo circulation for Monday IC.",
+      owner: "Will O'Donnell",
+      actionRequest: "Use as the weekly IC package anchor; review memos and prepare any Will questions by Friday afternoon.",
+      sourceLabel: "IC Memos for Monday, June 1"
+    }),
+    buildSignal({
+      id: "customer-urgent",
+      source: "outlook",
+      signalType: "decision",
+      attention: "high",
+      category: null,
+      title: "Customer escalation needs approval",
+      summary: "Customer decision needed today.",
+      sourceLabel: "Outlook"
+    })
+  ]);
+
+  assert.deepEqual(
+    routing.defaultSignals.map((signal) => signal.id),
+    ["customer-urgent"]
+  );
+  assert.deepEqual(
+    routing.icSignals.map((signal) => signal.id),
+    ["ic-routine"]
+  );
+  assert.equal(routing.routedRoutineIcCount, 1);
+  assert.equal(routing.directWillActionIcCount, 0);
+});
+
+test("routes direct-Will-action IC signals out of the default Inbox view", () => {
+  const routing = derivePriorityInboxSignalRouting([
+    buildSignal({
+      id: "ic-direct",
+      source: "outlook",
+      signalType: "decision",
+      attention: "high",
+      category: "IC",
+      title: "Will needs to approve the IC response",
+      summary: "Will needs to answer before the meeting.",
+      actionRequest: "Will needs to approve and respond before the meeting.",
+      sourceLabel: "Investment Committee"
+    })
+  ]);
+
+  assert.deepEqual(routing.defaultSignals.map((signal) => signal.id), []);
+  assert.deepEqual(
+    routing.icSignals.map((signal) => signal.id),
+    ["ic-direct"]
+  );
+  assert.equal(routing.routedRoutineIcCount, 1);
+  assert.equal(routing.directWillActionIcCount, 1);
+});
+
+test("keeps connector health diagnostics out of both inbox work views", () => {
+  const routing = derivePriorityInboxSignalRouting([
+    buildSignal({
+      id: "connector-diagnostic",
+      source: "teams",
+      signalType: "status",
+      title: "Teams connector was unavailable",
+      summary: "The Teams connector could not be reviewed during this dry run."
+    }),
+    buildSignal({
+      id: "normal-outlook",
+      source: "outlook",
+      signalType: "follow_up",
+      attention: "medium",
+      title: "Reply to partner note",
+      summary: "Follow up with the partner."
+    })
+  ]);
+
+  assert.deepEqual(
+    routing.diagnostics.map((signal) => signal.id),
+    ["connector-diagnostic"]
+  );
+  assert.deepEqual(
+    routing.defaultSignals.map((signal) => signal.id),
+    ["normal-outlook"]
+  );
+  assert.equal(routing.icSignals.length, 0);
 });
 
 test("strips markdown link urls from source-label display text", () => {

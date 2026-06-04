@@ -13,12 +13,16 @@ export type ChiefOfStaffSignal = {
   attention: ChiefOfStaffSignalAttention;
   title: string;
   summary: string;
+  whyItMatters?: string | null;
   owner: string;
   sourceLabel: string;
+  sourceReference?: string | null;
   occurredAt: string;
   dueAt: string | null;
   sourceUrl: string | null;
+  category?: string | null;
   actionRequest: string | null;
   participants: string[];
   protectedContext: boolean;
+  metadata?: Record<string, unknown> | null;
 };

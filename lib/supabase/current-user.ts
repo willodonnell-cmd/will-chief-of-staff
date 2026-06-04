@@ -108,7 +108,15 @@ async function findAppUserByField(
 }
 
 export async function resolveCurrentAppUser(): Promise<ResolvedAppUser | null> {
-  const serverClient = await createSupabaseServerClient();
+  let serverClient: ServerClient = null;
+  try {
+    serverClient = await createSupabaseServerClient();
+  } catch (error) {
+    logUserResolution("Supabase server client is unavailable outside a request scope; continuing without request cookies.", {
+      errorMessage: error instanceof Error ? error.message : String(error)
+    });
+  }
+
   const adminClient = createSupabaseAdminClient();
   const client = adminClient ?? serverClient;
 
