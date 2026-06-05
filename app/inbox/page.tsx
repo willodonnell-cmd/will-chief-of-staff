@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { AgentRunPriorityInboxCard } from "@/components/inbox/agent-run-priority-inbox-card";
 import { PageIntro } from "@/components/shell/page-intro";
 import {
@@ -271,16 +269,10 @@ export default async function InboxPage() {
         ) : null}
 
         {latestRun?.investmentCommitteeRoutedCount ? (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[1.1rem] border border-line/70 bg-white/70 px-4 py-3">
+          <div className="mt-4 rounded-[1.1rem] border border-line/70 bg-white/70 px-4 py-3">
             <p className="text-sm leading-6 text-text-muted">
               {latestRun.investmentCommitteeRoutedCount} signal{latestRun.investmentCommitteeRoutedCount === 1 ? "" : "s"} routed to Investment Committee and kept out of Priority Inbox.
             </p>
-            <Link
-              href="/investment-committee"
-              className="inline-flex rounded-full border border-line/75 bg-white/82 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white"
-            >
-              Open Investment Committee
-            </Link>
           </div>
         ) : null}
 
