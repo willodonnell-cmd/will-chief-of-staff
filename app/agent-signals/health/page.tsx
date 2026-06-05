@@ -7,6 +7,7 @@ import {
   type AgentRunInboxState,
   type PriorityInboxPageSourceMode
 } from "@/lib/agent-signals/load-priority-inbox-page-data";
+import { getMicrosoftGraphConnectionStatusForCurrentUser } from "@/lib/microsoft-graph/auth";
 
 const STALE_RUN_MS = 48 * 60 * 60 * 1000;
 
@@ -30,7 +31,7 @@ function formatTimestamp(value: string | null | undefined) {
 function sourceModeLabel(sourceMode: PriorityInboxPageSourceMode) {
   switch (sourceMode) {
     case "database":
-      return "Database-backed ChatGPT Agent run";
+      return "Database-backed Agent run";
     case "local":
       return "Local Agent payload fallback";
     case "fixture":
@@ -78,21 +79,24 @@ function HealthStat(props: { label: string; value: string | number }) {
 
 export default async function AgentSignalsHealthPage() {
   const { state, latestRun, latestManualRequest, sourceMode } = await loadPriorityInboxPageData();
+  const microsoftGraphStatus = await getMicrosoftGraphConnectionStatusForCurrentUser();
   const deployedCommitSha = process.env.VERCEL_GIT_COMMIT_SHA?.trim() || null;
   const currentlyReadingDurableData = sourceMode === "database";
   const stale = state === "stale" || isRunStale(latestRun?.completedAt);
+  const teamsCoverage = latestRun?.sourceCoverage?.teams;
 
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageIntro
         eyebrow="Agent Signals"
         title="Agent Signals Health"
-        description="Operational status for the durable ChatGPT Agent Microsoft 365 import path and the Priority Inbox read path."
+        description="Operational status for native Blackhawk Microsoft Graph runs, legacy imports, and the Priority Inbox read path."
       />
 
       <AgentControlsCard
         latestRun={latestRun}
         latestManualRequest={latestManualRequest}
+        microsoftGraphStatus={microsoftGraphStatus}
         sourceMode={sourceMode}
         state={state}
       />
@@ -106,10 +110,19 @@ export default async function AgentSignalsHealthPage() {
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <HealthStat label="Latest run id" value={latestRun?.id ?? "None"} />
+        <HealthStat label="Producer" value={latestRun?.producer === "blackhawk_native" ? "Blackhawk native" : latestRun ? "ChatGPT Agent" : "None"} />
         <HealthStat label="Run status" value={latestRun?.runStatus ?? "None"} />
         <HealthStat label="Produced at" value={formatTimestamp(latestRun?.producedAt)} />
-        <HealthStat label="Completed at" value={formatTimestamp(latestRun?.completedAt)} />
       </section>
+
+      {teamsCoverage?.status === "permission_denied" || teamsCoverage?.status === "unavailable" ? (
+        <section className="rounded-[1.3rem] border border-[rgba(170,102,31,0.35)] bg-[rgba(255,250,236,0.82)] px-4 py-4">
+          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Teams access</p>
+          <p className="mt-2 text-sm leading-6 text-text-muted">
+            Teams is unavailable for the latest Graph run. {teamsCoverage.reason ?? "Chat.Read may require tenant approval or Teams policy changes."}
+          </p>
+        </section>
+      ) : null}
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <HealthStat label="Submitted" value={latestRun?.totalSubmittedSignalCount ?? 0} />

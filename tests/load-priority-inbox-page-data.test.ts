@@ -15,6 +15,7 @@ type PriorityInboxRowWithAgentRun = PriorityInboxRow & {
 
 type FakeAgentSignalRunRow = {
   id: string;
+  producer: "chatgpt_agent" | "blackhawk_native";
   run_status: "failed" | "succeeded";
   tenant_label: string;
   produced_at: string;
@@ -108,6 +109,7 @@ function createRunRow(
 ): FakeAgentSignalRunRow {
   return {
     id: "run-1",
+    producer: "chatgpt_agent",
     run_status: "succeeded",
     tenant_label: "Will O'Donnell",
     produced_at: "2026-06-03T23:07:00Z",

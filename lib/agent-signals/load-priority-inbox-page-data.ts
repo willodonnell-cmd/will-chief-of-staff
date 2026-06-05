@@ -16,7 +16,8 @@ import {
 import {
   loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource,
   type AgentProducedMicrosoft365SignalEnvelope,
-  type AgentProducedMicrosoft365SignalEnvelopeSource
+  type AgentProducedMicrosoft365SignalEnvelopeSource,
+  type Microsoft365SignalProducer
 } from "@/lib/microsoft-signal-intake";
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 import { withSupabaseTimeout } from "@/lib/supabase/request-timeout";
@@ -27,6 +28,7 @@ export type PriorityInboxPageSourceMode = "database" | "local" | "fixture";
 
 type AgentSignalRunRow = {
   id: string;
+  producer: Microsoft365SignalProducer;
   run_status: "failed" | "succeeded";
   tenant_label: string;
   produced_at: string;
@@ -45,6 +47,7 @@ type AgentSignalRunRow = {
 
 export type PriorityInboxLatestRun = {
   id: string;
+  producer: Microsoft365SignalProducer;
   runStatus: "failed" | "succeeded";
   tenantLabel: string;
   producedAt: string;
@@ -83,6 +86,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function mapRun(row: AgentSignalRunRow): PriorityInboxLatestRun {
   return {
     id: row.id,
+    producer: row.producer,
     runStatus: row.run_status,
     tenantLabel: row.tenant_label,
     producedAt: row.produced_at,
@@ -210,6 +214,7 @@ export function buildFallbackPriorityInboxPageData(
 
   const latestRun: PriorityInboxLatestRun = {
     id: "local-dev-fallback",
+    producer: envelope.producer,
     runStatus: envelope.status === "failed" ? "failed" : "succeeded",
     tenantLabel: envelope.tenantLabel,
     producedAt: envelope.producedAt,
@@ -247,7 +252,7 @@ async function loadLatestAgentSignalRun(
   let query = resolved.client
     .from("agent_signal_runs")
     .select(
-      "id, run_status, tenant_label, produced_at, completed_at, sources_checked, source_coverage, total_submitted_signal_count, accepted_signal_count, investment_committee_routed_count, suppressed_meta_admin_count, suppressed_low_signal_count, rejected_invalid_count, error_message, created_at"
+      "id, producer, run_status, tenant_label, produced_at, completed_at, sources_checked, source_coverage, total_submitted_signal_count, accepted_signal_count, investment_committee_routed_count, suppressed_meta_admin_count, suppressed_low_signal_count, rejected_invalid_count, error_message, created_at"
     )
     .eq("user_id", resolved.user.id);
 
