@@ -335,3 +335,32 @@ test("fixture fallback only happens when no durable run exists and no local payl
   assert.equal(result.sourceMode, "fixture");
   assert.equal(result.items[0]?.id, "local-teams-budget-blocker");
 });
+
+test("production never uses local or fixture fallback when no durable run exists", async () => {
+  let fallbackCalls = 0;
+
+  const result = await loadPriorityInboxPageDataWithDeps({
+    env: {
+      ...process.env,
+      NODE_ENV: "production"
+    },
+    resolveAppUser: async () =>
+      createResolvedAppUser({
+        latestRun: null,
+        latestSuccessfulRun: null
+      }),
+    loadFallbackEnvelope: async () => {
+      fallbackCalls += 1;
+      return {
+        envelope: createEnvelope(),
+        source: "local"
+      };
+    }
+  });
+
+  assert.equal(result.sourceMode, "database");
+  assert.equal(result.state, "never_run");
+  assert.equal(result.latestRun, null);
+  assert.deepEqual(result.items, []);
+  assert.equal(fallbackCalls, 0);
+});

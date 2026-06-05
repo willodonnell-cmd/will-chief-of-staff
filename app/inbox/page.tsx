@@ -76,7 +76,7 @@ function stateTitle(state: AgentRunInboxState, sourceMode: PriorityInboxPageSour
       return "Priority Inbox is showing the latest accepted Agent-produced signals.";
     case "never_run":
     default:
-      return "Priority Inbox has not received an Agent run yet.";
+      return "No database-backed Agent run has been received yet.";
   }
 }
 
@@ -120,7 +120,7 @@ function stateDetail(state: AgentRunInboxState, sourceMode: PriorityInboxPageSou
       return "Only signals routed to Priority Inbox are shown here. Investment Committee and meta/admin signals stay out.";
     case "never_run":
     default:
-      return "Priority Inbox is waiting for the scheduled Blackhawk agent to POST a new payload into `/api/agent-signals/import`.";
+      return "Priority Inbox is waiting for the scheduled Blackhawk agent to POST a new payload into `/api/agent-signals/import`. Production does not fall back to local files or fixtures.";
   }
 }
 
