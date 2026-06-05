@@ -21,6 +21,63 @@ Will O'Donnell's Agentic Chief of Staff.
   - require an auth-mapped `users` row
   - remove the bootstrap seed user if it is no longer needed
 
+## Agent signal Priority Inbox import bridge
+
+- The canonical `/inbox` source is now the latest database-backed `agent_signal_runs` batch plus accepted `priority_inbox_items`, with raw/stub provenance stored in `source_items` and audited per-signal outcomes stored in `agent_signals`.
+- The old `.local/agent-signals.json` path is now a dev fallback only. It should not be treated as the canonical Priority Inbox source.
+- The checked-in seeded fixture is no longer a silent default. `/inbox` only uses it in local/dev when `ENABLE_AGENT_SIGNAL_FIXTURE_FALLBACK=true`.
+- This bridge imports ChatGPT Agent-derived Microsoft 365 signal envelopes. It is not full Microsoft Graph OAuth ingestion.
+- Current ingest flow:
+  - scheduled or on-demand Blackhawk ChatGPT agent
+  - ChatGPT Outlook / Calendar / Teams connectors
+  - Blackhawk-generated Microsoft 365 signal envelope
+  - `POST /api/agent-signals/import`
+  - Supabase `agent_signal_runs`, `source_items`, `agent_signals`, and accepted `priority_inbox_items`
+  - Priority Inbox UI
+
+### Importing a payload
+
+Required environment:
+
+- `AGENT_SIGNALS_IMPORT_SECRET`
+- `ENABLE_AGENT_SIGNAL_FIXTURE_FALLBACK=false`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Example:
+
+```bash
+curl -X POST "$APP_URL/api/agent-signals/import" \
+  -H "content-type: application/json" \
+  -H "x-agent-signals-import-secret: $AGENT_SIGNALS_IMPORT_SECRET" \
+  --data-binary @fixtures/chatgpt-agent-microsoft-365-signals.json
+```
+
+Local fixture import:
+
+```bash
+npm run import:agent-signals:fixture
+```
+
+Local Outlook-derived live example import:
+
+```bash
+npm run import:agent-signals:live-example
+```
+
+Local import scripts and `.local/agent-signals.json` are development tools only. They are not the production automation path.
+
+Future Microsoft Graph work should be implemented separately and should populate `source_items` with true provider metadata such as Graph object IDs, thread or conversation IDs, sender and recipient fields, and raw Graph payloads.
+
+## Blackhawk Microsoft 365 signal agent
+
+- The repo now also contains an isolated backend worker scaffold at [src/blackhawk-m365-signal-agent/README.md](/Users/willodonnell/Documents/will-chief-of-staff/src/blackhawk-m365-signal-agent/README.md).
+- This worker is separate from the UI and the current local fixture-based handoff path.
+- It is responsible for:
+  - checking pending manual run requests
+  - collecting Outlook, Calendar, and Teams data through Microsoft Graph
+  - classifying and deduplicating executive signals
+  - importing one validated payload into Blackhawk
+
 ## Outlook Priority Inbox ingestion
 
 - Blackhawk now supports an Outlook-first, read-only Priority Inbox source integration.

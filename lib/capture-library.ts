@@ -52,10 +52,21 @@ export type LibraryTaskStatus = "active" | "completed";
 export type LibraryTaskPriority = "low" | "medium" | "high";
 export type LibraryPriorityFilter = "all" | LibraryTaskPriority;
 export type LibraryTaskCategoryFilter = "all" | string;
+export type LibraryQuickView =
+  | "high-priority"
+  | "waiting-on"
+  | "decisions"
+  | "opportunities"
+  | "meeting-notes"
+  | "needs-cleanup"
+  | "recently-archived";
 export {
   LIBRARY_WORK_TYPE_ORDER,
+  LIBRARY_QUICK_VIEWS,
+  countLibraryItemsForQuickView,
   countLibraryItemsByWorkType,
   getLibraryCaptureType,
+  getLibraryQuickViewDefinition,
   getLibraryItemPriority,
   groupLibraryItemsByWorkType
 } from "@/lib/library-filters";
@@ -309,6 +320,7 @@ export type LibraryWorkTypeGroup = {
 export type LibraryQuery = {
   scope: LibraryScope;
   mode: LibraryBrowseMode;
+  view: LibraryQuickView | null;
   search: string;
   type: LibraryTypeFilter;
   status: LibraryStatusFilter;
@@ -1120,7 +1132,21 @@ function inlineDueCueRank(item: LibraryItemSummary) {
   return 2;
 }
 
-function sortLibraryItems(items: LibraryItemSummary[], scope: LibraryScope) {
+function sortLibraryItems(items: LibraryItemSummary[], query: LibraryQuery) {
+  if (query.view === "recently-archived") {
+    return [...items].sort((left, right) => {
+      const leftArchived = left.archivedAt ? Date.parse(left.archivedAt) : Number.NEGATIVE_INFINITY;
+      const rightArchived = right.archivedAt ? Date.parse(right.archivedAt) : Number.NEGATIVE_INFINITY;
+
+      if (leftArchived !== rightArchived) {
+        return rightArchived - leftArchived;
+      }
+
+      return compareLibraryItemsForExecutiveView(left, right);
+    });
+  }
+
+  const scope = query.scope;
   if (scope === "library") {
     return [...items].sort(compareLibraryItemsForExecutiveView);
   }
@@ -1835,7 +1861,7 @@ export async function listLibraryItems(query: LibraryQuery): Promise<LibraryItem
     .filter((record) => matchesSearch(localLibraryRecordToCaptureRow(record), normalizedSearch))
     .map(mapLocalLibrarySummary);
 
-  return sortLibraryItems(filterLibraryItems([...remoteItems, ...localItems], query), query.scope);
+  return sortLibraryItems(filterLibraryItems([...remoteItems, ...localItems], query), query);
 }
 
 export async function getLibraryItemDetail(captureId: string): Promise<LibraryItemDetail | null> {
@@ -2752,6 +2778,7 @@ export async function listTodayTasks(now = Date.now()): Promise<{
   const tasks = await listLibraryItems({
     scope: "tasks",
     mode: "tasks",
+    view: null,
     search: "",
     type: "task",
     status: "active",

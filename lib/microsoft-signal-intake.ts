@@ -37,6 +37,10 @@ export type Microsoft365SourceCoverage = Partial<
   Record<ChiefOfStaffSignalSource, Microsoft365SourceCoverageEntry>
 >;
 
+export const MICROSOFT_365_SIGNAL_PRODUCERS = ["chatgpt_agent", "blackhawk_native"] as const;
+
+export type Microsoft365SignalProducer = (typeof MICROSOFT_365_SIGNAL_PRODUCERS)[number];
+
 export const LOCAL_MICROSOFT_365_FIXTURE_URL = pathToFileURL(
   join(process.cwd(), "fixtures", "chatgpt-agent-microsoft-365-signals.json")
 );
@@ -48,7 +52,7 @@ export const LOCAL_MICROSOFT_365_AGENT_PAYLOAD_PATH = join(
 );
 
 export type AgentProducedMicrosoft365SignalEnvelope = {
-  producer: "chatgpt_agent";
+  producer: Microsoft365SignalProducer;
   connectorFamily: "microsoft_365";
   producedAt: string;
   tenantLabel: string;
@@ -58,6 +62,8 @@ export type AgentProducedMicrosoft365SignalEnvelope = {
   windowEnd?: string | null;
   sourceCoverage?: Microsoft365SourceCoverage;
   signals: ChiefOfStaffSignal[];
+  manualRunRequestId?: string | null;
+  runSource?: "blackhawk_native_graph" | "external_agent_import" | string | null;
 };
 
 export type AgentProducedMicrosoft365SignalEnvelopeSource = "local" | "fixture";
@@ -283,9 +289,7 @@ export function parseAgentProducedMicrosoft365SignalEnvelope(
     throw new Error("Payload must be an object.");
   }
 
-  if (input.producer !== "chatgpt_agent") {
-    throw new Error("producer must be 'chatgpt_agent'.");
-  }
+  const producer = asEnum(input.producer, MICROSOFT_365_SIGNAL_PRODUCERS, "producer");
 
   if (input.connectorFamily !== "microsoft_365") {
     throw new Error("connectorFamily must be 'microsoft_365'.");
@@ -296,7 +300,7 @@ export function parseAgentProducedMicrosoft365SignalEnvelope(
   }
 
   return {
-    producer: "chatgpt_agent",
+    producer,
     connectorFamily: "microsoft_365",
     producedAt: asIsoTimestamp(input.producedAt, "producedAt"),
     tenantLabel: asNonEmptyString(input.tenantLabel, "tenantLabel"),
@@ -324,7 +328,13 @@ export function parseAgentProducedMicrosoft365SignalEnvelope(
           : asIsoTimestamp(input.windowEnd, "windowEnd"),
     sourceCoverage:
       input.sourceCoverage === undefined ? undefined : parseSourceCoverage(input.sourceCoverage),
-    signals: input.signals.map((signal, index) => parseChiefOfStaffSignal(signal, index))
+    signals: input.signals.map((signal, index) => parseChiefOfStaffSignal(signal, index)),
+    manualRunRequestId:
+      input.manualRunRequestId === undefined
+        ? undefined
+        : asOptionalNullableString(input.manualRunRequestId, "manualRunRequestId"),
+    runSource:
+      input.runSource === undefined ? undefined : asOptionalNullableString(input.runSource, "runSource")
   };
 }
 

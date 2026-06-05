@@ -1,0 +1,77 @@
+{
+  "producer": "chatgpt_agent",
+  "connectorFamily": "microsoft_365",
+  "producedAt": "2026-06-02T21:25:00.000Z",
+  "tenantLabel": "Will O'Donnell Microsoft 365",
+  "sourceCoverage": {
+    "outlook": {
+      "status": "included",
+      "checkedAt": "2026-06-02T21:25:00.000Z",
+      "signalCount": 3,
+      "reason": "Recent Outlook review identified decision, review, and strategic FYI signals."
+    }
+  },
+  "signals": [
+    {
+      "id": "outlook-20260602-grumman-project-island-ficm",
+      "source": "outlook",
+      "signalType": "decision",
+      "attention": "high",
+      "title": "600 Grumman Project Island FICM approval is moving forward",
+      "summary": "Susan Pi says she will approve the $9m Grumman costs. The team is ready to proceed, with a template error corrected around understated carry.",
+      "owner": "Will O'Donnell",
+      "sourceLabel": "Outlook",
+      "occurredAt": "2026-06-02T21:15:57.000Z",
+      "dueAt": null,
+      "sourceUrl": "https://outlook.office365.com/owa/",
+      "actionRequest": "Review whether any response or escalation is needed before or after approval proceeds.",
+      "participants": [
+        "Susan Pi",
+        "Tim Arndt",
+        "Karsten Kallevig",
+        "Will O'Donnell",
+        "Damon Austin"
+      ],
+      "protectedContext": false
+    },
+    {
+      "id": "outlook-20260602-walden-robotics-ic-memo",
+      "source": "outlook",
+      "signalType": "follow_up",
+      "attention": "high",
+      "title": "Walden Robotics Series A IC memo is ready for review",
+      "summary": "The Ventures inbox sent the initial Walden Robotics Series A IC memo and asked Will to review it before scheduling a discussion.",
+      "owner": "Will O'Donnell",
+      "sourceLabel": "Outlook",
+      "occurredAt": "2026-06-02T21:15:46.000Z",
+      "dueAt": null,
+      "sourceUrl": "https://outlook.office365.com/owa/",
+      "actionRequest": "Review the Walden Robotics IC memo and decide whether to schedule a follow-up discussion.",
+      "participants": [
+        "Prologis Ventures Inbox",
+        "Will O'Donnell",
+        "Todd Lewis"
+      ],
+      "protectedContext": false
+    },
+    {
+      "id": "outlook-20260602-terminal-security-offering",
+      "source": "outlook",
+      "signalType": "status",
+      "attention": "medium",
+      "title": "Terminal Security offering may be relevant to Essentials",
+      "summary": "Lisa Costello forwarded a PLDV update after a meeting with Terminal about a new security offering that could become an Essentials opportunity if the product works.",
+      "owner": "PLDV",
+      "sourceLabel": "Outlook",
+      "occurredAt": "2026-06-02T20:18:02.000Z",
+      "dueAt": null,
+      "sourceUrl": "https://outlook.office365.com/owa/",
+      "actionRequest": "Decide whether this should be tracked as an Operations Essentials opportunity or just monitored.",
+      "participants": [
+        "Lisa Costello",
+        "PLDV"
+      ],
+      "protectedContext": false
+    }
+  ]
+}

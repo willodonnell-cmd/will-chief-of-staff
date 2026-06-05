@@ -214,6 +214,13 @@ const defaultDraft: CaptureDraft = {
 const LOCAL_CAPTURE_QUEUE_KEY = "blackhawk.capture-queue.v2";
 const LAST_CAPTURE_TYPE_KEY = "blackhawk.capture.last-type";
 const LEGACY_LAST_PATTERN_KEY = "blackhawk.capture.last-pattern";
+const PRIMARY_CAPTURE_TYPES: ExecutiveCaptureType[] = ["note", "task"];
+const EXECUTIVE_CAPTURE_TYPES: ExecutiveCaptureType[] = ["decision", "opportunity", "waiting_on", "meeting_note"];
+
+const compactSelectorButtonClass =
+  "rounded-full border px-3 py-1.5 text-[0.82rem] font-medium leading-none transition-colors duration-200";
+const compactExecutiveSelectorButtonClass =
+  "rounded-full border px-2.5 py-1.5 text-[0.74rem] font-medium leading-none transition-colors duration-200 whitespace-nowrap";
 
 function emptyInitiativeQueries(): InitiativeQueryMap {
   return {
@@ -371,6 +378,21 @@ function microphoneSupportMessage(error?: string) {
       return "Voice capture was interrupted. Type below and save when ready.";
     default:
       return "Voice capture is unavailable here. Type below and save when ready.";
+  }
+}
+
+function microphonePermissionMessage(error: unknown) {
+  const errorName = error instanceof DOMException ? error.name : "";
+
+  switch (errorName) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "Microphone access is blocked. Enable microphone permission for localhost, then try Capture again.";
+    case "NotFoundError":
+    case "DevicesNotFoundError":
+      return "No microphone was found on this device. Type below and save when ready.";
+    default:
+      return "Microphone access could not be started. Type below and save when ready.";
   }
 }
 
@@ -743,6 +765,7 @@ export function CaptureFlow({
   const [showMeetingDetails, setShowMeetingDetails] = useState(false);
   const [signalContext, setSignalContext] = useState<SignalCaptureContext | null>(null);
   const [initiativeQueries, setInitiativeQueries] = useState<InitiativeQueryMap>(emptyInitiativeQueries());
+  const [microphoneHint, setMicrophoneHint] = useState<string | null>(null);
   const summaryRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const recognitionBaseValueRef = useRef("");
@@ -755,6 +778,12 @@ export function CaptureFlow({
         category.slug.trim().toLowerCase() === "waiting-for" ||
         category.name.trim().toLowerCase() === "waiting for"
     )?.id ?? null;
+  const visibleTaskCategories = waitingOnCategoryId
+    ? categories.filter((category) => category.id !== waitingOnCategoryId)
+    : categories;
+  const visibleCommonCategories = waitingOnCategoryId
+    ? commonCategories.filter((category) => category.id !== waitingOnCategoryId)
+    : commonCategories;
   const selectedTaskCategory = categories.find((category) => category.id === draft.task.categoryId) ?? null;
 
   function setSummaryRef(node: HTMLTextAreaElement | HTMLInputElement | null) {
@@ -809,6 +838,20 @@ export function CaptureFlow({
           }
     );
   }, [waitingOnCategoryId]);
+
+  useEffect(() => {
+    if (!waitingOnCategoryId || draft.captureType !== "task" || draft.task.categoryId !== waitingOnCategoryId) {
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      task: {
+        ...current.task,
+        categoryId: null
+      }
+    }));
+  }, [draft.captureType, draft.task.categoryId, waitingOnCategoryId]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !initialHandoffKey || appliedHandoffRef.current) {
@@ -1185,7 +1228,7 @@ export function CaptureFlow({
     }
   }
 
-  function handleMicrophoneToggle() {
+  async function handleMicrophoneToggle() {
     if (isListening) {
       recognitionRef.current?.stop();
       return;
@@ -1198,12 +1241,30 @@ export function CaptureFlow({
 
     const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
     if (!Recognition) {
+      const message = "Voice capture is unavailable in this browser. Type below and save when ready.";
+      setMicrophoneHint(message);
       setFeedback({
         kind: "status",
-        message: microphoneSupportMessage()
+        message
       });
       summaryRef.current?.focus();
       return;
+    }
+
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (error) {
+        const message = microphonePermissionMessage(error);
+        setMicrophoneHint(message);
+        setFeedback({
+          kind: "status",
+          message
+        });
+        summaryRef.current?.focus();
+        return;
+      }
     }
 
     const recognition = new Recognition();
@@ -1211,6 +1272,7 @@ export function CaptureFlow({
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = "en-US";
+    setMicrophoneHint(null);
 
     recognition.onresult = (event) => {
       const transcript = Array.from(event.results ?? [])
@@ -1225,9 +1287,11 @@ export function CaptureFlow({
     recognition.onerror = (event) => {
       recognitionRef.current = null;
       setIsListening(false);
+      const message = microphoneSupportMessage(event.error);
+      setMicrophoneHint(message);
       setFeedback({
         kind: "status",
-        message: microphoneSupportMessage(event.error)
+        message
       });
       summaryRef.current?.focus();
     };
@@ -1242,18 +1306,23 @@ export function CaptureFlow({
       recognitionRef.current = recognition;
       recognition.start();
       setIsListening(true);
+      const message = `Voice capture is listening. Speak now, then ${submitLabelForCaptureType(
+        draft.captureType
+      )} when the text looks right.`;
+      setMicrophoneHint(message);
       setFeedback({
         kind: "status",
-        message: `Voice capture is listening. Speak now, then ${submitLabelForCaptureType(
-          draft.captureType
-        )} when the text looks right.`
+        message
       });
-    } catch {
+    } catch (error) {
       recognitionRef.current = null;
       setIsListening(false);
+      const message =
+        error instanceof DOMException ? microphonePermissionMessage(error) : microphoneSupportMessage();
+      setMicrophoneHint(message);
       setFeedback({
         kind: "status",
-        message: microphoneSupportMessage()
+        message
       });
       summaryRef.current?.focus();
     }
@@ -1422,46 +1491,76 @@ export function CaptureFlow({
 
       <form onSubmit={handleSubmit} className="grid gap-4 xl:grid-cols-[0.72fr_1.28fr]">
         <section className="flex flex-col gap-5 rounded-[1.85rem] border border-line/75 bg-white/76 p-5 md:p-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleMicrophoneToggle}
-              aria-pressed={isListening}
-              disabled={isPending}
-              className="inline-flex items-center gap-3 rounded-full border border-line/70 bg-white/70 px-3 py-2 text-text disabled:opacity-60"
-            >
-              <CaptureMicrophoneIcon className="h-5 w-5" />
-              <span className="text-sm font-medium">Capture</span>
-            </button>
-            <button
-              type="submit"
-              disabled={isPending}
-              className="inline-flex items-center gap-2 rounded-full bg-text px-4 py-2 text-sm font-medium text-white transition-opacity duration-200 disabled:opacity-60"
-            >
-              {submitLabelForCaptureType(draft.captureType)}
-            </button>
+          <div className="sticky top-4 z-20 -mx-1 rounded-[1.3rem] border border-line/60 bg-[rgba(247,245,240,0.94)] px-3 py-3 shadow-[0_14px_40px_rgba(18,20,26,0.08)] backdrop-blur">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleMicrophoneToggle}
+                aria-pressed={isListening}
+                disabled={isPending}
+                className="inline-flex items-center gap-2 rounded-full border border-line/70 bg-white/78 px-3 py-2 text-text disabled:opacity-60"
+              >
+                <CaptureMicrophoneIcon className="h-4 w-4" />
+                <span className="text-sm font-medium">Capture</span>
+              </button>
+              <button
+                type="submit"
+                disabled={isPending}
+                className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(5,150,105,0.24)] transition-colors duration-200 hover:bg-emerald-500 disabled:opacity-60"
+              >
+                {submitLabelForCaptureType(draft.captureType)}
+              </button>
+            </div>
+            {microphoneHint ? (
+              <p
+                className={cn(
+                  "mt-2 text-sm leading-5",
+                  isListening ? "text-emerald-700" : "text-text-muted"
+                )}
+              >
+                {microphoneHint}
+              </p>
+            ) : null}
           </div>
 
           <div>
             <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">What are you capturing?</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(
-                ["note", "task", "decision", "opportunity", "waiting_on", "meeting_note"] as ExecutiveCaptureType[]
-              ).map((captureType) => (
-                <button
-                  key={captureType}
-                  type="button"
-                  onClick={() => switchCaptureType(captureType)}
-                  className={cn(
-                    "rounded-full border px-4 py-2 text-sm font-medium transition-colors duration-200",
-                    draft.captureType === captureType
-                      ? "border-line bg-text text-white"
-                      : "border-line/75 bg-white/60 text-text-muted hover:text-text"
-                  )}
-                >
-                  {getExecutiveCaptureTypeLabel(captureType)}
-                </button>
-              ))}
+            <div className="mt-3 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {PRIMARY_CAPTURE_TYPES.map((captureType) => (
+                  <button
+                    key={captureType}
+                    type="button"
+                    onClick={() => switchCaptureType(captureType)}
+                    className={cn(
+                      compactSelectorButtonClass,
+                      draft.captureType === captureType
+                        ? "border-line bg-text text-white"
+                        : "border-line/75 bg-white/60 text-text-muted hover:text-text"
+                    )}
+                  >
+                    {getExecutiveCaptureTypeLabel(captureType)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1">
+                {EXECUTIVE_CAPTURE_TYPES.map((captureType) => (
+                  <button
+                    key={captureType}
+                    type="button"
+                    onClick={() => switchCaptureType(captureType)}
+                    className={cn(
+                      compactExecutiveSelectorButtonClass,
+                      draft.captureType === captureType
+                        ? "border-line bg-text text-white"
+                        : "border-line/75 bg-white/60 text-text-muted hover:text-text"
+                    )}
+                  >
+                    {getExecutiveCaptureTypeLabel(captureType)}
+                  </button>
+                ))}
+              </div>
             </div>
             {switchNotice ? (
               <p className="mt-3 rounded-[1rem] border border-line/70 bg-white/72 px-4 py-3 text-sm leading-6 text-text-muted">
@@ -1469,7 +1568,7 @@ export function CaptureFlow({
               </p>
             ) : null}
           </div>
-
+          
           {currentPriority() ? (
             <div>
               <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Priority</p>
@@ -1480,7 +1579,7 @@ export function CaptureFlow({
                     type="button"
                     onClick={() => updatePriority(priority)}
                     className={cn(
-                      "rounded-full border px-4 py-2 text-sm font-medium transition",
+                      compactSelectorButtonClass,
                       currentPriority() === priority
                         ? "border-line bg-[rgb(var(--color-shell))] text-white"
                         : "border-line/75 bg-white/60 text-text-muted hover:text-text"
@@ -1497,13 +1596,13 @@ export function CaptureFlow({
             <div>
               <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Category</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {commonCategories.map((category) => (
+                {visibleCommonCategories.map((category) => (
                   <button
                     key={category.id}
                     type="button"
                     onClick={() => updateTask("categoryId", category.id)}
                     className={cn(
-                      "rounded-full border px-4 py-2 text-sm font-medium transition",
+                      compactSelectorButtonClass,
                       draft.task.categoryId === category.id
                         ? "border-line bg-[rgb(var(--color-shell))] text-white"
                         : "border-line/75 bg-white/60 text-text-muted hover:text-text"
@@ -1515,7 +1614,10 @@ export function CaptureFlow({
                 <button
                   type="button"
                   onClick={() => setShowMoreCategories((current) => !current)}
-                  className="rounded-full border border-line/75 bg-white/60 px-4 py-2 text-sm font-medium text-text-muted transition hover:text-text"
+                  className={cn(
+                    compactSelectorButtonClass,
+                    "border-line/75 bg-white/60 text-text-muted hover:text-text"
+                  )}
                 >
                   More
                 </button>
@@ -1527,7 +1629,7 @@ export function CaptureFlow({
                   className="mt-3 w-full rounded-[1rem] border border-line/75 bg-white/78 px-4 py-3 text-sm text-text outline-none"
                 >
                   <option value="">Leave uncategorized for now</option>
-                  {categories.map((category) => (
+                  {visibleTaskCategories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
                     </option>
@@ -1543,21 +1645,21 @@ export function CaptureFlow({
           ) : null}
 
           {draft.captureType === "waiting_on" ? (
-            <div className="rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
+            <div className="rounded-[1.2rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-3">
               <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Category</p>
-              <p className="mt-3 text-sm text-text-muted">
-                Waiting On captures stay on the existing task track and default to the Waiting For category when it exists.
+              <p className="mt-2 text-sm text-text-muted">
+                Waiting On captures stay on the task track and use the underlying waiting-on category automatically.
               </p>
             </div>
           ) : null}
 
           {signalContext ? (
-            <div className="rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
+            <div className="rounded-[1.2rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-3">
               <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">
                 {signalContext.heading}
               </p>
-              <p className="mt-3 text-sm font-medium text-text">{signalContext.signalTitle}</p>
-              <div className="mt-3 space-y-2 text-sm leading-6 text-text-muted">
+              <p className="mt-2 text-sm font-medium text-text">{signalContext.signalTitle}</p>
+              <div className="mt-2 space-y-2 text-sm leading-6 text-text-muted">
                 {signalContext.entries.map((entry) => (
                   <p key={`${entry.label}-${entry.value}`} className="break-words">
                     <span className="font-medium text-text">{entry.label}:</span>{" "}
@@ -1576,16 +1678,16 @@ export function CaptureFlow({
                   </p>
                 ))}
               </div>
-              <p className="mt-3 text-sm text-text-muted">
+              <p className="mt-2 text-sm text-text-muted">
                 This context is here to guide the draft. You still decide what gets saved.
               </p>
             </div>
           ) : null}
 
-          <div className="rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-4">
+          <div className="rounded-[1.2rem] border border-line/70 bg-[rgba(255,255,255,0.58)] p-3">
             <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">Context</p>
-            <p className="mt-3 text-sm text-text-muted">{inheritedContext.name}</p>
-            <p className="mt-2 text-sm text-text-muted">{inheritedContext.detail}</p>
+            <p className="mt-2 text-sm text-text-muted">{inheritedContext.name}</p>
+            <p className="mt-1.5 text-sm text-text-muted">{inheritedContext.detail}</p>
           </div>
 
           <div className="mt-auto">
@@ -1601,7 +1703,7 @@ export function CaptureFlow({
                   type="button"
                   onClick={() => updatePrivacy(privacy)}
                   className={cn(
-                    "rounded-full border px-4 py-2 text-sm font-medium transition-colors duration-200",
+                    compactSelectorButtonClass,
                     draft.privacy === privacy
                       ? privacy === "protected" || privacy === "hybrid"
                         ? "border-accent-red/35 bg-[rgba(125,35,31,0.1)] text-text"

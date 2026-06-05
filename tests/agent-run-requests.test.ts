@@ -381,6 +381,15 @@ test("UI disables the button while a manual request is active", async () => {
   assert.equal(inactiveState.label, "Run Agent Now");
 });
 
+test("UI marks manual runs unavailable when the schema is missing", () => {
+  const unavailableState = getAgentRunRequestButtonState(null, {
+    available: false
+  });
+
+  assert.equal(unavailableState.disabled, true);
+  assert.equal(unavailableState.label, "Agent run unavailable");
+});
+
 test("create route returns the created manual request summary", async () => {
   const memory = createMemoryRepository();
 

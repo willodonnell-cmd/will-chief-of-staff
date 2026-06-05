@@ -22,7 +22,7 @@ export type AgentHandoffSourceCoverageDetail = {
 
 export type AgentHandoffSourceStatus = {
   available: boolean;
-  mode: "local" | "fixture" | "missing";
+  mode: "database" | "local" | "fixture" | "missing";
   producer: string | null;
   connectorFamily: string | null;
   producedAt: string | null;
@@ -57,7 +57,7 @@ type AgentEnvelopeStatusInput = {
         sourceCoverage?: Microsoft365SourceCoverage;
       })
     | null;
-  source?: AgentProducedMicrosoft365SignalEnvelopeSource | "missing" | null;
+  source?: AgentProducedMicrosoft365SignalEnvelopeSource | "database" | "missing" | null;
   now?: Date | string | number;
 };
 
@@ -187,7 +187,13 @@ function formatCoverageSummary(
 
 export function deriveAgentHandoffSourceStatus(input: AgentEnvelopeStatusInput): AgentHandoffSourceStatus {
   const envelope = input.envelope ?? null;
-  const mode: AgentHandoffSourceStatus["mode"] = envelope ? (input.source === "fixture" ? "fixture" : "local") : "missing";
+  const mode: AgentHandoffSourceStatus["mode"] = envelope
+    ? input.source === "fixture"
+      ? "fixture"
+      : input.source === "database"
+        ? "database"
+        : "local"
+    : "missing";
   const signalCountsBySource = {
     outlook: 0,
     calendar: 0,
@@ -260,6 +266,14 @@ export function deriveAgentHandoffSourceStatus(input: AgentEnvelopeStatusInput):
   } else if (mode === "fixture") {
     summaryParts.push("fixture fallback");
     summaryParts.push("not live data");
+  } else if (mode === "database") {
+    summaryParts.push("database import");
+
+    if (ageLabel) {
+      summaryParts.push(`produced ${ageLabel}`);
+    } else {
+      summaryParts.push("freshness unknown");
+    }
   } else {
     summaryParts.push("local handoff");
 

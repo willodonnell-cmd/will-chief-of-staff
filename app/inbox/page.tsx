@@ -6,6 +6,7 @@ import {
   type AgentRunInboxState,
   type PriorityInboxPageSourceMode
 } from "@/lib/agent-signals/load-priority-inbox-page-data";
+import { getMicrosoftGraphConnectionStatusForCurrentUser } from "@/lib/microsoft-graph/auth";
 import type { PriorityInboxItem } from "@/lib/priority-inbox";
 
 const SOURCE_ORDER = [
@@ -119,14 +120,14 @@ function stateDetail(state: AgentRunInboxState, sourceMode: PriorityInboxPageSou
       return "Only signals routed to Priority Inbox are shown here. Investment Committee and meta/admin signals stay out.";
     case "never_run":
     default:
-      return "Priority Inbox is waiting for the scheduled Blackhawk agent to POST a new payload into `/api/agent-signals/import`. Production does not fall back to local files or fixtures.";
+      return "Priority Inbox is waiting for a native Blackhawk Microsoft Graph run or a legacy import payload. Production does not fall back to local files or fixtures.";
   }
 }
 
 function sourcePanelLabel(sourceMode: PriorityInboxPageSourceMode) {
   switch (sourceMode) {
     case "database":
-      return "Database-backed ChatGPT Agent run";
+      return "Database-backed Agent run";
     case "local":
       return "Local Agent payload fallback";
     case "fixture":
@@ -150,7 +151,10 @@ function activeCount(items: PriorityInboxItem[]) {
 }
 
 export default async function InboxPage() {
-  const { state, latestRun, latestManualRequest, items, sourceMode } = await loadPriorityInboxPageData();
+  const { state, latestRun, latestManualRequest, manualRunRequestsAvailable, items, sourceMode } =
+    await loadPriorityInboxPageData();
+  const microsoftGraphStatus = await getMicrosoftGraphConnectionStatusForCurrentUser();
+  const teamsCoverage = latestRun?.sourceCoverage?.teams;
   const bySource = SOURCE_ORDER.map((source) => ({
     ...source,
     items: items.filter((item) => item.source === source.id)
@@ -167,9 +171,19 @@ export default async function InboxPage() {
       <AgentControlsCard
         latestRun={latestRun}
         latestManualRequest={latestManualRequest}
+        manualRunRequestsAvailable={manualRunRequestsAvailable}
+        microsoftGraphStatus={microsoftGraphStatus}
         sourceMode={sourceMode}
         state={state}
       />
+
+      {teamsCoverage?.status === "permission_denied" || teamsCoverage?.status === "unavailable" ? (
+        <section className="rounded-[1.2rem] border border-[rgba(170,102,31,0.35)] bg-[rgba(255,250,236,0.82)] px-4 py-3">
+          <p className="text-sm leading-6 text-text-muted">
+            Teams was not available in the latest Microsoft Graph run. {teamsCoverage.reason ?? "Chat.Read may require tenant approval or Teams policy changes."}
+          </p>
+        </section>
+      ) : null}
 
       <section className="grid gap-3 sm:grid-cols-3">
         {bySource.map((group) => (

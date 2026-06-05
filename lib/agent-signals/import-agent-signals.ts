@@ -23,6 +23,7 @@ import {
 import {
   parseAgentProducedMicrosoft365SignalEnvelope,
   type AgentProducedMicrosoft365SignalEnvelope,
+  type Microsoft365SignalProducer,
   type Microsoft365SourceCoverage
 } from "@/lib/microsoft-signal-intake";
 import { formatPriorityInboxTimestamp, type PriorityInboxSourceCandidate } from "@/lib/priority-inbox";
@@ -69,7 +70,7 @@ export type SourceItemUpsertRow = {
 
 export type AgentSignalRunInsertRow = {
   user_id: string;
-  producer: "chatgpt_agent";
+  producer: Microsoft365SignalProducer;
   connector_family: "microsoft_365";
   agent_run_request_id?: string | null;
   tenant_label: string;
@@ -358,7 +359,11 @@ function extractRunDraftFromInvalidPayload(
   importedAt: string,
   errorMessage: string
 ): AgentSignalRunInsertRow | null {
-  if (!isRecord(payload) || payload.producer !== "chatgpt_agent" || payload.connectorFamily !== "microsoft_365") {
+  if (
+    !isRecord(payload) ||
+    (payload.producer !== "chatgpt_agent" && payload.producer !== "blackhawk_native") ||
+    payload.connectorFamily !== "microsoft_365"
+  ) {
     return null;
   }
 
@@ -369,7 +374,7 @@ function extractRunDraftFromInvalidPayload(
 
   return {
     user_id: BOOTSTRAP_USER_ID,
-    producer: "chatgpt_agent",
+    producer: payload.producer,
     connector_family: "microsoft_365",
     tenant_label: tenantLabel,
     run_status: "failed",
@@ -765,7 +770,7 @@ export async function importAgentSignals(
 
   const runDraft: AgentSignalRunInsertRow = {
     user_id: repository.userId,
-    producer: "chatgpt_agent",
+    producer: envelope.producer,
     connector_family: "microsoft_365",
     agent_run_request_id: attachableManualRunRequestId,
     tenant_label: envelope.tenantLabel,
@@ -785,7 +790,10 @@ export async function importAgentSignals(
     error_message: envelope.status === "failed" ? "Agent reported a failed Microsoft 365 run." : null,
     raw_metadata: {
       status: envelope.status ?? "succeeded",
-      manualRunRequestId: attachableManualRunRequestId
+      manualRunRequestId: attachableManualRunRequestId,
+      runSource:
+        envelope.runSource ??
+        (envelope.producer === "blackhawk_native" ? "blackhawk_native_graph" : "external_agent_import")
     }
   };
 

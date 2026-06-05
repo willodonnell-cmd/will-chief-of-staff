@@ -1,0 +1,38 @@
+import { InvestmentCommitteeWorkspace } from "@/components/investment-committee/investment-committee-workspace";
+import { PageIntro } from "@/components/shell/page-intro";
+import { getInvestmentCommitteePageData } from "@/lib/investment-committee";
+
+type InvestmentCommitteePageProps = {
+  searchParams: Promise<{
+    notice?: string;
+    error?: string;
+  }>;
+};
+
+export default async function InvestmentCommitteePage({ searchParams }: InvestmentCommitteePageProps) {
+  const [{ notice, error }, pageData] = await Promise.all([searchParams, getInvestmentCommitteePageData()]);
+
+  if (!pageData) {
+    return (
+      <div className="space-y-6 lg:space-y-8">
+        <PageIntro
+          eyebrow="Investment Committee"
+          title="Investment Committee"
+          description="Current IC and Energy IC memo set."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 lg:space-y-8">
+      <PageIntro
+        eyebrow="Investment Committee"
+        title="Investment Committee"
+        description="Current IC and Energy IC memo set."
+      />
+
+      <InvestmentCommitteeWorkspace data={pageData} notice={notice} error={error} />
+    </div>
+  );
+}

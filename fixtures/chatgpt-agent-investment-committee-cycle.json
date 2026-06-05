@@ -1,0 +1,94 @@
+{
+  "producer": "chatgpt_agent",
+  "workflow": "investment_committee_weekly_cycle",
+  "producedAt": "2026-06-01T15:15:00.000Z",
+  "tenantLabel": "O'Donnell, Will",
+  "cycle": {
+    "weekOf": "2026-06-01",
+    "meetingDate": "2026-06-01T08:30:00-07:00",
+    "packageEmailSubject": "IC Memos for Monday, June 1",
+    "packageEmailUrl": "https://outlook.office365.com/owa/?ItemID=AAMkADA3ODE4ZDc3LTg0YmMtNDY4ZC04ZTJiLTQzMzUxNGY3Yzc3OABGAAAAAACB1INsVwJkQI5P1aKjzTUBBwBXl7tOU2hYTovhbE0qrVSlAAAC10zKAAAs9VGKuw59TY08XWtRkvk1AAkB1g2CAAA%3D&exvsurl=1&viewmodel=ReadMessageItem",
+    "boxFolderUrl": "https://prologis.box.com/s/4qcb1o3jcz8ha4qlj6fbfvl2wudd7rw5",
+    "questionsDueAt": "2026-06-05T17:00:00-07:00",
+    "resetAt": "2026-06-02T23:59:59-07:00"
+  },
+  "deals": [
+    {
+      "id": "600-grumman-project-island",
+      "title": "600 Grumman Project Island",
+      "memoUrl": null,
+      "peerQuestionSummary": "Committee Q&A traffic is active around the early works package and presenting-team follow-up.",
+      "answerSummary": "The presenting team compiled a Q&A summary for committee review.",
+      "threads": [
+        {
+          "id": "project-island-thread",
+          "subject": "RE: 600 Grumman - Project Island - IICM",
+          "sender": "Presenting deal team",
+          "kind": "question",
+          "occurredAt": "2026-05-30T02:12:32Z",
+          "sourceUrl": "https://outlook.office365.com/owa/?ItemID=AAMkADA3ODE4ZDc3LTg0YmMtNDY4ZC04ZTJiLTQzMzUxNGY3Yzc3OABGAAAAAACB1INsVwJkQI5P1aKjzTUBBwBXl7tOU2hYTovhbE0qrVSlAAAC10zKAAAs9VGKuw59TY08XWtRkvk1AAkB1g4%2BAAA%3D&exvsurl=1&viewmodel=ReadMessageItem",
+          "summary": "The Project Island IICM thread stayed active on the committee distribution list. The deal team appears to own the responses.",
+          "mentionsWill": false
+        },
+        {
+          "id": "project-island-qa",
+          "subject": "Q&A Summary - 600 Grumman",
+          "sender": "Presenting deal team",
+          "kind": "answer",
+          "occurredAt": "2026-06-01T01:21:48Z",
+          "sourceUrl": "https://outlook.office365.com/owa/?ItemID=AAMkADA3ODE4ZDc3LTg0YmMtNDY4ZC04ZTJiLTQzMzUxNGY3Yzc3OABGAAAAAACB1INsVwJkQI5P1aKjzTUBBwBXl7tOU2hYTovhbE0qrVSlAAAC10zKAAAs9VGKuw59TY08XWtRkvk1AAkB1g5hAAA%3D&exvsurl=1&viewmodel=ReadMessageItem",
+          "summary": "A Q&A summary circulated with committee questions and responses for the early works package.",
+          "mentionsWill": false
+        }
+      ]
+    },
+    {
+      "id": "brownsburg",
+      "title": "Brownsburg",
+      "memoUrl": null,
+      "peerQuestionSummary": "Peer committee questions centered on underwriting and standard IC review points.",
+      "answerSummary": "A Brownsburg Q&A summary compiled the presenting team’s responses.",
+      "threads": [
+        {
+          "id": "brownsburg-memo",
+          "subject": "RE: Brownsburg Land Acquisition + Horizontal Development IC Memo",
+          "sender": "Presenting deal team",
+          "kind": "package",
+          "occurredAt": "2026-05-30T06:43:30Z",
+          "sourceUrl": "https://outlook.office365.com/owa/?ItemID=AAMkADA3ODE4ZDc3LTg0YmMtNDY4ZC04ZTJiLTQzMzUxNGY3Yzc3OABGAAAAAACB1INsVwJkQI5P1aKjzTUBBwBXl7tOU2hYTovhbE0qrVSlAAAC10zKAAAs9VGKuw59TY08XWtRkvk1AAkB1g5FAAA%3D&exvsurl=1&viewmodel=ReadMessageItem",
+          "summary": "The Brownsburg IC memo circulated to the committee for review.",
+          "mentionsWill": false
+        },
+        {
+          "id": "brownsburg-qa",
+          "subject": "Q&A Summary - Brownsburg Land Acquisition + Horizontal Development",
+          "sender": "Presenting deal team",
+          "kind": "answer",
+          "occurredAt": "2026-06-01T02:00:14Z",
+          "sourceUrl": "https://outlook.office365.com/owa/?ItemID=AAMkADA3ODE4ZDc3LTg0YmMtNDY4ZC04ZTJiLTQzMzUxNGY3Yzc3OABGAAAAAACB1INsVwJkQI5P1aKjzTUBBwBXl7tOU2hYTovhbE0qrVSlAAAC10zKAAAs9VGKuw59TY08XWtRkvk1AAkB1g5jAAA%3D&exvsurl=1&viewmodel=ReadMessageItem",
+          "summary": "A Brownsburg Q&A summary compiled committee questions and the presenting team’s responses.",
+          "mentionsWill": false
+        }
+      ]
+    },
+    {
+      "id": "hollister-1",
+      "title": "Hollister 1",
+      "memoUrl": null,
+      "peerQuestionSummary": "A response packet references Will’s submitted question and the committee follow-up.",
+      "answerSummary": "The presenting team sent the compiled response packet after IC review.",
+      "threads": [
+        {
+          "id": "hollister-response",
+          "subject": "Q+A Responses - Hollister 1 ROFO Notice and Future Disposition",
+          "sender": "Presenting deal team",
+          "kind": "answer",
+          "occurredAt": "2026-06-01T14:13:19Z",
+          "sourceUrl": "https://outlook.office365.com/owa/?ItemID=AAMkADA3ODE4ZDc3LTg0YmMtNDY4ZC04ZTJiLTQzMzUxNGY3Yzc3OABGAAAAAACB1INsVwJkQI5P1aKjzTUBBwBXl7tOU2hYTovhbE0qrVSlAAAC10zKAAAs9VGKuw59TY08XWtRkvk1AAkB1g57AAA%3D&exvsurl=1&viewmodel=ReadMessageItem",
+          "summary": "The Hollister ROFO response packet references a question from Will O'Donnell and provides the compiled response set.",
+          "mentionsWill": true
+        }
+      ]
+    }
+  ]
+}

@@ -137,6 +137,22 @@ export function sanitizeAgentRunFailureMessage(value: string | null | undefined)
   return normalized.slice(0, 240);
 }
 
+export function isAgentRunRequestsSchemaUnavailableError(error: unknown) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("could not find the table 'public.agent_run_requests'") ||
+    normalized.includes('relation "public.agent_run_requests" does not exist') ||
+    normalized.includes("relation 'public.agent_run_requests' does not exist")
+  );
+}
+
 export function getEffectiveAgentRunRequestStatus(
   row: Pick<AgentRunRequestRow, "status" | "expires_at">,
   now = Date.now()
@@ -179,7 +195,19 @@ export function mapPendingAgentRunRequest(row: AgentRunRequestRow, now = Date.no
   };
 }
 
-export function getAgentRunRequestButtonState(request: ManualAgentRunRequest | null) {
+export function getAgentRunRequestButtonState(
+  request: ManualAgentRunRequest | null,
+  options?: {
+    available?: boolean;
+  }
+) {
+  if (options?.available === false) {
+    return {
+      disabled: true,
+      label: "Agent run unavailable"
+    };
+  }
+
   if (request?.isActive) {
     return {
       disabled: true,
@@ -210,7 +238,16 @@ export function getAgentRunRequestStatusLabel(status: AgentRunRequestStatus) {
   }
 }
 
-export function getAgentRunRequestStatusDetail(request: ManualAgentRunRequest | null) {
+export function getAgentRunRequestStatusDetail(
+  request: ManualAgentRunRequest | null,
+  options?: {
+    available?: boolean;
+  }
+) {
+  if (options?.available === false) {
+    return "Manual ChatGPT Agent runs are unavailable in this environment until the agent_run_requests Supabase migration is applied.";
+  }
+
   if (!request) {
     return "No manual ChatGPT Agent run request has been created yet.";
   }
