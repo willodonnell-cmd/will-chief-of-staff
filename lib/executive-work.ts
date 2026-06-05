@@ -88,6 +88,8 @@ export const EXECUTIVE_SIGNAL_ORIGINS = [
 ] as const;
 
 export type ExecutiveSignalOrigin = (typeof EXECUTIVE_SIGNAL_ORIGINS)[number];
+export const EXECUTIVE_ROUTING_CATEGORIES = ["IC"] as const;
+export type ExecutiveRoutingCategory = (typeof EXECUTIVE_ROUTING_CATEGORIES)[number];
 
 export type ExecutiveSignalStatus = string;
 
@@ -103,6 +105,8 @@ export type ExecutiveSignal = {
   work_type: ExecutiveWorkType;
   priority?: ExecutivePriority | null;
   category?: string | null;
+  routing_category?: ExecutiveRoutingCategory | null;
+  category_label?: string | null;
   status?: ExecutiveSignalStatus | null;
   related_persons?: string[];
   related_companies?: string[];
@@ -114,6 +118,7 @@ export type ExecutiveSignal = {
   delegated_to?: string | null;
   waiting_on?: string | null;
   due_at?: string | null;
+  requires_direct_will_action?: boolean | null;
   confidence?: number | null;
   evidence_snippets?: string[];
   href?: string | null;

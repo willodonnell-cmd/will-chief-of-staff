@@ -1,5 +1,6 @@
 import type { ChiefOfStaffSignal } from "@/lib/chief-of-staff-signal";
 import type { AgentProducedMicrosoft365SignalEnvelopeSource } from "@/lib/microsoft-signal-intake";
+import { mapChiefOfStaffSignalToExecutiveSignal } from "@/lib/executive-work-adapters";
 
 const CONNECTOR_HEALTH_DIRECT_PHRASES = [
   "could not be inspected",
@@ -153,4 +154,65 @@ export function isConnectorHealthSignal(signal: ChiefOfStaffSignal) {
   return normalizedContextFields.some((field) =>
     includesAnyTerm(field, CONNECTOR_HEALTH_SOURCE_LINKED_ISSUE_TERMS)
   );
+}
+
+export type PriorityInboxSignalView = "default" | "ic";
+
+export type PriorityInboxSignalRoutingResult = {
+  defaultSignals: ChiefOfStaffSignal[];
+  icSignals: ChiefOfStaffSignal[];
+  diagnostics: ChiefOfStaffSignal[];
+  routedRoutineIcCount: number;
+  directWillActionIcCount: number;
+};
+
+function isInvestmentCommitteeRoutedSignal(signal: ChiefOfStaffSignal) {
+  const executiveSignal = mapChiefOfStaffSignalToExecutiveSignal(signal);
+
+  return {
+    isIc:
+      signal.category === "IC" ||
+      executiveSignal.routing_category === "IC" ||
+      executiveSignal.category_label === "IC",
+    requiresDirectWillAction: executiveSignal.requires_direct_will_action === true
+  };
+}
+
+export function derivePriorityInboxSignalRouting(
+  signals: ChiefOfStaffSignal[]
+): PriorityInboxSignalRoutingResult {
+  const defaultSignals: ChiefOfStaffSignal[] = [];
+  const icSignals: ChiefOfStaffSignal[] = [];
+  const diagnostics: ChiefOfStaffSignal[] = [];
+  let routedRoutineIcCount = 0;
+  let directWillActionIcCount = 0;
+
+  for (const signal of signals) {
+    if (isConnectorHealthSignal(signal)) {
+      diagnostics.push(signal);
+      continue;
+    }
+
+    const icRouting = isInvestmentCommitteeRoutedSignal(signal);
+    if (!icRouting.isIc) {
+      defaultSignals.push(signal);
+      continue;
+    }
+
+    icSignals.push(signal);
+
+    if (icRouting.requiresDirectWillAction) {
+      directWillActionIcCount += 1;
+    }
+
+    routedRoutineIcCount += 1;
+  }
+
+  return {
+    defaultSignals,
+    icSignals,
+    diagnostics,
+    routedRoutineIcCount,
+    directWillActionIcCount
+  };
 }

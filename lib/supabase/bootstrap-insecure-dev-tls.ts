@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * Corporate SSL inspection often breaks Node’s default HTTPS trust chain.
  * When SUPABASE_DEV_ALLOW_INSECURE_TLS=true in .env.local, relax verification
