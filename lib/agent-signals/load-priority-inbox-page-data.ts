@@ -1,5 +1,10 @@
 import { mapPriorityInboxRow, type PriorityInboxRow } from "@/lib/priority-inbox-store";
 import {
+  mapAgentRunRequest,
+  type AgentRunRequestRow,
+  type ManualAgentRunRequest
+} from "@/lib/agent-run-requests";
+import {
   formatPriorityInboxTimestamp,
   type PriorityInboxItem,
   type PriorityInboxSourceCandidate
@@ -58,6 +63,7 @@ export type PriorityInboxLatestRun = {
 export type PriorityInboxPageData = {
   state: AgentRunInboxState;
   latestRun: PriorityInboxLatestRun | null;
+  latestManualRequest: ManualAgentRunRequest | null;
   items: PriorityInboxItem[];
   sourceMode: PriorityInboxPageSourceMode;
 };
@@ -222,6 +228,7 @@ export function buildFallbackPriorityInboxPageData(
   return {
     state: deriveState(latestRun),
     latestRun,
+    latestManualRequest: null,
     items,
     sourceMode: source
   };
@@ -257,6 +264,43 @@ async function loadLatestAgentSignalRun(
   );
 }
 
+async function expireManualRunRequests(
+  resolved: NonNullable<Awaited<ReturnType<typeof resolveCurrentAppUser>>>,
+  now: string
+) {
+  await withSupabaseTimeout(
+    resolved.client
+      .from("agent_run_requests")
+      .update({
+        status: "expired",
+        completed_at: now
+      })
+      .eq("user_id", resolved.user.id)
+      .in("status", ["requested", "claimed"])
+      .lt("expires_at", now)
+  );
+}
+
+async function loadLatestManualRunRequest(
+  resolved: NonNullable<Awaited<ReturnType<typeof resolveCurrentAppUser>>>,
+  now: string
+) {
+  await expireManualRunRequests(resolved, now);
+
+  return await withSupabaseTimeout(
+    resolved.client
+      .from("agent_run_requests")
+      .select(
+        "id, user_id, request_type, status, requested_at, claimed_at, completed_at, expires_at, agent_signal_run_id, requested_by, request_context, error_message, created_at, updated_at"
+      )
+      .eq("user_id", resolved.user.id)
+      .order("requested_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<AgentRunRequestRow>()
+  );
+}
+
 export async function loadPriorityInboxPageDataWithDeps(
   deps: LoadPriorityInboxPageDataDeps = {}
 ): Promise<PriorityInboxPageData> {
@@ -284,21 +328,34 @@ export async function loadPriorityInboxPageDataWithDeps(
     return {
       state: "never_run",
       latestRun: null,
+      latestManualRequest: null,
       items: [],
       sourceMode: "database"
     };
   }
 
+  const now = new Date().toISOString();
+  const latestManualRequestResponse = await loadLatestManualRunRequest(resolved, now);
+  const latestManualRequest =
+    latestManualRequestResponse.error || !latestManualRequestResponse.data
+      ? null
+      : mapAgentRunRequest(latestManualRequestResponse.data, Date.parse(now));
+
   const latestRunResponse = await loadLatestAgentSignalRun(resolved);
   if (latestRunResponse.error || !latestRunResponse.data) {
     const devFallback = await loadDevFallback();
     if (devFallback) {
-      return buildFallbackPriorityInboxPageData(devFallback.envelope, devFallback.source);
+      const fallback = buildFallbackPriorityInboxPageData(devFallback.envelope, devFallback.source);
+      return {
+        ...fallback,
+        latestManualRequest
+      };
     }
 
     return {
       state: "never_run",
       latestRun: null,
+      latestManualRequest,
       items: [],
       sourceMode: "database"
     };
@@ -313,6 +370,7 @@ export async function loadPriorityInboxPageDataWithDeps(
     return {
       state: deriveState(latestRun),
       latestRun,
+      latestManualRequest,
       items: [],
       sourceMode: "database"
     };
@@ -334,6 +392,7 @@ export async function loadPriorityInboxPageDataWithDeps(
   return {
     state: deriveState(latestRun),
     latestRun,
+    latestManualRequest,
     items: itemResponse.error ? [] : (itemResponse.data ?? []).map(mapPriorityInboxRow),
     sourceMode: "database"
   };

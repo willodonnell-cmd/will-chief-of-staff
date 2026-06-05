@@ -13,6 +13,7 @@ import {
   type AgentSignalsImportRepository,
   type SourceItemUpsertRow
 } from "../lib/agent-signals/import-agent-signals";
+import type { AgentRunRequestRow, AgentRunRequestsRepository } from "../lib/agent-run-requests";
 import { handleAgentSignalsImportRequest } from "../lib/agent-signals/import-route";
 import type { AgentProducedMicrosoft365SignalEnvelope } from "../lib/microsoft-signal-intake";
 
@@ -234,6 +235,79 @@ function buildMemoryRepository() {
   };
 }
 
+function buildMemoryRequestRepository(seed: AgentRunRequestRow[] = []) {
+  const rows = new Map(seed.map((row) => [row.id, { ...row }]));
+
+  const repository: AgentRunRequestsRepository = {
+    async create(row) {
+      const created: AgentRunRequestRow = {
+        id: "request-created",
+        created_at: row.requested_at,
+        updated_at: row.requested_at,
+        ...row
+      };
+      rows.set(created.id, created);
+      return created;
+    },
+    async update(requestId, row) {
+      const existing = rows.get(requestId);
+      if (!existing) {
+        return null;
+      }
+
+      const updated = {
+        ...existing,
+        ...row,
+        updated_at: (row.completed_at ?? row.claimed_at ?? existing.updated_at) as string
+      };
+      rows.set(requestId, updated);
+      return updated;
+    },
+    async findById(requestId) {
+      return rows.get(requestId) ?? null;
+    },
+    async findLatestByUser() {
+      return null;
+    },
+    async findActiveByUser() {
+      return null;
+    },
+    async listPending() {
+      return [];
+    },
+    async expire() {
+      return 0;
+    }
+  };
+
+  return {
+    repository,
+    rows
+  };
+}
+
+function createManualRequestRow(overrides: Partial<AgentRunRequestRow> = {}): AgentRunRequestRow {
+  return {
+    id: "request-1",
+    user_id: "user-1",
+    request_type: "manual",
+    status: "requested",
+    requested_at: "2026-06-04T16:00:00Z",
+    claimed_at: null,
+    completed_at: null,
+    expires_at: "2099-06-04T16:30:00Z",
+    agent_signal_run_id: null,
+    requested_by: "Will O'Donnell",
+    request_context: {
+      requestedFrom: "blackhawk_ui"
+    },
+    error_message: null,
+    created_at: "2026-06-04T16:00:00Z",
+    updated_at: "2026-06-04T16:00:00Z",
+    ...overrides
+  };
+}
+
 function getJsonBody(response: Response) {
   return response.json() as Promise<Record<string, unknown>>;
 }
@@ -373,15 +447,39 @@ test("importing an agent run creates a durable run, audits all signals, and mate
   );
 });
 
+test("importing an agent run can associate and complete a manual run request", async () => {
+  const memory = buildMemoryRepository();
+  const requests = buildMemoryRequestRepository([
+    createManualRequestRow({
+      status: "claimed",
+      claimed_at: "2026-06-04T16:01:00Z"
+    })
+  ]);
+
+  const summary = await importAgentSignals(buildEnvelope(), {
+    repository: memory.repository,
+    requestRepository: requests.repository,
+    manualRunRequestId: "request-1",
+    importedAt: "2026-06-04T16:02:00Z"
+  });
+
+  assert.equal(summary.runId, "run-1");
+  assert.equal(memory.runs.get("run-1")?.agent_run_request_id, "request-1");
+  assert.equal(requests.rows.get("request-1")?.status, "completed");
+  assert.equal(requests.rows.get("request-1")?.agent_signal_run_id, "run-1");
+});
+
 test("valid import secret with a valid payload returns success", async () => {
   const payload = buildEnvelope();
+  let receivedManualRunRequestId: string | null | undefined = undefined;
 
   const response = await handleAgentSignalsImportRequest(
     new Request("http://localhost/api/agent-signals/import", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-agent-signals-import-secret": "top-secret"
+        "x-agent-signals-import-secret": "top-secret",
+        "x-agent-run-request-id": "request-77"
       },
       body: JSON.stringify(payload)
     }),
@@ -390,7 +488,9 @@ test("valid import secret with a valid payload returns success", async () => {
         ...process.env,
         AGENT_SIGNALS_IMPORT_SECRET: "top-secret"
       },
-      importPayload: async () => ({
+      importPayload: async (_input, options) => {
+        receivedManualRunRequestId = options?.manualRunRequestId;
+        return {
         runId: "run-1",
         runStatus: "succeeded",
         producedAt: payload.producedAt,
@@ -422,7 +522,8 @@ test("valid import secret with a valid payload returns success", async () => {
           low: 2
         },
         importedAt: "2026-06-03T23:10:00.000Z"
-      })
+        };
+      }
     }
   );
 
@@ -431,6 +532,7 @@ test("valid import secret with a valid payload returns success", async () => {
   assert.equal(body.runId, "run-1");
   assert.equal(body.submittedSignalCount, 5);
   assert.equal(body.acceptedSignalCount, 2);
+  assert.equal(receivedManualRunRequestId, "request-77");
 });
 
 test("missing import secret returns 401", async () => {

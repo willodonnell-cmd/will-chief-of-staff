@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { extractManualRunRequestId } from "@/lib/agent-run-requests";
 import {
   AgentSignalsImportConfigurationError,
   AgentSignalsImportValidationError,
@@ -9,7 +10,12 @@ import {
 
 export type AgentSignalsImportHandlerDeps = {
   env?: NodeJS.ProcessEnv;
-  importPayload?: (input: unknown) => Promise<AgentSignalsImportSummary>;
+  importPayload?: (
+    input: unknown,
+    options?: {
+      manualRunRequestId?: string | null;
+    }
+  ) => Promise<AgentSignalsImportSummary>;
 };
 
 function getExpectedSecret(env: NodeJS.ProcessEnv) {
@@ -57,7 +63,13 @@ export async function handleAgentSignalsImportRequest(
   }
 
   try {
-    const summary = await (deps.importPayload ?? importAgentSignals)(payload);
+    const manualRunRequestId = extractManualRunRequestId({
+      headers: request.headers,
+      payload
+    });
+    const summary = await (deps.importPayload ?? importAgentSignals)(payload, {
+      manualRunRequestId
+    });
     return NextResponse.json(summary);
   } catch (error) {
     if (error instanceof AgentSignalsImportValidationError) {

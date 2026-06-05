@@ -1,3 +1,4 @@
+import { AgentControlsCard } from "@/components/agent-signals/agent-controls-card";
 import Link from "next/link";
 
 import { PageIntro } from "@/components/shell/page-intro";
@@ -76,7 +77,7 @@ function HealthStat(props: { label: string; value: string | number }) {
 }
 
 export default async function AgentSignalsHealthPage() {
-  const { state, latestRun, sourceMode } = await loadPriorityInboxPageData();
+  const { state, latestRun, latestManualRequest, sourceMode } = await loadPriorityInboxPageData();
   const deployedCommitSha = process.env.VERCEL_GIT_COMMIT_SHA?.trim() || null;
   const currentlyReadingDurableData = sourceMode === "database";
   const stale = state === "stale" || isRunStale(latestRun?.completedAt);
@@ -87,6 +88,13 @@ export default async function AgentSignalsHealthPage() {
         eyebrow="Agent Signals"
         title="Agent Signals Health"
         description="Operational status for the durable ChatGPT Agent Microsoft 365 import path and the Priority Inbox read path."
+      />
+
+      <AgentControlsCard
+        latestRun={latestRun}
+        latestManualRequest={latestManualRequest}
+        sourceMode={sourceMode}
+        state={state}
       />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

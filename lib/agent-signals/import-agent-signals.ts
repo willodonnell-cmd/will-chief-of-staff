@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  completeAgentRunRequest,
+  createSupabaseAgentRunRequestsRepository,
+  extractManualRunRequestId,
+  getEffectiveAgentRunRequestStatus,
+  type AgentRunRequestsRepository
+} from "@/lib/agent-run-requests";
+import {
   CHIEF_OF_STAFF_SIGNAL_ATTENTION,
   CHIEF_OF_STAFF_SIGNAL_SOURCES,
   type ChiefOfStaffSignal,
@@ -64,6 +71,7 @@ export type AgentSignalRunInsertRow = {
   user_id: string;
   producer: "chatgpt_agent";
   connector_family: "microsoft_365";
+  agent_run_request_id?: string | null;
   tenant_label: string;
   run_status: "failed" | "succeeded";
   sources_checked: string[];
@@ -689,12 +697,22 @@ export async function importAgentSignals(
     importedAt?: string;
     importSourceMode?: AgentSignalImportSourceMode;
     repository?: AgentSignalsImportRepository;
+    manualRunRequestId?: string | null;
+    requestRepository?: AgentRunRequestsRepository | null;
   } = {}
 ): Promise<AgentSignalsImportSummary> {
   const payload = normalizeAgentSignalsImportInput(input);
   const importedAt = options.importedAt ?? new Date().toISOString();
   const importSourceMode = options.importSourceMode ?? "agent_run";
   const repository = options.repository ?? (await createSupabaseAgentSignalsImportRepository());
+  const manualRunRequestId =
+    options.manualRunRequestId ?? extractManualRunRequestId({ payload });
+  const requestRepository =
+    options.requestRepository === undefined
+      ? manualRunRequestId
+        ? await createSupabaseAgentRunRequestsRepository()
+        : null
+      : options.requestRepository;
 
   let envelope: AgentProducedMicrosoft365SignalEnvelope;
   try {
@@ -731,11 +749,25 @@ export async function importAgentSignals(
   const suppressedMetaAdminSignals = routeResults.filter((entry) => entry.route.outcome === "suppressed_meta_admin");
   const suppressedLowSignalSignals = routeResults.filter((entry) => entry.route.outcome === "suppressed_low_signal");
   const rejectedInvalidSignals = routeResults.filter((entry) => entry.route.outcome === "rejected_invalid");
+  let attachableManualRunRequestId: string | null = null;
+
+  if (manualRunRequestId && requestRepository) {
+    const manualRequest = await requestRepository.findById(manualRunRequestId);
+    if (
+      manualRequest &&
+      manualRequest.user_id === repository.userId &&
+      (getEffectiveAgentRunRequestStatus(manualRequest, Date.parse(importedAt)) === "requested" ||
+        getEffectiveAgentRunRequestStatus(manualRequest, Date.parse(importedAt)) === "claimed")
+    ) {
+      attachableManualRunRequestId = manualRequest.id;
+    }
+  }
 
   const runDraft: AgentSignalRunInsertRow = {
     user_id: repository.userId,
     producer: "chatgpt_agent",
     connector_family: "microsoft_365",
+    agent_run_request_id: attachableManualRunRequestId,
     tenant_label: envelope.tenantLabel,
     run_status: envelope.status === "failed" ? "failed" : "succeeded",
     sources_checked: sourcesChecked,
@@ -752,7 +784,8 @@ export async function importAgentSignals(
     rejected_invalid_count: rejectedInvalidSignals.length,
     error_message: envelope.status === "failed" ? "Agent reported a failed Microsoft 365 run." : null,
     raw_metadata: {
-      status: envelope.status ?? "succeeded"
+      status: envelope.status ?? "succeeded",
+      manualRunRequestId: attachableManualRunRequestId
     }
   };
 
@@ -819,6 +852,14 @@ export async function importAgentSignals(
     });
 
     const upsertedPriorityInboxItemCount = await repository.upsertPriorityInboxItems(priorityInboxRows);
+
+    if (attachableManualRunRequestId && requestRepository) {
+      await completeAgentRunRequest(requestRepository, {
+        requestId: attachableManualRunRequestId,
+        agentSignalRunId: createdRun.id,
+        now: importedAt
+      });
+    }
 
     await repository.updateRun(createdRun.id, {
       run_status: "succeeded",

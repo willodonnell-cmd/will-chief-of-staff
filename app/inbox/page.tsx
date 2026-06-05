@@ -1,3 +1,4 @@
+import { AgentControlsCard } from "@/components/agent-signals/agent-controls-card";
 import { AgentRunPriorityInboxCard } from "@/components/inbox/agent-run-priority-inbox-card";
 import { PageIntro } from "@/components/shell/page-intro";
 import {
@@ -149,7 +150,7 @@ function activeCount(items: PriorityInboxItem[]) {
 }
 
 export default async function InboxPage() {
-  const { state, latestRun, items, sourceMode } = await loadPriorityInboxPageData();
+  const { state, latestRun, latestManualRequest, items, sourceMode } = await loadPriorityInboxPageData();
   const bySource = SOURCE_ORDER.map((source) => ({
     ...source,
     items: items.filter((item) => item.source === source.id)
@@ -161,6 +162,13 @@ export default async function InboxPage() {
         eyebrow="Priority Inbox"
         title="Priority Inbox"
         description="Agent-produced Outlook, Calendar, and Teams priorities that survived server-side validation, routing, and suppression."
+      />
+
+      <AgentControlsCard
+        latestRun={latestRun}
+        latestManualRequest={latestManualRequest}
+        sourceMode={sourceMode}
+        state={state}
       />
 
       <section className="grid gap-3 sm:grid-cols-3">
