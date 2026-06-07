@@ -38,7 +38,7 @@ function createEnvelope(): AgentProducedMicrosoft365SignalEnvelope {
   return {
     producer: "chatgpt_agent",
     connectorFamily: "microsoft_365",
-    producedAt: "2026-06-03T23:07:00Z",
+    producedAt: new Date().toISOString(),
     tenantLabel: "Will O'Donnell",
     status: "succeeded",
     sourcesChecked: ["outlook", "calendar", "teams"],

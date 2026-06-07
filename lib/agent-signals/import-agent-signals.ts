@@ -394,6 +394,12 @@ function extractRunDraftFromInvalidPayload(
     error_message: errorMessage,
     raw_metadata: {
       status: payload.status ?? null,
+      runSource:
+        typeof payload.runSource === "string"
+          ? payload.runSource
+          : payload.producer === "blackhawk_native"
+            ? "blackhawk_native_graph"
+            : "external_agent_import",
       validationFailure: true
     }
   };
@@ -793,7 +799,9 @@ export async function importAgentSignals(
       manualRunRequestId: attachableManualRunRequestId,
       runSource:
         envelope.runSource ??
-        (envelope.producer === "blackhawk_native" ? "blackhawk_native_graph" : "external_agent_import")
+        (envelope.producer === "blackhawk_native"
+          ? "blackhawk_native_graph"
+          : "external_agent_import")
     }
   };
 

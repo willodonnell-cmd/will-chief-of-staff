@@ -17,12 +17,12 @@ import {
 import {
   loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource,
   type AgentProducedMicrosoft365SignalEnvelope,
-  type AgentProducedMicrosoft365SignalEnvelopeSource
+  type AgentProducedMicrosoft365SignalEnvelopeSource,
+  type Microsoft365SourceCoverage,
+  type Microsoft365SignalProducer
 } from "@/lib/microsoft-signal-intake";
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 import { withSupabaseTimeout } from "@/lib/supabase/request-timeout";
-import type { Microsoft365SourceCoverage } from "@/lib/microsoft-signal-intake";
-import type { Microsoft365SignalProducer } from "@/lib/microsoft-signal-intake";
 
 export type AgentRunInboxState = "never_run" | "failed" | "zero_signals" | "stale" | "succeeded";
 export type PriorityInboxPageSourceMode = "database" | "local" | "fixture";
