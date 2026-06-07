@@ -5,6 +5,7 @@ import type { ChiefOfStaffSignal } from "../lib/chief-of-staff-signal";
 import type { LibraryItemSummary } from "../lib/capture-library";
 import {
   classifyExecutiveWork,
+  classifyInvestmentCommitteeSignal,
   isDiagnosticSystemSignal,
   mapChiefOfStaffSignalToExecutiveSignal,
   mapLibraryItemToExecutiveSignal,
@@ -269,6 +270,68 @@ test("classifies calendar diagnostics as system noise", () => {
   );
 });
 
+test("detects investment committee cues without Susan Pi", () => {
+  const cases = [
+    "Investment Committee approval memo",
+    "Energy Investment Committee package",
+    "Energy IC pre-review",
+    "IC memo for committee questions",
+    "IC package circulation",
+    "Q&AInvestmentCommittee follow-up",
+    "InvestmentCommittee comments",
+    "Flower Mound FICM phase 2",
+    "600 Grumman - Project Island - IICM",
+    "capital allocation approval memo"
+  ];
+
+  for (const title of cases) {
+    const result = classifyInvestmentCommitteeSignal({
+      title,
+      summary: "Committee traffic that should stay in the IC lane."
+    });
+
+    assert.equal(result.isInvestmentCommittee, true, title);
+    assert.equal(result.routingCategory, "IC", title);
+  }
+});
+
+test("uses Susan Pi as a confidence booster but not as a standalone IC cue", () => {
+  const routed = classifyInvestmentCommitteeSignal({
+    title: "Susan Pi is approving Flower Mound FICM",
+    summary: "Approval package is circulating."
+  });
+  const notRouted = classifyInvestmentCommitteeSignal({
+    title: "Susan Pi lunch follow-up",
+    summary: "Coordinate lunch timing."
+  });
+
+  assert.equal(routed.isInvestmentCommittee, true);
+  assert.equal(routed.hasSusanPiCue, true);
+  assert.equal(notRouted.isInvestmentCommittee, false);
+  assert.equal(notRouted.hasSusanPiCue, true);
+});
+
+test("does not treat routine IC package traffic as direct Will action just because owner is Will", () => {
+  const result = classifyInvestmentCommitteeSignal({
+    title: "Susan Pi sent weekly IC package",
+    summary: "Standard weekly Investment Committee package circulation for Friday question prep.",
+    category: "IC",
+    owner: "Will O'Donnell"
+  });
+
+  assert.equal(result.isInvestmentCommittee, true);
+  assert.equal(result.requiresDirectWillAction, false);
+});
+
+test("avoids false positives for generic words containing ic", () => {
+  const result = classifyInvestmentCommitteeSignal({
+    title: "Pacific logistics update",
+    summary: "Specific pricing and service policy follow-up."
+  });
+
+  assert.equal(result.isInvestmentCommittee, false);
+});
+
 test("maps library task items into executive signals", () => {
   const signal = mapLibraryItemToExecutiveSignal(buildLibraryTask());
 
@@ -376,6 +439,28 @@ test("maps explicit meeting-note captures into meeting signals", () => {
   assert.equal(signal.recommended_action, "prepare");
 });
 
+test("maps archived and completed library items to archive cleanup actions", () => {
+  const archivedSignal = mapLibraryItemToExecutiveSignal(
+    buildLibraryNote({
+      status: "archived",
+      archivedAt: "2026-05-29T11:00:00.000Z"
+    })
+  );
+  const completedSignal = mapLibraryItemToExecutiveSignal(
+    buildLibraryTask({
+      status: "completed",
+      completedAt: "2026-05-29T11:00:00.000Z",
+      task: {
+        ...buildLibraryTask().task!,
+        status: "completed"
+      }
+    })
+  );
+
+  assert.equal(archivedSignal.recommended_action, "archive");
+  assert.equal(completedSignal.recommended_action, "archive");
+});
+
 test("maps priority inbox items into executive signals", () => {
   const signal = mapPriorityInboxItemToExecutiveSignal(buildPriorityInboxItem());
 
@@ -388,6 +473,26 @@ test("maps priority inbox items into executive signals", () => {
   assert.match(signal.evidence_snippets?.join(" ") ?? "", /Board approval/i);
 });
 
+test("routes routine IC inbox traffic into IC without overwriting task categories", () => {
+  const signal = mapPriorityInboxItemToExecutiveSignal(
+    buildPriorityInboxItem({
+      threadTitle: "Energy IC package questions",
+      primaryLine: "Committee comments are coming in ahead of the meeting.",
+      summary: "Deal team should respond to committee questions.",
+      sender: "Susan Pi",
+      taskPrefill: {
+        ...buildPriorityInboxItem().taskPrefill!,
+        categoryName: "Priority Action"
+      }
+    })
+  );
+
+  assert.equal(signal.routing_category, "IC");
+  assert.equal(signal.category_label, "IC");
+  assert.equal(signal.requires_direct_will_action, false);
+  assert.equal(signal.category, "Priority Action");
+});
+
 test("maps chief of staff signals into executive signals", () => {
   const signal = mapChiefOfStaffSignalToExecutiveSignal(buildChiefOfStaffSignal());
 
@@ -398,6 +503,21 @@ test("maps chief of staff signals into executive signals", () => {
   assert.equal(signal.owner, "Will O'Donnell");
   assert.equal(signal.source_label, "Agent brief · Outlook");
   assert.deepEqual(signal.related_persons, ["Amelia Hart", "Will O'Donnell"]);
+});
+
+test("maps IC agent signals with explicit Will asks as direct-action IC items", () => {
+  const signal = mapChiefOfStaffSignalToExecutiveSignal(
+    buildChiefOfStaffSignal({
+      title: "Energy IC memo needs Will input",
+      summary: "Committee comments are in and Will needs to respond before the meeting.",
+      actionRequest: "Ask Will O'Donnell to approve the IC memo before the meeting.",
+      category: "IC"
+    })
+  );
+
+  assert.equal(signal.routing_category, "IC");
+  assert.equal(signal.category, "IC");
+  assert.equal(signal.requires_direct_will_action, true);
 });
 
 test("maps meeting signals to meeting work type", () => {

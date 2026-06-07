@@ -1,6 +1,4 @@
 import Link from "next/link";
-import type { Route } from "next";
-
 import { PageIntro } from "@/components/shell/page-intro";
 import { CompactExecutiveList, type CompactExecutiveListItem } from "@/components/today/compact-executive-list";
 import { ExecutiveCockpitSection } from "@/components/today/executive-cockpit-section";
@@ -9,16 +7,12 @@ import { QuietlyHandledDetails } from "@/components/today/quietly-handled-detail
 import { TopNextActionCard } from "@/components/today/top-next-action-card";
 import { sanitizeDisplayText } from "@/lib/agent-signal-brief";
 import {
-  getMicrosoftSourceModeLabel,
-  type AgentHandoffSourceStatus
-} from "@/lib/agent-handoff-source-status";
-import {
   getExecutiveRecommendedActionLabel,
   type ExecutiveRecommendedAction
 } from "@/lib/executive-work";
 import { getTodayPageData } from "@/lib/today";
-import { shouldShowAppNativeCalendarReconnectPrompt } from "@/lib/today-calendar-signals";
 import {
+  getDecisionsSectionStatusNote,
   getMeetingSectionCountLabel,
   getMeetingSectionStatusNote,
   type TodayExecutiveLeverageViewModel
@@ -60,6 +54,15 @@ const EMPTY_EXECUTIVE_LEVERAGE: TodayExecutiveLeverageViewModel = {
     surfacedAboveBySourceType: {},
     liveCalendarVisibleCount: 0,
     liveCalendarSurfacedAboveCount: 0
+  },
+  crossSectionCounts: {
+    meetingItemsInTop3: 0,
+    decisionRelevantMeetingsInMeetings: 0,
+    decisionRelevantMeetingsInTop3: 0,
+    decisionItemsSuppressedBecauseMeetingPrimary: 0,
+    totalIcItems: 0,
+    icItemsRequiringWillAction: 0,
+    icItemsRoutedToIcLaneOnly: 0
   },
   emptyState: {
     title: "No executive leverage signals yet.",
@@ -147,20 +150,43 @@ function sectionStatusNote(overlap: number, overflow: number, overflowLabel: str
   return parts.join(" ");
 }
 
-function agentSourceTrustDetail(status: AgentHandoffSourceStatus | undefined, microsoftSourceMode: string | undefined) {
-  if (!status) {
-    return "Agent Microsoft 365 brief metadata is unavailable.";
+function decisionSignalSummary(leverage: TodayExecutiveLeverageViewModel) {
+  const parts: string[] = [];
+  parts.push(`${leverage.decisionsNeeded.length} visible`);
+
+  if (leverage.crossSectionCounts.decisionItemsSuppressedBecauseMeetingPrimary > 0) {
+    parts.push(`${leverage.crossSectionCounts.decisionItemsSuppressedBecauseMeetingPrimary} in meetings or Top 3`);
   }
 
-  if (microsoftSourceMode === "mixed") {
-    return `${status.summary} App-native Outlook calendar is also available separately.`;
+  if (leverage.sectionOverlapCounts.decisionsNeeded > 0) {
+    parts.push(`${leverage.sectionOverlapCounts.decisionsNeeded} surfaced above`);
   }
 
-  if (microsoftSourceMode === "graph_oauth" && !status.available) {
-    return "App-native Graph OAuth is the active Microsoft source. Agent Microsoft 365 brief missing.";
+  if (leverage.sectionOverflowCounts.decisionsNeeded > 0) {
+    parts.push(`${leverage.sectionOverflowCounts.decisionsNeeded} kept out of the foreground`);
   }
 
-  return status.summary;
+  return parts.join(" · ");
+}
+
+function investmentCommitteeSummary(leverage: TodayExecutiveLeverageViewModel) {
+  const total = leverage.crossSectionCounts.totalIcItems;
+  if (total <= 0) {
+    return null;
+  }
+
+  const requiresWillAction = leverage.crossSectionCounts.icItemsRequiringWillAction;
+  const laneOnly = leverage.crossSectionCounts.icItemsRoutedToIcLaneOnly;
+  const parts = [
+    `${total} IC ${total === 1 ? "item" : "items"} detected`,
+    `${requiresWillAction} ${requiresWillAction === 1 ? "requires" : "require"} Will action`
+  ];
+
+  if (laneOnly > 0) {
+    parts.push(`${laneOnly} kept in the IC lane`);
+  }
+
+  return parts.join(" · ");
 }
 
 export default async function TodayPage() {
@@ -179,15 +205,11 @@ export default async function TodayPage() {
   }
 
   const leverage = todayData.executiveLeverage ?? EMPTY_EXECUTIVE_LEVERAGE;
-  const agentHandoffSourceStatus = todayData.agentHandoffSourceStatus;
   const calendarSourceStatus = todayData.calendarSourceStatus;
   const microsoftSourceMode = todayData.microsoftSourceMode;
-  const showAppNativeCalendarReconnect = shouldShowAppNativeCalendarReconnectPrompt({
-    sourceMode: microsoftSourceMode ?? "graph_oauth",
-    calendarSourceStatus
-  });
   const totalDecisionSignals =
     leverage.decisionsNeeded.length +
+    leverage.crossSectionCounts.decisionItemsSuppressedBecauseMeetingPrimary +
     leverage.sectionOverlapCounts.decisionsNeeded +
     leverage.sectionOverflowCounts.decisionsNeeded;
   const totalOpportunitySignals =
@@ -200,6 +222,7 @@ export default async function TodayPage() {
     leverage.sectionOverflowCounts.quietlyHandled;
   const totalSuppressedQuietSignals =
     leverage.quietlyHandled.length + leverage.sectionOverflowCounts.quietlyHandled;
+  const icSummary = investmentCommitteeSummary(leverage);
   const trustRow = [
     {
       label: "Visible now",
@@ -210,12 +233,10 @@ export default async function TodayPage() {
     {
       label: "Decision signals",
       value: `${totalDecisionSignals} total`,
-      detail: countSummary(
-        leverage.decisionsNeeded.length,
-        leverage.sectionOverlapCounts.decisionsNeeded,
-        leverage.sectionOverflowCounts.decisionsNeeded,
-        "No decision signals"
-      ),
+      detail:
+        totalDecisionSignals > 0
+          ? decisionSignalSummary(leverage)
+          : "No decision signals",
       tone: "default" as const
     },
     {
@@ -245,7 +266,7 @@ export default async function TodayPage() {
   const meetingItems: CompactExecutiveListItem[] = leverage.consequentialMeetings.map((item) => ({
     id: item.id,
     title: item.title,
-    summary: sanitizeDisplayText(item.why_consequential),
+    summary: sanitizeDisplayText(item.summary || item.why_consequential),
     actionLabel: actionLabel(item.recommended_action),
     href: item.href ?? null,
     meta: compactMeta([item.source_label_compact, formatTimestamp(item.meeting_time)])
@@ -254,8 +275,15 @@ export default async function TodayPage() {
     meetingSourceAttribution: leverage.meetingSourceAttribution,
     microsoftSourceMode,
     calendarSourceStatus,
+    surfacedAboveCount: leverage.crossSectionCounts.meetingItemsInTop3,
     overflowCount: leverage.sectionOverflowCounts.consequentialMeetings
   });
+  const compactMeetingState =
+    leverage.crossSectionCounts.meetingItemsInTop3 > 0
+      ? leverage.crossSectionCounts.meetingItemsInTop3 === 1
+        ? "1 meeting item is already in Top 3."
+        : `${leverage.crossSectionCounts.meetingItemsInTop3} meeting items are already in Top 3.`
+      : "No meeting-prep items need foreground attention right now.";
 
   const decisionItems: CompactExecutiveListItem[] = leverage.decisionsNeeded.map((item) => ({
     id: item.id,
@@ -314,20 +342,6 @@ export default async function TodayPage() {
         description="A ranked view of the decisions, opportunities, meetings, delegation, and strategic work that need Will&apos;s attention now."
       />
 
-      <section className="rounded-[1.35rem] border border-line/70 bg-white/68 px-4 py-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0">
-            <p className="section-label">Microsoft source</p>
-            <p className="mt-1 text-sm font-medium text-text">
-              {getMicrosoftSourceModeLabel(microsoftSourceMode ?? "graph_oauth")}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-text-muted">
-              {agentSourceTrustDetail(agentHandoffSourceStatus, microsoftSourceMode)}
-            </p>
-          </div>
-        </div>
-      </section>
-
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {trustRow.map((item) => (
           <GlanceChip
@@ -340,26 +354,14 @@ export default async function TodayPage() {
         ))}
       </section>
 
-      {showAppNativeCalendarReconnect ? (
-        <section className="rounded-[1.35rem] border border-line/70 bg-white/68 px-4 py-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="min-w-0">
-              <p className="section-label">App-native calendar</p>
-              <p className="mt-1 text-sm leading-6 text-text-muted">
-                {calendarSourceStatus?.message ?? "Connect app-native Outlook Calendar to include direct live calendar context."}
-              </p>
-            </div>
-
-            {calendarSourceStatus?.connectHref ? (
-              <Link
-                href={calendarSourceStatus.connectHref as Route}
-                className="shrink-0 rounded-full border border-line/70 bg-white/80 px-3 py-1.5 text-[0.72rem] font-medium uppercase tracking-[0.18em] text-text-subtle transition-colors hover:bg-white"
-              >
-                Connect Outlook Calendar
-              </Link>
-            ) : null}
-          </div>
-        </section>
+      {icSummary ? (
+        <Link
+          href="/investment-committee"
+          className="refined-b block rounded-[1.4rem] px-4 py-3 transition hover:bg-[rgba(255,255,255,0.68)]"
+        >
+          <p className="section-label">IC routing</p>
+          <p className="mt-2 text-sm leading-6 text-text-muted">{icSummary}</p>
+        </Link>
       ) : null}
 
       <section className="space-y-4">
@@ -402,20 +404,21 @@ export default async function TodayPage() {
         <div className="grid gap-4 xl:grid-cols-2">
           <ExecutiveCockpitSection
             eyebrow="Meetings & prep"
-            title="Prepare for the moments that matter."
+            title="Upcoming meetings and prep context."
             count={getMeetingSectionCountLabel({
               visibleCount: leverage.consequentialMeetings.length,
+              surfacedAboveCount: leverage.crossSectionCounts.meetingItemsInTop3,
               microsoftSourceMode,
               calendarSourceStatus
             })}
             statusNote={meetingStatusNote}
+            compact={meetingItems.length === 0}
+            className="self-start"
           >
             <CompactExecutiveList
               items={meetingItems}
               emptyState={
-                leverage.sectionOverlapCounts.consequentialMeetings > 0
-                  ? "Meeting context needing attention is already surfaced above."
-                  : "No consequential meeting context detected."
+                compactMeetingState
               }
             />
           </ExecutiveCockpitSection>
@@ -424,11 +427,12 @@ export default async function TodayPage() {
             eyebrow="Decisions needed"
             title="Judgment calls waiting on Will."
             count={sectionCountLabel(leverage.decisionsNeeded.length, leverage.sectionOverflowCounts.decisionsNeeded)}
-            statusNote={sectionStatusNote(
-              leverage.sectionOverlapCounts.decisionsNeeded,
-              leverage.sectionOverflowCounts.decisionsNeeded,
-              "decision items"
-            )}
+            statusNote={getDecisionsSectionStatusNote({
+              overlapCount: leverage.sectionOverlapCounts.decisionsNeeded,
+              overflowCount: leverage.sectionOverflowCounts.decisionsNeeded,
+              crossSectionCounts: leverage.crossSectionCounts
+            })}
+            className="self-start"
           >
             <CompactExecutiveList
               items={decisionItems}

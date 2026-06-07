@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildTodayExecutiveLeverageViewModel,
+  getDecisionsSectionStatusNote,
   getMeetingSectionCountLabel,
   getMeetingSectionStatusNote,
   makeExecutiveSummary,
@@ -110,6 +111,15 @@ test("builds an empty view model from an empty signal list", () => {
     surfacedAboveBySourceType: {},
     liveCalendarVisibleCount: 0,
     liveCalendarSurfacedAboveCount: 0
+  });
+  assert.deepEqual(model.crossSectionCounts, {
+    meetingItemsInTop3: 0,
+    decisionRelevantMeetingsInMeetings: 0,
+    decisionRelevantMeetingsInTop3: 0,
+    decisionItemsSuppressedBecauseMeetingPrimary: 0,
+    totalIcItems: 0,
+    icItemsRequiringWillAction: 0,
+    icItemsRoutedToIcLaneOnly: 0
   });
   assert.equal(model.emptyState?.title, "No executive leverage signals yet.");
 });
@@ -503,7 +513,7 @@ test("a decision signal not selected for top next best actions can still appear 
     }),
     buildSignal({
       id: "decision-3",
-      title: "Secondary governance call",
+      title: "Secondary governance memo",
       summary: "A lower-priority governance decision still needs review.",
       work_type: "decision",
       priority: "medium",
@@ -745,9 +755,9 @@ test("meeting overlap status wording distinguishes live calendar, mixed, and non
     }
   });
 
-  assert.match(liveCalendarOnly ?? "", /live calendar items already surfaced above/i);
-  assert.match(mixed ?? "", /meeting-related items already surfaced above/i);
-  assert.match(nonCalendarOnly ?? "", /meeting-prep signals already surfaced above/i);
+  assert.match(liveCalendarOnly ?? "", /live calendar items already in Top 3/i);
+  assert.match(mixed ?? "", /meeting-related items already in Top 3/i);
+  assert.match(nonCalendarOnly ?? "", /meeting-prep items already in Top 3/i);
 });
 
 test("agent handoff source mode suppresses app-native reconnect semantics", () => {
@@ -914,7 +924,7 @@ test("meetings and prep status can say no foreground attention after reviewed ev
   });
 
   assert.match(note ?? "", /Live calendar connected · 2 events reviewed · none needed foreground attention\./i);
-  assert.match(note ?? "", /2 meeting-prep signals already surfaced above\./i);
+  assert.match(note ?? "", /2 meeting-prep items already in Top 3\./i);
 });
 
 test("meetings and prep count label reflects calendar status instead of zero visible", () => {
@@ -1073,6 +1083,7 @@ test("live calendar reviewed count can differ from visible meeting card count", 
 
   assert.equal(model.consequentialMeetings.length, 0);
   assert.equal(model.meetingSourceAttribution.liveCalendarSurfacedAboveCount, 1);
+  assert.equal(model.crossSectionCounts.meetingItemsInTop3, 1);
   assert.match(note ?? "", /4 events reviewed/i);
 });
 
@@ -1150,6 +1161,29 @@ test("agent teams decision signal can enter decisions needed", () => {
   ]);
 
   assert.equal(model.decisionsNeeded.some((item) => item.id === "teams-decision-1"), true);
+});
+
+test("meeting-primary items not selected for top 3 appear in Meetings & Prep before decisions", () => {
+  const model = buildViewModel([
+    buildSignal({ id: "decision-1", title: "Decision A", work_type: "decision", priority: "high", recommended_action: "decide" }),
+    buildSignal({ id: "decision-2", title: "Decision B", work_type: "decision", priority: "high", recommended_action: "decide" }),
+    buildSignal({ id: "opportunity-1", title: "Opportunity A", work_type: "opportunity", priority: "high", recommended_action: "advance" }),
+    buildSignal({
+      id: "meeting-decision-1",
+      title: "Board prep meeting",
+      summary: "Prep for the board meeting and land the approval path.",
+      work_type: "decision",
+      source_type: "calendar",
+      source_origin: "agent_brief",
+      source_label: "Outlook Calendar connector",
+      priority: "medium",
+      recommended_action: "follow_up"
+    })
+  ]);
+
+  assert.equal(model.topNextBestActions.some((item) => item.id === "meeting-decision-1"), false);
+  assert.equal(model.consequentialMeetings.some((item) => item.id === "meeting-decision-1"), true);
+  assert.equal(model.decisionsNeeded.some((item) => item.id === "meeting-decision-1"), false);
 });
 
 test("agent teams follow-up signal can enter delegate waiting on", () => {
@@ -1267,6 +1301,37 @@ test("calendar diagnostics are kept quiet instead of surfacing as executive work
     model.quietlyHandled.find((item) => item.id === "calendar-diagnostic-1")?.reason_suppressed,
     "System diagnostic kept out of foreground."
   );
+});
+
+test("decision section status acknowledges decision-relevant meeting overlap without duplicate cards", () => {
+  const model = buildViewModel([
+    buildSignal({ id: "decision-1", title: "Decision A", work_type: "decision", priority: "high", recommended_action: "decide" }),
+    buildSignal({ id: "decision-2", title: "Decision B", work_type: "decision", priority: "high", recommended_action: "decide" }),
+    buildSignal({ id: "decision-3", title: "Decision C", work_type: "decision", priority: "high", recommended_action: "decide" }),
+    buildSignal({
+      id: "meeting-decision-1",
+      title: "Board prep meeting",
+      summary: "The meeting will force a decision on the approval path.",
+      work_type: "decision",
+      source_type: "calendar",
+      source_origin: "agent_brief",
+      source_label: "Outlook Calendar connector",
+      priority: "medium",
+      recommended_action: "follow_up"
+    })
+  ]);
+
+  const note = getDecisionsSectionStatusNote({
+    overlapCount: model.sectionOverlapCounts.decisionsNeeded,
+    overflowCount: model.sectionOverflowCounts.decisionsNeeded,
+    crossSectionCounts: model.crossSectionCounts
+  });
+
+  assert.equal(model.decisionsNeeded.some((item) => item.id === "meeting-decision-1"), false);
+  assert.equal(model.consequentialMeetings.some((item) => item.id === "meeting-decision-1"), true);
+  assert.equal(model.crossSectionCounts.decisionRelevantMeetingsInMeetings, 1);
+  assert.equal(model.crossSectionCounts.decisionItemsSuppressedBecauseMeetingPrimary, 1);
+  assert.match(note ?? "", /1 decision-relevant meeting is in Meetings & Prep\./i);
 });
 
 test("groups delegation and waiting-on signals into delegate waiting on when not already surfaced above", () => {
@@ -1537,7 +1602,7 @@ test("capped-out items do not reappear as duplicates elsewhere", () => {
   assert.equal(visibleIds.has("decision-6"), false);
 });
 
-test("primary placement priority is deterministic", () => {
+test("decision-like meeting item stays in Meetings & Prep when it is meeting-primary", () => {
   const model = buildViewModel([
     buildSignal({
       id: "hybrid-1",
@@ -1554,9 +1619,119 @@ test("primary placement priority is deterministic", () => {
   ]);
 
   assert.equal(model.topNextBestActions.some((item) => item.id === "hybrid-1"), false);
-  assert.equal(model.decisionsNeeded.some((item) => item.id === "hybrid-1"), true);
-  assert.equal(model.consequentialMeetings.some((item) => item.id === "hybrid-1"), false);
+  assert.equal(model.decisionsNeeded.some((item) => item.id === "hybrid-1"), false);
+  assert.equal(model.consequentialMeetings.some((item) => item.id === "hybrid-1"), true);
   assert.equal(model.delegateWaitingOn.some((item) => item.id === "hybrid-1"), false);
+});
+
+test("meeting section count label can report items already in Top 3 when no meeting cards are visible", () => {
+  const label = getMeetingSectionCountLabel({
+    visibleCount: 0,
+    surfacedAboveCount: 2,
+    calendarSourceStatus: {
+      fetchSucceeded: true,
+      reviewedEventCount: 3
+    }
+  });
+
+  assert.equal(label, "2 in Top 3");
+});
+
+test("top 3 still takes precedence over meetings and suppresses duplicate meeting cards", () => {
+  const model = buildViewModel([
+    buildSignal({ id: "top-decision", title: "Top decision", work_type: "decision", priority: "high", recommended_action: "decide" }),
+    buildSignal({ id: "top-opportunity", title: "Top opportunity", work_type: "opportunity", priority: "high", recommended_action: "advance" }),
+    buildSignal({
+      id: "top-meeting",
+      title: "Board meeting prep",
+      work_type: "meeting",
+      source_type: "outlook_calendar",
+      source_origin: "live_calendar",
+      source_label: "Outlook Calendar",
+      priority: "high",
+      recommended_action: "prepare"
+    }),
+    buildSignal({ id: "decision-1", title: "Decision 1", work_type: "decision", priority: "medium", recommended_action: "decide" })
+  ]);
+
+  assert.equal(model.topNextBestActions.some((item) => item.id === "top-meeting"), true);
+  assert.equal(model.consequentialMeetings.some((item) => item.id === "top-meeting"), false);
+  assert.equal(model.crossSectionCounts.meetingItemsInTop3, 1);
+});
+
+test("routine IC traffic stays out of Top 3 and Decisions Needed", () => {
+  const model = buildViewModel([
+    buildSignal({
+      id: "ic-1",
+      title: "Energy IC package questions",
+      summary: "Deal team should respond to committee comments.",
+      work_type: "decision",
+      priority: "high",
+      recommended_action: "decide",
+      routing_category: "IC",
+      category_label: "IC",
+      requires_direct_will_action: false
+    }),
+    buildSignal({
+      id: "urgent-customer",
+      title: "Customer escalation needs Will response",
+      work_type: "opportunity",
+      priority: "high",
+      recommended_action: "advance",
+      due_at: "2026-05-29T18:00:00.000Z"
+    })
+  ]);
+
+  assert.equal(model.topNextBestActions.some((item) => item.id === "ic-1"), false);
+  assert.equal(model.decisionsNeeded.some((item) => item.id === "ic-1"), false);
+  assert.equal(model.topNextBestActions.some((item) => item.id === "urgent-customer"), true);
+  assert.equal(model.crossSectionCounts.totalIcItems, 1);
+  assert.equal(model.crossSectionCounts.icItemsRequiringWillAction, 0);
+  assert.equal(model.crossSectionCounts.icItemsRoutedToIcLaneOnly, 1);
+});
+
+test("direct-action IC items can still enter Top 3", () => {
+  const model = buildViewModel([
+    buildSignal({
+      id: "ic-ask",
+      title: "Energy IC memo needs Will approval",
+      summary: "Will needs to approve the IC memo before the meeting.",
+      work_type: "decision",
+      priority: "high",
+      recommended_action: "decide",
+      due_at: "2026-05-29T16:00:00.000Z",
+      routing_category: "IC",
+      category_label: "IC",
+      requires_direct_will_action: true
+    })
+  ]);
+
+  assert.equal(model.topNextBestActions.some((item) => item.id === "ic-ask"), true);
+  assert.equal(model.crossSectionCounts.totalIcItems, 1);
+  assert.equal(model.crossSectionCounts.icItemsRequiringWillAction, 1);
+  assert.equal(model.crossSectionCounts.icItemsRoutedToIcLaneOnly, 0);
+});
+
+test("IC meetings can stay in Meetings & Prep without duplicating into Decisions Needed", () => {
+  const model = buildViewModel([
+    buildSignal({
+      id: "ic-meeting",
+      title: "Energy IC pre-review",
+      summary: "Prep before the IC meeting.",
+      work_type: "meeting",
+      source_type: "calendar",
+      source_origin: "agent_brief",
+      priority: "medium",
+      recommended_action: "prepare",
+      routing_category: "IC",
+      category_label: "IC",
+      requires_direct_will_action: false
+    })
+  ]);
+
+  assert.equal(model.consequentialMeetings.some((item) => item.id === "ic-meeting"), true);
+  assert.equal(model.decisionsNeeded.some((item) => item.id === "ic-meeting"), false);
+  assert.equal(model.crossSectionCounts.totalIcItems, 1);
 });
 
 test("due-soon item outranks an undated comparable item", () => {

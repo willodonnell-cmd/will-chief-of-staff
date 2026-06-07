@@ -48,6 +48,7 @@ test("AgentControlsCard shows Connect Microsoft 365 when Graph is not connected"
   const element = AgentControlsCard({
     latestRun: null,
     latestManualRequest: null,
+    manualRunRequestsAvailable: true,
     microsoftGraphStatus: status(),
     sourceMode: "database",
     state: "never_run"
@@ -78,6 +79,7 @@ test("AgentControlsCard shows native Graph run CTA when connected", () => {
       errorMessage: null
     },
     latestManualRequest: null,
+    manualRunRequestsAvailable: true,
     microsoftGraphStatus: status({
       state: "connected",
       connected: true,

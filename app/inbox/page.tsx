@@ -151,7 +151,8 @@ function activeCount(items: PriorityInboxItem[]) {
 }
 
 export default async function InboxPage() {
-  const { state, latestRun, latestManualRequest, items, sourceMode } = await loadPriorityInboxPageData();
+  const { state, latestRun, latestManualRequest, manualRunRequestsAvailable, items, sourceMode } =
+    await loadPriorityInboxPageData();
   const microsoftGraphStatus = await getMicrosoftGraphConnectionStatusForCurrentUser();
   const teamsCoverage = latestRun?.sourceCoverage?.teams;
   const bySource = SOURCE_ORDER.map((source) => ({
@@ -170,6 +171,7 @@ export default async function InboxPage() {
       <AgentControlsCard
         latestRun={latestRun}
         latestManualRequest={latestManualRequest}
+        manualRunRequestsAvailable={manualRunRequestsAvailable}
         microsoftGraphStatus={microsoftGraphStatus}
         sourceMode={sourceMode}
         state={state}

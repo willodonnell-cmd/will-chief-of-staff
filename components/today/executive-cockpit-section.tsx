@@ -8,6 +8,7 @@ type ExecutiveCockpitSectionProps = {
   count?: number | string;
   children: React.ReactNode;
   className?: string;
+  compact?: boolean;
 };
 
 export function ExecutiveCockpitSection({
@@ -17,11 +18,18 @@ export function ExecutiveCockpitSection({
   statusNote,
   count,
   children,
-  className
+  className,
+  compact = false
 }: ExecutiveCockpitSectionProps) {
   return (
-    <section className={cn("rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6", className)}>
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <section
+      className={cn(
+        "rounded-[1.75rem] border border-line/75 bg-white/72",
+        compact ? "p-4 md:p-5" : "p-5 md:p-6",
+        className
+      )}
+    >
+      <div className={cn("flex flex-col md:flex-row md:items-start md:justify-between", compact ? "gap-2.5" : "gap-3")}>
         <div className="min-w-0">
           <p className="section-label">{eyebrow}</p>
           <h3 className="section-title mt-0">{title}</h3>
@@ -34,13 +42,18 @@ export function ExecutiveCockpitSection({
         </div>
 
         {count !== undefined ? (
-          <span className="shrink-0 rounded-full border border-line/70 bg-white/70 px-3 py-1 text-[0.72rem] uppercase tracking-[0.18em] text-text-subtle">
+          <span
+            className={cn(
+              "shrink-0 rounded-full border border-line/70 bg-white/70 uppercase tracking-[0.18em] text-text-subtle",
+              compact ? "px-2.5 py-1 text-[0.68rem]" : "px-3 py-1 text-[0.72rem]"
+            )}
+          >
             {count}
           </span>
         ) : null}
       </div>
 
-      <div className="mt-5">{children}</div>
+      <div className={cn(compact ? "mt-3" : "mt-5")}>{children}</div>
     </section>
   );
 }

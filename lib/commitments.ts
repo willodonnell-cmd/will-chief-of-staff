@@ -257,6 +257,7 @@ export async function getCommitmentsPageData(now = Date.now()): Promise<Commitme
   const tasks = await listLibraryItems({
     scope: "tasks",
     mode: "tasks",
+    view: null,
     search: "",
     type: "task",
     status: "all",

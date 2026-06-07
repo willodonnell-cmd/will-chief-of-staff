@@ -1,22 +1,25 @@
 # ChatGPT Agent Signal Prompt
 
-Use this prompt with ChatGPT Agent when you want a local JSON handoff for `/Users/willodonnell/Documents/will-chief-of-staff/.local/agent-signals.json`.
+Use this prompt with ChatGPT Agent when you want a strict JSON envelope that can be imported into Priority Inbox through `/api/agent-signals/import`.
 
 ## Copy/Paste Prompt
 
 ```text
-Review my Microsoft 365 signals and produce a strict JSON envelope for a local app handoff.
+Review my Microsoft 365 signals and produce a strict JSON envelope for a Priority Inbox import handoff.
 
 Instructions:
 
 1. Review Outlook first.
 2. Review Teams and Calendar only if they are available through ChatGPT connectors in this session.
-3. If Teams or Calendar connectors are unavailable, inaccessible, or fail, do not treat that as a fatal error. Represent that condition as one or more `status` signals instead.
-4. Return exactly one JSON object only.
-5. The response must start with `{` and end with `}`.
-6. Output JSON only. Do not output markdown. Do not output commentary. Do not wrap the JSON in code fences. Do not include any text before the opening `{` or after the closing `}`.
-7. Do not cite sources inside the JSON. Do not add notes, confidence labels, provenance prose, or explanation fields beyond the schema below.
-8. Conform exactly to this schema:
+3. This prompt is for the general Microsoft 365 handoff that powers Priority Inbox. It is not the weekly Investment Committee workflow payload.
+4. Do not use this output as the Investment Committee system of record, and do not optimize it around routine IC package traffic.
+5. If you see routine Investment Committee package emails, memo circulation, committee Q&A packets, or presenting-team-owned IC follow-up, omit them from this general handoff unless they create a separate non-routine executive issue outside the normal IC workflow.
+6. If Teams or Calendar connectors are unavailable, inaccessible, or fail, do not treat that as a fatal error. Represent that condition as one or more `status` signals instead.
+7. Return exactly one JSON object only.
+8. The response must start with `{` and end with `}`.
+9. Output JSON only. Do not output markdown. Do not output commentary. Do not wrap the JSON in code fences. Do not include any text before the opening `{` or after the closing `}`.
+10. Do not cite sources inside the JSON. Do not add notes, confidence labels, provenance prose, or explanation fields beyond the schema below.
+11. Conform exactly to this schema:
    - Top-level object:
      - `producer`: exactly `"chatgpt_agent"`
      - `connectorFamily`: exactly `"microsoft_365"`
@@ -38,10 +41,10 @@ Instructions:
      - `actionRequest`: string or `null`
      - `participants`: array of strings
      - `protectedContext`: boolean
-9. Keep every required field present. Use `null` only for nullable fields. Do not omit nullable fields.
-10. Do not include raw email bodies, raw Teams messages, long quoted text, confidential blocks, or unnecessary personal data.
-11. Summarize sensitive or protected context instead of reproducing it verbatim.
-12. Prefer executive-priority signals, especially:
+12. Keep every required field present. Use `null` only for nullable fields. Do not omit nullable fields.
+13. Do not include raw email bodies, raw Teams messages, long quoted text, confidential blocks, or unnecessary personal data.
+14. Summarize sensitive or protected context instead of reproducing it verbatim.
+15. Prefer executive-priority signals, especially:
    - direct asks
    - decisions needed
    - implied follow-ups
@@ -61,7 +64,7 @@ Instructions:
    - regulation
    - tariffs
    - logistics
-13. Aggressively filter out:
+16. Aggressively filter out:
    - newsletters
    - promotions
    - cold sales outreach
@@ -69,16 +72,16 @@ Instructions:
    - PR pitches
    - recruiting noise
    - automated notifications unless they create a real action or decision
-14. Keep the output concise:
+17. Keep the output concise:
    - target 5 to 15 signals
    - include fewer if fewer matter
    - do not pad the list
-15. If nothing meaningful is present, return a small number of `status` signals explaining the quiet state or connector availability rather than inventing importance.
-16. `summary` should be concise and useful to an executive chief-of-staff workflow.
-17. `owner` should identify who appears responsible for the next move, using a short human-readable string.
-18. `sourceLabel` should be a short human-readable source description such as a mailbox folder, meeting title, or chat/thread label.
-19. `protectedContext` should be `true` when the signal involves sensitive personnel, legal, finance, board, transaction, or similarly protected material.
-20. Connector gaps must be emitted as `status` signals. If a connector is unavailable, inaccessible, blocked, not reviewed, not inspected, failed, or could not be reviewed, include a concise `status` signal describing that gap instead of silently omitting it.
+18. If nothing meaningful is present, return a small number of `status` signals explaining the quiet state or connector availability rather than inventing importance.
+19. `summary` should be concise and useful to an executive chief-of-staff workflow.
+20. `owner` should identify who appears responsible for the next move, using a short human-readable string.
+21. `sourceLabel` should be a short human-readable source description such as a mailbox folder, meeting title, or chat/thread label.
+22. `protectedContext` should be `true` when the signal involves sensitive personnel, legal, finance, board, transaction, or similarly protected material.
+23. Connector gaps must be emitted as `status` signals. If a connector is unavailable, inaccessible, blocked, not reviewed, not inspected, failed, or could not be reviewed, include a concise `status` signal describing that gap instead of silently omitting it.
 
 Before returning, verify all of the following:
 
@@ -172,7 +175,7 @@ Return only the final JSON object.
 }
 ```
 
-Save the resulting JSON locally as `.local/agent-signals.json`. Do not commit real Agent output.
+Save the resulting JSON somewhere local and import it through `/api/agent-signals/import`. Do not commit real Agent output.
 
 ## Repair Prompt
 
@@ -206,7 +209,7 @@ Invalid JSON:
 ## Operator Flow
 
 1. Run the prompt above in ChatGPT Agent.
-2. Save the JSON-only response to `.local/agent-signals.json`.
-3. Run `npm run validate:agent-signals`.
-4. Open `/inbox`.
-5. Confirm `Payload source` says `Local Agent JSON`.
+2. POST the JSON-only response to `/api/agent-signals/import` with `x-agent-signals-import-secret`.
+3. Open `/inbox`.
+4. Confirm `Source mode` says `Database`.
+5. Confirm `Latest imported` is populated.

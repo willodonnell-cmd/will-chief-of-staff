@@ -1,5 +1,6 @@
 import { mapPriorityInboxRow, type PriorityInboxRow } from "@/lib/priority-inbox-store";
 import {
+  isAgentRunRequestsSchemaUnavailableError,
   mapAgentRunRequest,
   type AgentRunRequestRow,
   type ManualAgentRunRequest
@@ -17,11 +18,11 @@ import {
   loadLocalAgentProducedMicrosoft365SignalEnvelopeWithSource,
   type AgentProducedMicrosoft365SignalEnvelope,
   type AgentProducedMicrosoft365SignalEnvelopeSource,
+  type Microsoft365SourceCoverage,
   type Microsoft365SignalProducer
 } from "@/lib/microsoft-signal-intake";
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 import { withSupabaseTimeout } from "@/lib/supabase/request-timeout";
-import type { Microsoft365SourceCoverage } from "@/lib/microsoft-signal-intake";
 
 export type AgentRunInboxState = "never_run" | "failed" | "zero_signals" | "stale" | "succeeded";
 export type PriorityInboxPageSourceMode = "database" | "local" | "fixture";
@@ -67,6 +68,7 @@ export type PriorityInboxPageData = {
   state: AgentRunInboxState;
   latestRun: PriorityInboxLatestRun | null;
   latestManualRequest: ManualAgentRunRequest | null;
+  manualRunRequestsAvailable: boolean;
   items: PriorityInboxItem[];
   sourceMode: PriorityInboxPageSourceMode;
 };
@@ -234,6 +236,7 @@ export function buildFallbackPriorityInboxPageData(
     state: deriveState(latestRun),
     latestRun,
     latestManualRequest: null,
+    manualRunRequestsAvailable: false,
     items,
     sourceMode: source
   };
@@ -334,6 +337,7 @@ export async function loadPriorityInboxPageDataWithDeps(
       state: "never_run",
       latestRun: null,
       latestManualRequest: null,
+      manualRunRequestsAvailable: false,
       items: [],
       sourceMode: "database"
     };
@@ -341,6 +345,10 @@ export async function loadPriorityInboxPageDataWithDeps(
 
   const now = new Date().toISOString();
   const latestManualRequestResponse = await loadLatestManualRunRequest(resolved, now);
+  const manualRunRequestsAvailable = !(
+    latestManualRequestResponse.error &&
+    isAgentRunRequestsSchemaUnavailableError(latestManualRequestResponse.error.message)
+  );
   const latestManualRequest =
     latestManualRequestResponse.error || !latestManualRequestResponse.data
       ? null
@@ -353,7 +361,8 @@ export async function loadPriorityInboxPageDataWithDeps(
       const fallback = buildFallbackPriorityInboxPageData(devFallback.envelope, devFallback.source);
       return {
         ...fallback,
-        latestManualRequest
+        latestManualRequest,
+        manualRunRequestsAvailable
       };
     }
 
@@ -361,6 +370,7 @@ export async function loadPriorityInboxPageDataWithDeps(
       state: "never_run",
       latestRun: null,
       latestManualRequest,
+      manualRunRequestsAvailable,
       items: [],
       sourceMode: "database"
     };
@@ -376,6 +386,7 @@ export async function loadPriorityInboxPageDataWithDeps(
       state: deriveState(latestRun),
       latestRun,
       latestManualRequest,
+      manualRunRequestsAvailable,
       items: [],
       sourceMode: "database"
     };
@@ -398,6 +409,7 @@ export async function loadPriorityInboxPageDataWithDeps(
     state: deriveState(latestRun),
     latestRun,
     latestManualRequest,
+    manualRunRequestsAvailable,
     items: itemResponse.error ? [] : (itemResponse.data ?? []).map(mapPriorityInboxRow),
     sourceMode: "database"
   };

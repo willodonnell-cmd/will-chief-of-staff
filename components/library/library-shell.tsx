@@ -11,13 +11,16 @@ import {
 import type { TaskCategoryOption } from "@/lib/blackhawk-capture-model";
 import { formatTaskPriorityLabel } from "@/lib/blackhawk-capture-model";
 import {
+  LIBRARY_QUICK_VIEWS,
   countLibraryItemsByWorkType,
   getLibraryCaptureType,
+  getLibraryQuickViewDefinition,
   getLibraryItemPriority,
   groupLibraryItemsByWorkType,
   type LibraryBrowseMode,
   type LibraryItemSummary,
   type LibraryPriorityFilter,
+  type LibraryQuickView,
   type LibraryQuery,
   type LibraryScope,
   type LibraryTypeFilter
@@ -78,6 +81,7 @@ function buildQueryHref(
   query: LibraryQuery,
   overrides: Partial<{
     mode: LibraryBrowseMode;
+    view: LibraryQuickView | null;
     search: string;
     type: LibraryTypeFilter;
     status: LibraryQuery["status"];
@@ -88,6 +92,7 @@ function buildQueryHref(
 ) {
   const next = {
     mode: query.mode,
+    view: query.view,
     search: query.search,
     type: query.type,
     status: query.status,
@@ -102,6 +107,10 @@ function buildQueryHref(
 
   if (scope !== "tasks" && next.mode !== defaultMode) {
     params.set("mode", next.mode);
+  }
+
+  if (next.view) {
+    params.set("view", next.view);
   }
 
   if (next.search) {
@@ -332,6 +341,7 @@ function LibraryTabs({ scope, query }: { scope: LibraryScope; query: LibraryQuer
           <Link
             href={buildQueryHref("library", query, {
               mode: "all",
+              view: null,
               status: scope === "archived" ? "all" : query.status,
               type: normalizedTypeForMode("all", query.type)
             })}
@@ -347,6 +357,7 @@ function LibraryTabs({ scope, query }: { scope: LibraryScope; query: LibraryQuer
           <Link
             href={buildQueryHref("library", query, {
               mode: "notes",
+              view: null,
               status: scope === "archived" ? "all" : query.status,
               type: normalizedTypeForMode("notes", query.type)
             })}
@@ -362,6 +373,7 @@ function LibraryTabs({ scope, query }: { scope: LibraryScope; query: LibraryQuer
           <Link
             href={buildQueryHref("tasks", query, {
               mode: "tasks",
+              view: null,
               status: scope === "archived" ? "all" : query.status,
               type: normalizedTypeForMode("tasks", query.type)
             })}
@@ -380,7 +392,15 @@ function LibraryTabs({ scope, query }: { scope: LibraryScope; query: LibraryQuer
           Primary view: <span className="font-medium text-text">{primaryModeLabel(mode)}</span>
         </p>
         <Link
-          href="/library/archived"
+          href={buildQueryHref("archived", query, {
+            mode: "all",
+            view: null,
+            type: "all",
+            status: "archived",
+            priority: "all",
+            due: "all",
+            category: "all"
+          })}
           className={cn(
             "text-sm transition",
             scope === "archived" ? "font-medium text-text" : "text-text-muted hover:text-text"
@@ -390,6 +410,71 @@ function LibraryTabs({ scope, query }: { scope: LibraryScope; query: LibraryQuer
         </Link>
       </div>
     </div>
+  );
+}
+
+function QuickViews({ scope, query }: { scope: LibraryScope; query: LibraryQuery }) {
+  const activeView = query.view ? getLibraryQuickViewDefinition(query.view) : null;
+
+  function quickViewHref(view: LibraryQuickView, targetScope: LibraryScope) {
+    return buildQueryHref(targetScope, query, {
+      mode: "all",
+      view,
+      type: "all",
+      status: targetScope === "archived" ? "archived" : "all",
+      priority: "all",
+      due: "all",
+      category: "all"
+    });
+  }
+
+  return (
+    <section className="rounded-[1.45rem] border border-line/75 bg-white/60 px-4 py-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-2">
+          <p className="section-label">Quick Views</p>
+          <div className="flex flex-wrap gap-2">
+            {LIBRARY_QUICK_VIEWS.map((view) => (
+              <Link
+                key={view.value}
+                href={quickViewHref(view.value, view.scope)}
+                className={cn(
+                  "rounded-full border px-3.5 py-1.5 text-sm transition",
+                  query.view === view.value
+                    ? "border-line/85 bg-[rgb(var(--color-shell))] text-white"
+                    : "border-line/75 bg-white/78 text-text-muted hover:bg-white hover:text-text"
+                )}
+              >
+                {view.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {activeView ? (
+          <div className="flex flex-wrap items-center gap-2 text-sm text-text-muted md:justify-end">
+            <span>
+              Quick view: <span className="font-medium text-text">{activeView.label}</span>
+            </span>
+            <Link
+              href={buildQueryHref(scope, query, {
+                view: null,
+                status: scope === "archived" ? "archived" : "all",
+                type: "all",
+                priority: "all",
+                due: "all",
+                category: "all"
+              })}
+              className="rounded-full border border-line/75 bg-white/78 px-3 py-1.5 text-sm text-text-muted transition hover:bg-white hover:text-text"
+            >
+              Clear quick view
+            </Link>
+          </div>
+        ) : (
+          <p className="text-sm text-text-muted">Fixed shortcuts for the slices you reach for most.</p>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -407,9 +492,14 @@ function Filters({
   return (
     <form action={basePath} className="rounded-[1.55rem] border border-line/75 bg-white/68 p-4 md:p-5">
       {query.scope !== "tasks" && query.mode !== "all" ? <input type="hidden" name="mode" value={query.mode} /> : null}
+      {query.view ? <input type="hidden" name="view" value={query.view} /> : null}
       <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-text-muted">
         <span className="section-label">Filters</span>
-        <span>Primary mode controls the browsing surface; work type refines within it.</span>
+        <span>
+          {query.view
+            ? "Quick view defines the main slice; search and non-conflicting filters refine within it."
+            : "Primary mode controls the browsing surface; work type refines within it."}
+        </span>
       </div>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_repeat(3,minmax(0,0.5fr))_auto]">
         <label className="space-y-2 text-sm text-text-muted">
@@ -814,6 +904,7 @@ export function LibraryShell({ copy, scope, items, query, currentPath, categorie
       <PageIntro eyebrow={copy.eyebrow} title={copy.title} description={copy.description} />
 
       <LibraryTabs scope={scope} query={query} />
+      <QuickViews scope={scope} query={query} />
       <Filters query={query} categories={categories} commonCategories={commonCategories} />
       <WorkTypeCountSummary items={items} />
 

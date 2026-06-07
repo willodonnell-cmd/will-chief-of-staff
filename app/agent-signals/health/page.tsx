@@ -78,7 +78,8 @@ function HealthStat(props: { label: string; value: string | number }) {
 }
 
 export default async function AgentSignalsHealthPage() {
-  const { state, latestRun, latestManualRequest, sourceMode } = await loadPriorityInboxPageData();
+  const { state, latestRun, latestManualRequest, manualRunRequestsAvailable, sourceMode } =
+    await loadPriorityInboxPageData();
   const microsoftGraphStatus = await getMicrosoftGraphConnectionStatusForCurrentUser();
   const deployedCommitSha = process.env.VERCEL_GIT_COMMIT_SHA?.trim() || null;
   const currentlyReadingDurableData = sourceMode === "database";
@@ -96,6 +97,7 @@ export default async function AgentSignalsHealthPage() {
       <AgentControlsCard
         latestRun={latestRun}
         latestManualRequest={latestManualRequest}
+        manualRunRequestsAvailable={manualRunRequestsAvailable}
         microsoftGraphStatus={microsoftGraphStatus}
         sourceMode={sourceMode}
         state={state}

@@ -7,6 +7,7 @@ import {
   type LibraryQuery
 } from "../lib/capture-library";
 import {
+  countLibraryItemsForQuickView,
   countLibraryItemsByWorkType,
   filterLibraryItems,
   groupLibraryItemsByWorkType,
@@ -61,6 +62,7 @@ function buildLibraryQuery(overrides: Partial<LibraryQuery> = {}): LibraryQuery 
   return {
     scope: "library",
     mode: "all",
+    view: null,
     search: "",
     type: "all",
     status: "all",
@@ -195,6 +197,39 @@ test("parses library query params for q, type, status, and priority", () => {
   assert.equal(query.type, "decision");
   assert.equal(query.status, "archived");
   assert.equal(query.priority, "high");
+});
+
+test("parses valid quick view values and normalizes dominant filters", () => {
+  const query = parseLibraryQueryParams(
+    {
+      q: "board",
+      view: "decisions",
+      type: "task",
+      status: "completed",
+      priority: "low"
+    },
+    "library"
+  );
+
+  assert.equal(query.search, "board");
+  assert.equal(query.view, "decisions");
+  assert.equal(query.mode, "all");
+  assert.equal(query.type, "decision");
+  assert.equal(query.status, "active");
+  assert.equal(query.priority, "all");
+});
+
+test("rejects invalid quick view values", () => {
+  const query = parseLibraryQueryParams(
+    {
+      view: "not-a-view",
+      type: "decision"
+    },
+    "library"
+  );
+
+  assert.equal(query.view, null);
+  assert.equal(query.type, "decision");
 });
 
 test("notes mode keeps note-compatible executive objects in view", () => {
@@ -396,6 +431,265 @@ test("filters by priority and status", () => {
     filterLibraryItems(items, buildLibraryQuery({ status: "archived" })).map((item) => item.id),
     ["archived-note"]
   );
+});
+
+test("high-priority quick view returns only active high-priority items", () => {
+  const items = [
+    buildLibraryItem({
+      id: "high-decision",
+      captureType: "decision",
+      captureTypeLabel: "Decision",
+      executiveWorkType: "decision",
+      priority: "high",
+      captureMetadata: { captureType: "decision", decisionQuestion: "Approve?" }
+    }),
+    buildLibraryItem({
+      id: "low-task",
+      type: "task",
+      captureType: "task",
+      captureTypeLabel: "Task",
+      note: null,
+      priority: "low",
+      task: {
+        title: "Later",
+        description: "Later",
+        nextStep: "",
+        desiredOutcome: "",
+        status: "active",
+        dueAt: null,
+        priority: "low",
+        categoryId: "priority-action",
+        categoryName: "Priority Action",
+        categoryIsFallback: false,
+        linkedInitiativeId: null,
+        linkedInitiativeTitle: null
+      }
+    }),
+    buildLibraryItem({
+      id: "archived-high",
+      priority: "high",
+      status: "archived",
+      archivedAt: "2026-05-31T10:00:00.000Z"
+    })
+  ];
+
+  assert.deepEqual(
+    filterLibraryItems(items, buildLibraryQuery({ view: "high-priority", status: "active", priority: "high" })).map(
+      (item) => item.id
+    ),
+    ["high-decision"]
+  );
+});
+
+test("waiting-on quick view includes waiting-on and waiting-for task items", () => {
+  const items = [
+    buildLibraryItem({
+      id: "waiting-on-capture",
+      type: "task",
+      captureType: "waiting_on",
+      captureTypeLabel: "Waiting On",
+      executiveWorkType: "delegation",
+      note: null,
+      priority: "medium",
+      task: {
+        title: "Waiting on finance",
+        description: "Waiting on finance",
+        nextStep: "",
+        desiredOutcome: "Budget numbers",
+        status: "active",
+        dueAt: null,
+        priority: "medium",
+        categoryId: "waiting-for",
+        categoryName: "Waiting For",
+        categoryIsFallback: false,
+        linkedInitiativeId: null,
+        linkedInitiativeTitle: null
+      }
+    }),
+    buildLibraryItem({
+      id: "waiting-for-task",
+      type: "task",
+      captureType: "task",
+      captureTypeLabel: "Task",
+      note: null,
+      priority: "medium",
+      task: {
+        title: "Need response",
+        description: "Need response",
+        nextStep: "",
+        desiredOutcome: "",
+        status: "active",
+        dueAt: null,
+        priority: "medium",
+        categoryId: "waiting-for",
+        categoryName: "Waiting For",
+        categoryIsFallback: false,
+        linkedInitiativeId: null,
+        linkedInitiativeTitle: null
+      }
+    }),
+    buildLibraryItem({ id: "ordinary-note" })
+  ];
+
+  assert.deepEqual(
+    filterLibraryItems(items, buildLibraryQuery({ view: "waiting-on", status: "active" })).map((item) => item.id),
+    ["waiting-on-capture", "waiting-for-task"]
+  );
+});
+
+test("decision, opportunity, and meeting-note quick views isolate their work types", () => {
+  const items = [
+    buildLibraryItem({
+      id: "decision-1",
+      captureType: "decision",
+      captureTypeLabel: "Decision",
+      executiveWorkType: "decision",
+      captureMetadata: { captureType: "decision", decisionQuestion: "Approve?" }
+    }),
+    buildLibraryItem({
+      id: "opportunity-1",
+      captureType: "opportunity",
+      captureTypeLabel: "Opportunity",
+      executiveWorkType: "opportunity",
+      captureMetadata: { captureType: "opportunity", companyOrCounterparty: "Harbinger" }
+    }),
+    buildLibraryItem({
+      id: "meeting-1",
+      captureType: "meeting_note",
+      captureTypeLabel: "Meeting Note",
+      executiveWorkType: "meeting",
+      captureMetadata: { captureType: "meeting_note", meetingTitle: "Board prep sync" }
+    })
+  ];
+
+  assert.deepEqual(filterLibraryItems(items, buildLibraryQuery({ view: "decisions", type: "decision" })).map((item) => item.id), [
+    "decision-1"
+  ]);
+  assert.deepEqual(
+    filterLibraryItems(items, buildLibraryQuery({ view: "opportunities", type: "opportunity" })).map((item) => item.id),
+    ["opportunity-1"]
+  );
+  assert.deepEqual(
+    filterLibraryItems(items, buildLibraryQuery({ view: "meeting-notes", type: "meeting_note" })).map((item) => item.id),
+    ["meeting-1"]
+  );
+});
+
+test("needs-cleanup quick view catches deterministic cleanup candidates", () => {
+  const items = [
+    buildLibraryItem({
+      id: "fallback-task",
+      type: "task",
+      captureType: "task",
+      captureTypeLabel: "Task",
+      note: null,
+      priority: "medium",
+      task: {
+        title: "Triage later",
+        description: "Triage later",
+        nextStep: "",
+        desiredOutcome: "",
+        status: "active",
+        dueAt: null,
+        priority: "medium",
+        categoryId: "tbd",
+        categoryName: "TBD",
+        categoryIsFallback: true,
+        linkedInitiativeId: null,
+        linkedInitiativeTitle: null
+      }
+    }),
+    buildLibraryItem({
+      id: "low-no-date",
+      type: "task",
+      captureType: "task",
+      captureTypeLabel: "Task",
+      note: null,
+      priority: "low",
+      lastActiveAt: "2026-05-31T09:00:00.000Z",
+      task: {
+        title: "Reference item",
+        description: "Reference item",
+        nextStep: "",
+        desiredOutcome: "",
+        status: "active",
+        dueAt: null,
+        priority: "low",
+        categoryId: "priority-action",
+        categoryName: "Priority Action",
+        categoryIsFallback: false,
+        linkedInitiativeId: null,
+        linkedInitiativeTitle: null
+      }
+    }),
+    buildLibraryItem({
+      id: "stale-note",
+      title: "Old note",
+      preview: "Dormant reference",
+      lastActiveAt: "2025-01-01T09:00:00.000Z"
+    }),
+    buildLibraryItem({
+      id: "obvious-test",
+      title: "test item",
+      preview: "Scratch note"
+    }),
+    buildLibraryItem({
+      id: "fresh-priority",
+      captureType: "decision",
+      captureTypeLabel: "Decision",
+      executiveWorkType: "decision",
+      priority: "high",
+      captureMetadata: { captureType: "decision", decisionQuestion: "Approve?" }
+    })
+  ];
+
+  assert.deepEqual(
+    filterLibraryItems(items, buildLibraryQuery({ view: "needs-cleanup", status: "active" })).map((item) => item.id),
+    ["fallback-task", "low-no-date", "stale-note", "obvious-test"]
+  );
+});
+
+test("recently-archived quick view returns archived items and counts correctly", () => {
+  const items = [
+    buildLibraryItem({
+      id: "archived-note",
+      status: "archived",
+      archivedAt: "2026-05-31T10:00:00.000Z"
+    }),
+    buildLibraryItem({
+      id: "archived-task",
+      type: "task",
+      captureType: "task",
+      captureTypeLabel: "Task",
+      status: "archived",
+      archivedAt: "2026-05-31T11:00:00.000Z",
+      note: null,
+      priority: "medium",
+      task: {
+        title: "Done",
+        description: "Done",
+        nextStep: "",
+        desiredOutcome: "",
+        status: "completed",
+        dueAt: null,
+        priority: "medium",
+        categoryId: "priority-action",
+        categoryName: "Priority Action",
+        categoryIsFallback: false,
+        linkedInitiativeId: null,
+        linkedInitiativeTitle: null
+      }
+    }),
+    buildLibraryItem({ id: "active-note" })
+  ];
+
+  assert.deepEqual(
+    filterLibraryItems(items, buildLibraryQuery({ scope: "archived", view: "recently-archived", status: "archived" })).map(
+      (item) => item.id
+    ),
+    ["archived-note", "archived-task"]
+  );
+  assert.equal(countLibraryItemsForQuickView(items, "recently-archived"), 2);
 });
 
 test("counts and groups items by work type in executive order", () => {

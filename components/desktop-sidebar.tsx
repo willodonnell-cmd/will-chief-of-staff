@@ -3,7 +3,6 @@
 import type { Route } from "next";
 import type { CSSProperties } from "react";
 import type { ComponentType } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -112,12 +111,12 @@ export function DesktopSidebar() {
               ].join(", ")
             }}
           />
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src="/brand/stingray-side-profile.png"
             alt="Black 1967 Corvette Stingray convertible side profile."
             width={220}
             height={95}
-            priority
             className="h-auto w-full max-w-[224px] object-contain"
             style={{
               WebkitMaskImage:

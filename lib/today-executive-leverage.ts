@@ -151,6 +151,16 @@ export type TodayExecutiveLeverageMeetingSourceAttribution = {
   liveCalendarSurfacedAboveCount: number;
 };
 
+export type TodayExecutiveLeverageCrossSectionCounts = {
+  meetingItemsInTop3: number;
+  decisionRelevantMeetingsInMeetings: number;
+  decisionRelevantMeetingsInTop3: number;
+  decisionItemsSuppressedBecauseMeetingPrimary: number;
+  totalIcItems: number;
+  icItemsRequiringWillAction: number;
+  icItemsRoutedToIcLaneOnly: number;
+};
+
 export type TodayExecutiveLeverageViewModel = {
   generated_at: string;
   topNextBestActions: TopNextBestAction[];
@@ -164,6 +174,7 @@ export type TodayExecutiveLeverageViewModel = {
   sectionOverlapCounts: TodayExecutiveLeverageSectionOverlapCounts;
   sectionOverflowCounts: TodayExecutiveLeverageSectionOverflowCounts;
   meetingSourceAttribution: TodayExecutiveLeverageMeetingSourceAttribution;
+  crossSectionCounts: TodayExecutiveLeverageCrossSectionCounts;
   emptyState?: TodayExecutiveLeverageEmptyState | null;
 };
 
@@ -191,6 +202,17 @@ const EXECUTIVE_SUMMARY_LIMIT = 132;
 const EXECUTIVE_SUMMARY_SHORT_LIMIT = 112;
 
 const DECISION_EVIDENCE_TERMS = ["decision", "approve", "approval", "board", "committee", "governance", "ic", "pac"];
+const MEETING_PRIMARY_TERMS = [
+  "meeting",
+  "prep",
+  "agenda",
+  "debrief",
+  "sync",
+  "standup",
+  "1:1",
+  "one-on-one",
+  "call"
+] as const;
 const OPPORTUNITY_EVIDENCE_TERMS = [
   "opportunity",
   "deal",
@@ -687,27 +709,83 @@ function sourceTimestamp(signal: ExecutiveSignal) {
 }
 
 function isTopActionCandidate(signal: ExecutiveSignal) {
-  return signal.work_type !== "noise" && !isSystemDiagnosticSignal(signal);
+  return (
+    signal.work_type !== "noise" &&
+    !isSystemDiagnosticSignal(signal) &&
+    !isRoutineInvestmentCommitteeSignal(signal)
+  );
 }
 
-function isConsequentialMeeting(signal: ExecutiveSignal) {
+function isInvestmentCommitteeSignal(signal: ExecutiveSignal) {
+  return signal.routing_category === "IC";
+}
+
+function requiresDirectWillAction(signal: ExecutiveSignal) {
+  return signal.requires_direct_will_action === true;
+}
+
+function isRoutineInvestmentCommitteeSignal(signal: ExecutiveSignal) {
+  return isInvestmentCommitteeSignal(signal) && !requiresDirectWillAction(signal);
+}
+
+export function isMeetingPrimarySignal(signal: ExecutiveSignal) {
   if (isSystemDiagnosticSignal(signal)) {
     return false;
   }
 
-  return (
-    signal.work_type === "meeting" &&
+  if (signal.work_type === "noise" || signal.recommended_action === "archive" || signal.recommended_action === "ignore") {
+    return false;
+  }
+
+  if (signal.work_type === "meeting") {
+    return true;
+  }
+
+  if (
+    signal.source_origin === "live_calendar" ||
+    signal.source_type === "outlook_calendar" ||
+    signal.source_type === "calendar"
+  ) {
+    return true;
+  }
+
+  if (
     (signal.recommended_action === "prepare" ||
       signal.recommended_action === "follow_up" ||
       signal.recommended_action === "review" ||
+      signal.recommended_action === "schedule" ||
+      signal.recommended_action === "decide") &&
+    includesAnyTerm(signalText(signal), MEETING_PRIMARY_TERMS)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isConsequentialMeeting(signal: ExecutiveSignal) {
+  if (!isMeetingPrimarySignal(signal)) {
+    return false;
+  }
+
+  return (
+    signal.recommended_action === "prepare" ||
+      signal.recommended_action === "follow_up" ||
+      signal.recommended_action === "review" ||
       signal.recommended_action === "decide" ||
+      signal.recommended_action === "schedule" ||
       signal.priority === "high" ||
-      signal.priority === "medium")
+      signal.priority === "medium" ||
+      Boolean(signal.due_at || signal.source_received_at)
   );
 }
 
 function isDecisionNeeded(signal: ExecutiveSignal) {
   if (isSystemDiagnosticSignal(signal)) {
+    return false;
+  }
+
+  if (isRoutineInvestmentCommitteeSignal(signal)) {
     return false;
   }
 
@@ -723,6 +801,10 @@ function isDelegateWaitingOn(signal: ExecutiveSignal) {
     return false;
   }
 
+  if (isRoutineInvestmentCommitteeSignal(signal)) {
+    return false;
+  }
+
   return (
     signal.work_type === "delegation" ||
     signal.recommended_action === "delegate" ||
@@ -735,6 +817,10 @@ function isDelegateWaitingOn(signal: ExecutiveSignal) {
 
 function isOpportunitySignal(signal: ExecutiveSignal) {
   if (isSystemDiagnosticSignal(signal)) {
+    return false;
+  }
+
+  if (isRoutineInvestmentCommitteeSignal(signal)) {
     return false;
   }
 
@@ -754,10 +840,18 @@ function isProtectedValueSignal(signal: ExecutiveSignal) {
     return false;
   }
 
+  if (isRoutineInvestmentCommitteeSignal(signal)) {
+    return false;
+  }
+
   return signal.work_type === "strategic_initiative" || (signal.related_initiatives?.length ?? 0) > 0;
 }
 
 function isQuietlyHandled(signal: ExecutiveSignal) {
+  if (isRoutineInvestmentCommitteeSignal(signal)) {
+    return false;
+  }
+
   return (
     isSystemDiagnosticSignal(signal) ||
     signal.work_type === "noise" ||
@@ -1084,6 +1178,7 @@ function buildQuietlyHandled(signals: ExecutiveSignal[]): QuietlyHandledItem[] {
 type MeetingSectionStatusNoteInput = {
   meetingSourceAttribution: TodayExecutiveLeverageMeetingSourceAttribution;
   microsoftSourceMode?: TodayMicrosoftSourceMode;
+  surfacedAboveCount?: number;
   calendarSourceStatus?: {
     connected?: boolean;
     hasCalendarScope?: boolean;
@@ -1101,15 +1196,25 @@ type MeetingSectionStatusNoteInput = {
 
 export function getMeetingSectionCountLabel(input: {
   visibleCount: number;
+  surfacedAboveCount?: number;
   microsoftSourceMode?: TodayMicrosoftSourceMode;
   calendarSourceStatus?: MeetingSectionStatusNoteInput["calendarSourceStatus"];
 }) {
   const visibleCount = input.visibleCount;
+  const surfacedAboveCount = input.surfacedAboveCount ?? 0;
   const microsoftSourceMode = input.microsoftSourceMode;
   const calendarSourceStatus = input.calendarSourceStatus;
 
+  if (visibleCount > 0) {
+    return pluralize(visibleCount, "meeting card");
+  }
+
+  if (surfacedAboveCount > 0) {
+    return `${surfacedAboveCount} in Top 3`;
+  }
+
   if (microsoftSourceMode === "agent_handoff") {
-    return visibleCount > 0 ? pluralize(visibleCount, "meeting card") : "agent brief";
+    return "agent brief";
   }
 
   if (calendarSourceStatus?.needsReconnect) {
@@ -1125,15 +1230,7 @@ export function getMeetingSectionCountLabel(input: {
   }
 
   if (calendarSourceStatus?.fetchSucceeded) {
-    if (visibleCount > 0) {
-      return pluralize(visibleCount, "meeting card");
-    }
-
     return "calendar checked";
-  }
-
-  if (visibleCount > 0) {
-    return pluralize(visibleCount, "meeting card");
   }
 
   return "0 meeting cards";
@@ -1143,7 +1240,8 @@ export function getMeetingSectionStatusNote(input: MeetingSectionStatusNoteInput
   const parts: string[] = [];
   const microsoftSourceMode = input.microsoftSourceMode;
   const calendarSourceStatus = input.calendarSourceStatus;
-  const surfacedAboveTotal = sumMeetingSourceCounts(input.meetingSourceAttribution.surfacedAboveBySourceType);
+  const surfacedAboveTotal =
+    input.surfacedAboveCount ?? sumMeetingSourceCounts(input.meetingSourceAttribution.surfacedAboveBySourceType);
   const surfacedAboveLive =
     calendarSourceStatus?.liveCalendarSurfacedAboveCount ??
     input.meetingSourceAttribution.liveCalendarSurfacedAboveCount;
@@ -1185,16 +1283,66 @@ export function getMeetingSectionStatusNote(input: MeetingSectionStatusNoteInput
 
   if (surfacedAboveTotal > 0) {
     if (surfacedAboveLive === surfacedAboveTotal) {
-      parts.push(`${pluralize(surfacedAboveTotal, "live calendar item")} already surfaced above.`);
+      parts.push(`${pluralize(surfacedAboveTotal, "live calendar item")} already in Top 3.`);
     } else if (surfacedAboveLive === 0) {
-      parts.push(`${pluralize(surfacedAboveTotal, "meeting-prep signal")} already surfaced above.`);
+      parts.push(`${pluralize(surfacedAboveTotal, "meeting-prep item")} already in Top 3.`);
     } else {
-      parts.push(`${pluralize(surfacedAboveTotal, "meeting-related item")} already surfaced above.`);
+      parts.push(`${pluralize(surfacedAboveTotal, "meeting-related item")} already in Top 3.`);
     }
   }
 
   if ((input.overflowCount ?? 0) > 0) {
     parts.push(`${pluralize(input.overflowCount ?? 0, "more meeting item")} kept out of the foreground.`);
+  }
+
+  return parts.join(" ").trim() || undefined;
+}
+
+export function getDecisionsSectionStatusNote(input: {
+  overlapCount: number;
+  overflowCount: number;
+  crossSectionCounts?: TodayExecutiveLeverageCrossSectionCounts | null;
+}) {
+  const parts: string[] = [];
+  const crossSectionCounts = input.crossSectionCounts;
+
+  if ((crossSectionCounts?.decisionRelevantMeetingsInMeetings ?? 0) > 0) {
+    const count = crossSectionCounts?.decisionRelevantMeetingsInMeetings ?? 0;
+    parts.push(
+      count === 1
+        ? "1 decision-relevant meeting is in Meetings & Prep."
+        : `${count} decision-relevant meetings are in Meetings & Prep.`
+    );
+  }
+
+  if ((crossSectionCounts?.decisionRelevantMeetingsInTop3 ?? 0) > 0) {
+    const count = crossSectionCounts?.decisionRelevantMeetingsInTop3 ?? 0;
+    parts.push(
+      count === 1
+        ? "1 meeting requiring a decision is already in Top 3."
+        : `${count} meetings requiring decisions are already in Top 3.`
+    );
+  }
+
+  if ((crossSectionCounts?.icItemsRoutedToIcLaneOnly ?? 0) > 0) {
+    const count = crossSectionCounts?.icItemsRoutedToIcLaneOnly ?? 0;
+    parts.push(
+      count === 1
+        ? "1 IC item stayed in the IC lane."
+        : `${count} IC items stayed in the IC lane.`
+    );
+  }
+
+  if (input.overlapCount > 0) {
+    parts.push(
+      input.overlapCount === 1
+        ? "1 non-meeting decision is already surfaced above."
+        : `${input.overlapCount} non-meeting decisions are already surfaced above.`
+    );
+  }
+
+  if (input.overflowCount > 0) {
+    parts.push(`${pluralize(input.overflowCount, "more decision item")} kept out of the foreground.`);
   }
 
   return parts.join(" ").trim() || undefined;
@@ -1209,9 +1357,16 @@ export function buildTodayExecutiveLeverageViewModel(
   const initiatives = input.initiatives ?? [];
 
   const topNextBestActions = buildTopNextBestActions(executiveSignals, nowMs);
+  const topActionIds = new Set(topNextBestActions.map((item) => item.id));
+  const topActionSignals = executiveSignals.filter((signal) => topActionIds.has(signal.id));
   const usedSignalIds = new Set(topNextBestActions.map((item) => item.id));
-  const decisionsSelection = selectSectionSignals(executiveSignals, nowMs, isDecisionNeeded, usedSignalIds);
   const meetingsSelection = selectSectionSignals(executiveSignals, nowMs, isConsequentialMeeting, usedSignalIds);
+  const decisionsSelection = selectSectionSignals(
+    executiveSignals,
+    nowMs,
+    (signal) => isDecisionNeeded(signal) && !isMeetingPrimarySignal(signal),
+    usedSignalIds
+  );
   const delegationSelection = selectSectionSignals(executiveSignals, nowMs, isDelegateWaitingOn, usedSignalIds);
   const opportunitySelection = selectSectionSignals(executiveSignals, nowMs, isOpportunitySignal, usedSignalIds);
   const protectedSignals = executiveSignals.filter(isProtectedValueSignal);
@@ -1227,6 +1382,8 @@ export function buildTodayExecutiveLeverageViewModel(
     buildConsequentialMeetings(meetingsSelection.selected, nowMs),
     CONSEQUENTIAL_MEETING_LIMIT
   );
+  const investmentCommitteeSignals = executiveSignals.filter(isInvestmentCommitteeSignal);
+  const visibleMeetingIds = new Set(visibleMeetingSignals.map((signal) => signal.id));
   const meetingSourceAttribution = buildMeetingSourceAttribution(
     [...meetingsSelection.selected, ...meetingsSelection.omittedSignals],
     visibleMeetingSignals,
@@ -1240,6 +1397,28 @@ export function buildTodayExecutiveLeverageViewModel(
   );
   const quietlyHandled = capSection(buildQuietlyHandled(quietlyHandledSelection.selected), QUIETLY_HANDLED_LIMIT);
   const sourceCounts = buildSourceCounts(executiveSignals);
+  const decisionRelevantMeetingIds = new Set(
+    [
+      ...topActionSignals.filter((signal) => isMeetingPrimarySignal(signal) && isDecisionNeeded(signal)).map((signal) => signal.id),
+      ...meetingsSelection.selected.filter((signal) => isDecisionNeeded(signal)).map((signal) => signal.id)
+    ]
+  );
+  const crossSectionCounts: TodayExecutiveLeverageCrossSectionCounts = {
+    meetingItemsInTop3: topActionSignals.filter(isMeetingPrimarySignal).length,
+    decisionRelevantMeetingsInMeetings: visibleMeetingSignals.filter(isDecisionNeeded).length,
+    decisionRelevantMeetingsInTop3: topActionSignals.filter(
+      (signal) => isMeetingPrimarySignal(signal) && isDecisionNeeded(signal)
+    ).length,
+    decisionItemsSuppressedBecauseMeetingPrimary: decisionRelevantMeetingIds.size,
+    totalIcItems: investmentCommitteeSignals.length,
+    icItemsRequiringWillAction: investmentCommitteeSignals.filter(requiresDirectWillAction).length,
+    icItemsRoutedToIcLaneOnly: investmentCommitteeSignals.filter(
+      (signal) =>
+        !requiresDirectWillAction(signal) &&
+        !topActionIds.has(signal.id) &&
+        !visibleMeetingIds.has(signal.id)
+    ).length
+  };
   const hasSignals =
     topNextBestActions.length > 0 ||
     consequentialMeetings.visible.length > 0 ||
@@ -1275,6 +1454,7 @@ export function buildTodayExecutiveLeverageViewModel(
       quietlyHandled: quietlyHandled.hiddenCount
     },
     meetingSourceAttribution,
+    crossSectionCounts,
     emptyState: hasSignals
       ? null
       : {

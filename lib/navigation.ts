@@ -5,6 +5,7 @@ import {
   BriefcaseBusiness,
   CandlestickChart,
   Inbox,
+  Landmark,
   SlidersHorizontal,
   Target,
   Users,
@@ -41,6 +42,7 @@ export const mobileNavItems: NavItem[] = [
 
 export const mobileShellActions: NavItem[] = [
   { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness },
+  { label: "Investment Committee", href: "/investment-committee", icon: Landmark, shortLabel: "IC" },
   { label: "Library", href: "/library", icon: BookOpen },
   { label: "Admin", href: "/admin", icon: SlidersHorizontal }
 ];
@@ -48,6 +50,7 @@ export const mobileShellActions: NavItem[] = [
 export const desktopPrimaryNav: AnyNavItem[] = [
   { label: "Today", href: "/", icon: Target },
   { label: "Priority Inbox", href: "/inbox", icon: Inbox },
+  { label: "Investment Committee", href: "/investment-committee", icon: Landmark },
   { label: "People", href: "/people", icon: Users },
   { label: "Dossier", href: "https://odossier.vercel.app", icon: CandlestickChart, external: true },
   { label: "Library", href: "/library", icon: BookOpen },

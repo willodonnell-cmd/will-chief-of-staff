@@ -21,6 +21,7 @@ import type {
 type AgentControlsCardProps = {
   latestRun: PriorityInboxLatestRun | null;
   latestManualRequest: ManualAgentRunRequest | null;
+  manualRunRequestsAvailable: boolean;
   microsoftGraphStatus: MicrosoftGraphConnectionStatus;
   sourceMode: PriorityInboxPageSourceMode;
   state: AgentRunInboxState;
@@ -77,11 +78,15 @@ function ControlStat(props: { label: string; value: string | number }) {
 }
 
 export function AgentControlsCard(props: AgentControlsCardProps) {
-  const buttonState = getAgentRunRequestButtonState(props.latestManualRequest);
+  const buttonState = getAgentRunRequestButtonState(props.latestManualRequest, {
+    available: props.manualRunRequestsAvailable
+  });
   const nativeConnected = props.microsoftGraphStatus.connected;
   const latestRequestStatus = props.latestManualRequest
     ? getAgentRunRequestStatusLabel(props.latestManualRequest.status)
-    : "None";
+    : props.manualRunRequestsAvailable
+      ? "None"
+      : "Unavailable";
 
   return (
     <section className="rounded-[1.55rem] border border-line/75 bg-white/74 p-5 md:p-6">
@@ -171,7 +176,11 @@ export function AgentControlsCard(props: AgentControlsCardProps) {
             </button>
           </form>
         </div>
-        <p className="mt-3 text-sm leading-6 text-text-muted">{getAgentRunRequestStatusDetail(props.latestManualRequest)}</p>
+        <p className="mt-3 text-sm leading-6 text-text-muted">
+          {getAgentRunRequestStatusDetail(props.latestManualRequest, {
+            available: props.manualRunRequestsAvailable
+          })}
+        </p>
         {props.latestManualRequest?.agentSignalRunId ? (
           <p className="mt-2 text-sm font-medium text-text">
             Resulting run id: {props.latestManualRequest.agentSignalRunId}
