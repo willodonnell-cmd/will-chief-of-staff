@@ -4,6 +4,7 @@ import {
   BookOpen,
   BriefcaseBusiness,
   CandlestickChart,
+  FileText,
   Inbox,
   Landmark,
   SlidersHorizontal,
@@ -41,6 +42,7 @@ export const mobileNavItems: NavItem[] = [
 ];
 
 export const mobileShellActions: NavItem[] = [
+  { label: "Executive Brief", href: "/brief", icon: FileText, shortLabel: "Brief" },
   { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness },
   { label: "Investment Committee", href: "/investment-committee", icon: Landmark, shortLabel: "IC" },
   { label: "Library", href: "/library", icon: BookOpen },
@@ -49,6 +51,7 @@ export const mobileShellActions: NavItem[] = [
 
 export const desktopPrimaryNav: AnyNavItem[] = [
   { label: "Today", href: "/", icon: Target },
+  { label: "Executive Brief", href: "/brief", icon: FileText },
   { label: "Priority Inbox", href: "/inbox", icon: Inbox },
   { label: "Investment Committee", href: "/investment-committee", icon: Landmark },
   { label: "People", href: "/people", icon: Users },
