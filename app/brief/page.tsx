@@ -4,8 +4,15 @@ import { loadExecutiveBriefPageData } from "@/lib/brief/load-executive-brief-pag
 
 export const dynamic = "force-dynamic";
 
-export default async function BriefPage() {
-  const pageData = await loadExecutiveBriefPageData();
+type BriefPageProps = {
+  searchParams: Promise<{
+    notice?: string;
+    error?: string;
+  }>;
+};
+
+export default async function BriefPage({ searchParams }: BriefPageProps) {
+  const [{ notice, error }, pageData] = await Promise.all([searchParams, loadExecutiveBriefPageData()]);
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -15,7 +22,7 @@ export default async function BriefPage() {
         description="The latest processed agent-email snapshot for Blackhawk, organized by scheduled brief slot and manual refreshes."
       />
 
-      <ExecutiveBriefWorkspace data={pageData} />
+      <ExecutiveBriefWorkspace data={pageData} notice={notice} error={error} />
     </div>
   );
 }

@@ -6,8 +6,10 @@ import type {
   InvestmentCommitteeAgentEnvelope,
   InvestmentCommitteeAgentCycle,
   InvestmentCommitteeAgentDeal,
-  InvestmentCommitteeAgentThreadKind
+  InvestmentCommitteeAgentThreadKind,
+  ParsedInvestmentCommitteeBundle
 } from "@/lib/investment-committee-agent";
+import { withSupabaseTimeout } from "@/lib/supabase/request-timeout";
 
 export const INVESTMENT_COMMITTEE_CYCLE_STATUSES = ["active", "completed", "archived"] as const;
 export const INVESTMENT_COMMITTEE_DEAL_STATUSES = [
@@ -119,7 +121,7 @@ export type InvestmentCommitteeBoardDeal = {
 };
 
 export type InvestmentCommitteeBoard = {
-  source: "agent_run" | "local" | "fixture";
+  source: "agent_run" | "local" | "fixture" | "cloudmailin";
   statusNotice: string | null;
   weekOf: string;
   meetingDate: string | null;
@@ -147,6 +149,22 @@ type OwnedCycleContext = {
 };
 
 type InvestmentCommitteeClient = { from: SupabaseClient["from"] };
+
+type InvestmentCommitteeAgentBundleRow = {
+  id: string;
+  user_id: string;
+  subject: string;
+  raw_email_body: string;
+  envelope: InvestmentCommitteeAgentEnvelope;
+  source_message_id: string | null;
+  produced_at: string;
+  week_of: string;
+  created_at: string;
+  updated_at: string;
+};
+
+const INVESTMENT_COMMITTEE_AGENT_BUNDLE_SELECT =
+  "id, user_id, subject, raw_email_body, envelope, source_message_id, produced_at, week_of, created_at, updated_at";
 
 async function resolveInvestmentCommitteeUser() {
   const { resolveCurrentAppUser } = await import("@/lib/supabase/current-user");
@@ -289,7 +307,7 @@ export function shouldClearInvestmentCommitteeBoard(
 }
 
 export function shouldHideInvestmentCommitteeBoard(
-  source: "local" | "fixture" | null,
+  source: "local" | "fixture" | "cloudmailin" | null,
   cycle: Pick<InvestmentCommitteeAgentCycle, "resetAt">,
   now = new Date()
 ) {
@@ -303,7 +321,7 @@ export function shouldHideInvestmentCommitteeBoard(
 export function buildInvestmentCommitteeBoard(
   envelope: InvestmentCommitteeAgentEnvelope,
   persistedDeals: InvestmentCommitteeDealRecord[],
-  source: "local" | "fixture",
+  source: "local" | "fixture" | "cloudmailin",
   statusNotice: string | null = null
 ): InvestmentCommitteeBoard {
   return {
@@ -903,8 +921,54 @@ async function listInvestmentCommitteeDealsForCycle(
   return data ?? [];
 }
 
+async function getLatestInvestmentCommitteeAgentBundleForUser(
+  client: InvestmentCommitteeClient,
+  userId: string
+) {
+  const response = await withSupabaseTimeout(
+    client
+      .from("investment_committee_agent_bundles")
+      .select(INVESTMENT_COMMITTEE_AGENT_BUNDLE_SELECT)
+      .eq("user_id", userId)
+      .order("produced_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<InvestmentCommitteeAgentBundleRow>()
+  );
+
+  if (response.error || !response.data) {
+    return null;
+  }
+
+  return response.data;
+}
+
 export async function getInvestmentCommitteePageData(): Promise<InvestmentCommitteePageData | null> {
   const resolved = await resolveInvestmentCommitteeUser();
+  const latestBundle = resolved
+    ? await getLatestInvestmentCommitteeAgentBundleForUser(resolved.client, resolved.user.id)
+    : null;
+
+  if (resolved && latestBundle && !shouldHideInvestmentCommitteeBoard("cloudmailin", latestBundle.envelope.cycle)) {
+    const cycleForWeek = findInvestmentCommitteeCycleForWeek(
+      await listInvestmentCommitteeCyclesForUser(resolved.user.id, resolved.client),
+      latestBundle.envelope.cycle.weekOf
+    );
+    const visiblePersistedDeals = cycleForWeek
+      ? listVisibleInvestmentCommitteeDeals(await listInvestmentCommitteeDealsForCycle(resolved.client, cycleForWeek.id))
+      : [];
+
+    return {
+      board: buildInvestmentCommitteeBoard(
+        latestBundle.envelope,
+        visiblePersistedDeals,
+        "cloudmailin",
+        "Showing the latest Investment Committee bundle received through CloudMailIn."
+      ),
+      emptyState: null
+    };
+  }
+
   const { loadLocalInvestmentCommitteeAgentEnvelope } = await import("@/lib/investment-committee-agent");
   const envelope = await loadLocalInvestmentCommitteeAgentEnvelope().catch(() => null);
 
@@ -1019,6 +1083,81 @@ function findPersistedDealByTitle(
     }) ??
     null
   );
+}
+
+export async function upsertInvestmentCommitteeAgentBundle(params: {
+  client: SupabaseClient;
+  userId: string;
+  parsed: ParsedInvestmentCommitteeBundle;
+}) {
+  const bundleRow = {
+    user_id: params.userId,
+    subject: params.parsed.subject,
+    raw_email_body: params.parsed.rawEmailBody,
+    envelope: params.parsed.envelope,
+    source_message_id: params.parsed.sourceMessageId,
+    produced_at: params.parsed.envelope.producedAt,
+    week_of: params.parsed.envelope.cycle.weekOf
+  };
+
+  const query = params.parsed.sourceMessageId
+    ? params.client.from("investment_committee_agent_bundles").upsert(bundleRow, {
+        onConflict: "user_id,source_message_id"
+      })
+    : params.client.from("investment_committee_agent_bundles").insert(bundleRow);
+
+  const bundleResponse = await withSupabaseTimeout(
+    query.select(INVESTMENT_COMMITTEE_AGENT_BUNDLE_SELECT).single<InvestmentCommitteeAgentBundleRow>()
+  );
+
+  if (bundleResponse.error || !bundleResponse.data) {
+    throw new Error(bundleResponse.error?.message ?? "Investment Committee bundle could not be persisted.");
+  }
+
+  const cycle = await ensureInvestmentCommitteeCycleForWeek(params.client, params.userId, {
+    weekOf: params.parsed.envelope.cycle.weekOf,
+    boxFolderUrl: params.parsed.envelope.cycle.boxFolderUrl,
+    meetingDate: params.parsed.envelope.cycle.meetingDate,
+    questionsDueAt: params.parsed.envelope.cycle.questionsDueAt
+  });
+  const visibleDeals = listVisibleInvestmentCommitteeDeals(
+    await listInvestmentCommitteeDealsForCycle(params.client, cycle.id)
+  );
+
+  for (const [index, deal] of params.parsed.envelope.deals.entries()) {
+    const existingDeal = findPersistedDealByTitle(visibleDeals, deal.title);
+    if (existingDeal) {
+      const { error } = await params.client
+        .from("investment_committee_deals")
+        .update({
+          memo_link: normalizeUrl(deal.memoUrl) ?? existingDeal.memo_link,
+          peer_question_notes: normalizeText(deal.peerQuestionSummary) ?? existingDeal.peer_question_notes
+        })
+        .eq("user_id", params.userId)
+        .eq("id", existingDeal.id);
+
+      if (error) {
+        throw new Error("Investment Committee deal could not be updated.");
+      }
+      continue;
+    }
+
+    const { error } = await params.client.from("investment_committee_deals").insert({
+      user_id: params.userId,
+      cycle_id: cycle.id,
+      title: deal.title,
+      memo_link: normalizeUrl(deal.memoUrl),
+      status: "not_started",
+      peer_question_notes: normalizeText(deal.peerQuestionSummary),
+      sort_order: visibleDeals.length + index
+    });
+
+    if (error) {
+      throw new Error("Investment Committee deal could not be created.");
+    }
+  }
+
+  return bundleResponse.data;
 }
 
 export async function saveInvestmentCommitteeWillNotes(input: {

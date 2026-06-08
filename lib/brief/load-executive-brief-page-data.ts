@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   EXECUTIVE_BRIEF_SLOT_LABELS,
+  countStructuredExecutiveBriefItems,
   listExecutiveBriefSnapshotsForUser,
   type ExecutiveBriefSnapshot,
   type ExecutiveBriefSlotLabel
@@ -84,7 +85,7 @@ export async function loadExecutiveBriefPageData(): Promise<ExecutiveBriefPageDa
           label,
           status: snapshot ? "processed" : "waiting",
           processedAt: snapshot?.generatedAt ?? snapshot?.createdAt ?? null,
-          itemCount: snapshot ? 1 : 0,
+          itemCount: snapshot ? Math.max(countStructuredExecutiveBriefItems(snapshot.structuredBrief), 1) : 0,
           snapshot
         };
       }),
