@@ -1,4 +1,8 @@
-import { createTaskFromBriefCandidateAction, requestExecutiveBriefRefreshAction } from "@/app/brief/actions";
+import {
+  createTaskFromBriefCandidateAction,
+  dismissBriefTaskCandidateAction,
+  requestExecutiveBriefRefreshAction
+} from "@/app/brief/actions";
 import type { StructuredExecutiveBriefItem } from "@/lib/brief/executive-brief-snapshots";
 import type { ExecutiveBriefPageData, ExecutiveBriefSlot } from "@/lib/brief/load-executive-brief-page-data";
 
@@ -51,7 +55,15 @@ function sanitizeFlashMessage(value?: string) {
   return normalized.length > 0 ? normalized : null;
 }
 
-function StructuredItemCard({ item, taskCandidate = false }: { item: StructuredExecutiveBriefItem; taskCandidate?: boolean }) {
+function StructuredItemCard({
+  item,
+  taskCandidate = false,
+  snapshotId = null
+}: {
+  item: StructuredExecutiveBriefItem;
+  taskCandidate?: boolean;
+  snapshotId?: string | null;
+}) {
   return (
     <article className="rounded-[1.15rem] border border-line/70 bg-white/66 px-4 py-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -78,20 +90,47 @@ function StructuredItemCard({ item, taskCandidate = false }: { item: StructuredE
       </div>
 
       {taskCandidate ? (
-        <form action={createTaskFromBriefCandidateAction} className="mt-4">
-          <input type="hidden" name="description" value={item.title} />
-          <input type="hidden" name="nextStep" value={item.recommendedAction ?? ""} />
-          <input type="hidden" name="desiredOutcome" value={item.summary ?? ""} />
-          <input type="hidden" name="priority" value={item.priority ?? "medium"} />
-          <input type="hidden" name="source" value={item.source ?? "Executive Brief"} />
-          <input type="hidden" name="dueAt" value={item.dueAt ?? ""} />
-          <button
-            type="submit"
-            className="rounded-full border border-line/75 bg-white/84 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white"
-          >
-            Create task
-          </button>
-        </form>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <form action={createTaskFromBriefCandidateAction}>
+            <input type="hidden" name="description" value={item.title} />
+            <input type="hidden" name="nextStep" value={item.recommendedAction ?? ""} />
+            <input type="hidden" name="desiredOutcome" value={item.summary ?? ""} />
+            <input type="hidden" name="priority" value={item.priority ?? "medium"} />
+            <input type="hidden" name="source" value={item.source ?? "Executive Brief"} />
+            <input type="hidden" name="dueAt" value={item.dueAt ?? ""} />
+            <button
+              type="submit"
+              className="rounded-full border border-line/75 bg-white/84 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white"
+            >
+              Create task
+            </button>
+          </form>
+
+          {snapshotId ? (
+            <form action={dismissBriefTaskCandidateAction} className="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="snapshotId" value={snapshotId} />
+              <input type="hidden" name="itemId" value={item.id} />
+              <input type="hidden" name="itemTitle" value={item.title} />
+              <select
+                name="reason"
+                defaultValue="not_important"
+                className="rounded-full border border-line/75 bg-white/84 px-3 py-2 text-xs text-text-muted outline-none"
+                aria-label="Dismiss reason"
+              >
+                <option value="not_important">Not important</option>
+                <option value="already_handled">Already handled</option>
+                <option value="not_my_task">Not my task</option>
+                <option value="bad_recommendation">Bad recommendation</option>
+              </select>
+              <button
+                type="submit"
+                className="rounded-full border border-line/75 bg-white/70 px-3.5 py-2 text-sm font-medium text-text-muted transition hover:bg-white hover:text-text"
+              >
+                Dismiss
+              </button>
+            </form>
+          ) : null}
+        </div>
       ) : null}
     </article>
   );
@@ -101,12 +140,14 @@ function StructuredSection({
   title,
   eyebrow,
   items,
-  taskCandidate = false
+  taskCandidate = false,
+  snapshotId = null
 }: {
   title: string;
   eyebrow: string;
   items: StructuredExecutiveBriefItem[];
   taskCandidate?: boolean;
+  snapshotId?: string | null;
 }) {
   if (items.length === 0) {
     return null;
@@ -120,7 +161,7 @@ function StructuredSection({
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
         {items.map((item) => (
-          <StructuredItemCard key={item.id} item={item} taskCandidate={taskCandidate} />
+          <StructuredItemCard key={item.id} item={item} taskCandidate={taskCandidate} snapshotId={snapshotId} />
         ))}
       </div>
     </section>
@@ -138,6 +179,8 @@ export function ExecutiveBriefWorkspace({
 }) {
   const latest = data.latestSnapshot;
   const structuredBrief = latest?.structuredBrief ?? null;
+  const visibleTaskCandidates =
+    structuredBrief?.taskCandidates.filter((item) => !data.dismissedTaskCandidateIds.includes(item.id)) ?? [];
   const successMessage = sanitizeFlashMessage(notice);
   const errorMessage = sanitizeFlashMessage(error);
 
@@ -201,8 +244,9 @@ export function ExecutiveBriefWorkspace({
               <StructuredSection
                 eyebrow="Tasks"
                 title="Task candidates"
-                items={structuredBrief.taskCandidates}
+                items={visibleTaskCandidates}
                 taskCandidate
+                snapshotId={latest.id}
               />
             </div>
           ) : (

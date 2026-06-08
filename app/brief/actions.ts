@@ -34,6 +34,12 @@ function parseTaskPriority(value: string): TaskPriority {
   return isTaskPriority(value) ? value : "medium";
 }
 
+function parseDismissReason(value: string) {
+  return ["not_important", "already_handled", "not_my_task", "bad_recommendation"].includes(value)
+    ? value
+    : "not_important";
+}
+
 export async function createTaskFromBriefCandidateAction(formData: FormData) {
   const resolved = await resolveCurrentAppUser();
   if (!resolved) {
@@ -129,4 +135,58 @@ export async function createTaskFromBriefCandidateAction(formData: FormData) {
   revalidatePath("/brief");
   revalidatePath("/library/tasks");
   redirect("/brief?notice=task-created");
+}
+
+export async function dismissBriefTaskCandidateAction(formData: FormData) {
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
+    redirect("/brief?error=no-active-user");
+  }
+
+  const snapshotId = formString(formData, "snapshotId");
+  const itemId = formString(formData, "itemId");
+  const itemTitle = formString(formData, "itemTitle");
+  const reason = parseDismissReason(formString(formData, "reason"));
+
+  if (!snapshotId || !itemId || !itemTitle) {
+    redirect("/brief?error=missing-dismissal-context");
+  }
+
+  const client = createSupabaseAdminClient() ?? resolved.client;
+  const snapshotResponse = await withSupabaseTimeout(
+    client
+      .from("executive_brief_snapshots")
+      .select("id")
+      .eq("user_id", resolved.user.id)
+      .eq("id", snapshotId)
+      .maybeSingle<{ id: string }>()
+  );
+
+  if (snapshotResponse.error || !snapshotResponse.data) {
+    redirect("/brief?error=snapshot-not-found");
+  }
+
+  const feedbackResponse = await withSupabaseTimeout(
+    client.from("executive_brief_item_feedback").upsert(
+      {
+        user_id: resolved.user.id,
+        snapshot_id: snapshotId,
+        item_kind: "task_candidate",
+        item_id: itemId,
+        item_title: itemTitle,
+        feedback_type: "dismissed",
+        reason
+      },
+      {
+        onConflict: "user_id,snapshot_id,item_kind,item_id,feedback_type"
+      }
+    )
+  );
+
+  if (feedbackResponse.error) {
+    redirect("/brief?error=dismiss-failed");
+  }
+
+  revalidatePath("/brief");
+  redirect("/brief?notice=task-dismissed");
 }
