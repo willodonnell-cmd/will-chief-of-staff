@@ -72,6 +72,31 @@ test("falls back to manual slot and forwarded date when bundle lacks metadata", 
   assert.equal(parsed.humanBrief, "No structured bundle yet.");
 });
 
+test("strips Will email signature from the human brief", () => {
+  const parsed = parseExecutiveBriefBundleEmail({
+    destinationAddress: "priority+will@example.com",
+    subject: "BLACKHAWK_BRIEF_BUNDLE Manual",
+    forwardedAt: "2026-06-08T02:00:00.000Z",
+    rawText: [
+      "Human brief:",
+      "Read this summary before the task candidates.",
+      "",
+      "Will O'Donnell",
+      "|",
+      "MD, Global Corporate  Development & Growth",
+      "Pier 1, Bay 1 | San Francisco | California | 94111 | United States of America",
+      "Direct +1 (415) 733-9489 | Mobile +1 (415) 517-6244 | WODonnell@prologis.com",
+      "www.prologis.com | Follow us on LinkedIn and Facebook",
+      "The information transmitted, including any attachments, is intended only for the person or entity to which it is addressed and may contain confidential and/or privileged material.",
+      "signature for O'Donnell, Will"
+    ].join("\n")
+  });
+
+  assert.equal(parsed.humanBrief, "Read this summary before the task candidates.");
+  assert.doesNotMatch(parsed.humanBrief ?? "", /WODonnell@prologis\.com/);
+  assert.doesNotMatch(parsed.humanBrief ?? "", /signature for O'Donnell, Will/);
+});
+
 test("normalizes marked Executive Brief JSON into structured sections", () => {
   const parsed = parseExecutiveBriefBundleEmail({
     destinationAddress: "priority+will@example.com",
