@@ -114,6 +114,18 @@ function normalizeSpace(value: string) {
   return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 }
 
+function stripWillEmailSignature(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const withoutSignature = value
+    .replace(/\n\s*Will O'Donnell\s*\n\s*\|[\s\S]*$/i, "")
+    .replace(/\n\s*signature for O'Donnell, Will\s*$/i, "");
+  const normalized = normalizeSpace(withoutSignature);
+  return normalized || null;
+}
+
 function normalizeOneLine(value: unknown) {
   return typeof value === "string" && value.trim() ? value.replace(/\s+/g, " ").trim() : null;
 }
@@ -173,7 +185,7 @@ function displayDateFromJson(value: JsonRecord | null) {
 
 function humanBriefFromJson(value: JsonRecord | null) {
   const raw = value?.human_brief ?? value?.humanBrief ?? value?.brief;
-  return typeof raw === "string" && raw.trim() ? normalizeSpace(raw) : null;
+  return typeof raw === "string" && raw.trim() ? stripWillEmailSignature(raw) : null;
 }
 
 function contractVersionFromJson(value: JsonRecord | null) {
@@ -474,7 +486,7 @@ function extractHumanBrief(raw: string, jsonExtraction: JsonExtraction | null, j
     .replace(/^\s*(end)[-_\s]*human[-_\s]*brief\s*$/gim, "")
     .replace(/^\s*(begin|start|end)[-_\s]*json[-_\s]*bundle\s*$/gim, "");
 
-  const normalized = normalizeSpace(candidate);
+  const normalized = stripWillEmailSignature(candidate);
   return normalized || fromJson;
 }
 
@@ -486,7 +498,7 @@ function mapSnapshotRow(row: ExecutiveBriefSnapshotRow): ExecutiveBriefSnapshot 
     generatedAt: row.generated_at,
     displayDate: row.display_date,
     rawEmailBody: row.raw_email_body,
-    humanBrief: row.human_brief,
+    humanBrief: stripWillEmailSignature(row.human_brief),
     jsonBundle: row.json_bundle,
     structuredBrief: toJsonRecord(row.structured_brief) as StructuredExecutiveBrief | null,
     contractVersion: row.contract_version,
