@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import {
   EXECUTIVE_BRIEF_SLOT_LABELS,
   countStructuredExecutiveBriefItems,
@@ -19,6 +21,7 @@ export type ExecutiveBriefSlot = {
 
 export type ExecutiveBriefPageData = {
   latestSnapshot: ExecutiveBriefSnapshot | null;
+  dismissedTaskCandidateIds: string[];
   slots: ExecutiveBriefSlot[];
   emptyState: {
     title: string;
@@ -29,6 +32,7 @@ export type ExecutiveBriefPageData = {
 function buildEmptyExecutiveBriefPageData(): ExecutiveBriefPageData {
   return {
     latestSnapshot: null,
+    dismissedTaskCandidateIds: [],
     slots: EXECUTIVE_BRIEF_SLOT_LABELS.map((label) => ({
       label,
       status: "waiting",
@@ -46,6 +50,27 @@ function buildEmptyExecutiveBriefPageData(): ExecutiveBriefPageData {
 
 function snapshotSortTime(snapshot: ExecutiveBriefSnapshot) {
   return Date.parse(snapshot.generatedAt ?? snapshot.createdAt) || 0;
+}
+
+async function listDismissedTaskCandidateIds(params: {
+  client: SupabaseClient;
+  userId: string;
+  snapshotId: string;
+}) {
+  const { data, error } = await params.client
+    .from("executive_brief_item_feedback")
+    .select("item_id")
+    .eq("user_id", params.userId)
+    .eq("snapshot_id", params.snapshotId)
+    .eq("item_kind", "task_candidate")
+    .eq("feedback_type", "dismissed")
+    .returns<{ item_id: string }[]>();
+
+  if (error) {
+    return [];
+  }
+
+  return (data ?? []).map((row) => row.item_id);
 }
 
 export async function loadExecutiveBriefPageData(): Promise<ExecutiveBriefPageData> {
@@ -76,9 +101,17 @@ export async function loadExecutiveBriefPageData(): Promise<ExecutiveBriefPageDa
 
       return latest;
     }, null);
+    const dismissedTaskCandidateIds = latestSnapshot
+      ? await listDismissedTaskCandidateIds({
+          client: resolved.client,
+          userId: resolved.user.id,
+          snapshotId: latestSnapshot.id
+        })
+      : [];
 
     return {
       latestSnapshot,
+      dismissedTaskCandidateIds,
       slots: EXECUTIVE_BRIEF_SLOT_LABELS.map((label) => {
         const snapshot = latestBySlot.get(label) ?? null;
         return {
