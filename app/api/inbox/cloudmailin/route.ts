@@ -6,6 +6,11 @@ import {
   parseExecutiveBriefBundleEmail,
   upsertExecutiveBriefSnapshot
 } from "@/lib/brief/executive-brief-snapshots";
+import {
+  isInvestmentCommitteeBundleSubject,
+  parseInvestmentCommitteeBundleEmail
+} from "@/lib/investment-committee-agent";
+import { upsertInvestmentCommitteeAgentBundle } from "@/lib/investment-committee";
 import { parseBasicAuthHeader, parseCloudMailinRequest } from "@/lib/priority-inbox-cloudmailin";
 import { parseForwardedEmail } from "@/lib/priority-inbox-forwarded";
 import { resolveForwardingUserByDestination } from "@/lib/priority-inbox-forwarding";
@@ -107,6 +112,30 @@ export async function POST(request: Request) {
         snapshotId: snapshot.id,
         slot: snapshot.slot,
         generatedAt: snapshot.generatedAt
+      });
+    }
+
+    if (isInvestmentCommitteeBundleSubject(parsedRequest.input.subject)) {
+      const parsedBundle = parseInvestmentCommitteeBundleEmail(parsedRequest.input);
+      const bundle = await upsertInvestmentCommitteeAgentBundle({
+        client,
+        userId: forwardingConfig.user_id,
+        parsed: parsedBundle
+      });
+
+      logCloudMailinInbound("Persisted Investment Committee bundle from CloudMailIn.", {
+        bundleId: bundle.id,
+        weekOf: bundle.week_of,
+        sourceMessageId: bundle.source_message_id
+      });
+      revalidatePath("/investment-committee");
+
+      return NextResponse.json({
+        ok: true,
+        kind: "investment_committee",
+        bundleId: bundle.id,
+        weekOf: bundle.week_of,
+        producedAt: bundle.produced_at
       });
     }
 

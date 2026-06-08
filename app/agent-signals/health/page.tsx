@@ -91,7 +91,7 @@ export default async function AgentSignalsHealthPage() {
       <PageIntro
         eyebrow="Agent Signals"
         title="Agent Signals Health"
-        description="Operational status for native Blackhawk Microsoft Graph runs, legacy imports, and the Priority Inbox read path."
+        description="Operational status for native Blackhawk Microsoft Graph runs, legacy imports, and compatibility signal intake."
       />
 
       <AgentControlsCard
@@ -141,10 +141,10 @@ export default async function AgentSignalsHealthPage() {
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link
-            href="/inbox"
+            href="/brief"
             className="inline-flex rounded-full border border-line/75 bg-white/82 px-3.5 py-2 text-sm font-medium text-text transition hover:bg-white"
           >
-            Open Priority Inbox
+            Open Executive Brief
           </Link>
         </div>
       </section>

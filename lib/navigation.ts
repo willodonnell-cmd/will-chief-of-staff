@@ -5,7 +5,6 @@ import {
   BriefcaseBusiness,
   CandlestickChart,
   FileText,
-  Inbox,
   Landmark,
   SlidersHorizontal,
   Target,
@@ -35,14 +34,13 @@ export type AnyNavItem = NavItem | ExternalNavItem;
 
 export const mobileNavItems: NavItem[] = [
   { label: "Today", href: "/", icon: Target },
-  { label: "Inbox", href: "/inbox", icon: Inbox },
+  { label: "Executive Brief", href: "/brief", icon: FileText, shortLabel: "Brief" },
   { label: "Capture", href: "/capture", icon: CaptureMicrophoneIcon, isCapture: true },
   { label: "People", href: "/people", icon: Users },
   { label: "Initiatives", href: "/initiatives", icon: Waypoints, shortLabel: "Plans" }
 ];
 
 export const mobileShellActions: NavItem[] = [
-  { label: "Executive Brief", href: "/brief", icon: FileText, shortLabel: "Brief" },
   { label: "Commitments", href: "/commitments", icon: BriefcaseBusiness },
   { label: "Investment Committee", href: "/investment-committee", icon: Landmark, shortLabel: "IC" },
   { label: "Library", href: "/library", icon: BookOpen },
@@ -52,7 +50,6 @@ export const mobileShellActions: NavItem[] = [
 export const desktopPrimaryNav: AnyNavItem[] = [
   { label: "Today", href: "/", icon: Target },
   { label: "Executive Brief", href: "/brief", icon: FileText },
-  { label: "Priority Inbox", href: "/inbox", icon: Inbox },
   { label: "Investment Committee", href: "/investment-committee", icon: Landmark },
   { label: "People", href: "/people", icon: Users },
   { label: "Dossier", href: "https://odossier.vercel.app", icon: CandlestickChart, external: true },

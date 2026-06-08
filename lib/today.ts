@@ -200,7 +200,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
       label: "Needs decision",
       value: String(highPriorityItems.length + needsReviewItems.length),
       tone: "default",
-      href: "/inbox"
+      href: "/brief"
     },
     {
       label: "Quietly on track",
@@ -212,7 +212,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
       label: "Protected",
       value: protectedCount > 0 ? String(protectedCount) : "—",
       tone: "protected",
-      href: "/inbox"
+      href: "/brief"
     }
   ];
 
@@ -223,7 +223,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
         owner: topItem.sender,
         timing: topItem.timeLabel,
         decision: recommendedActionLabel(topItem.recommendedAction),
-        href: "/inbox"
+        href: "/brief"
       }
     : null;
 

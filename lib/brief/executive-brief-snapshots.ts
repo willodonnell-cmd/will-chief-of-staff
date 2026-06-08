@@ -18,6 +18,9 @@ export type ParsedExecutiveBriefBundle = {
   rawEmailBody: string;
   humanBrief: string | null;
   jsonBundle: JsonValue | null;
+  structuredBrief: StructuredExecutiveBrief | null;
+  contractVersion: string | null;
+  validationWarnings: string[];
   sourceMessageId: string | null;
 };
 
@@ -35,8 +38,30 @@ type ExecutiveBriefSnapshotRow = {
   raw_email_body: string;
   human_brief: string | null;
   json_bundle: JsonValue | null;
+  structured_brief: JsonValue | null;
+  contract_version: string | null;
+  validation_warnings: string[] | null;
   source_message_id: string | null;
   created_at: string;
+};
+
+export type StructuredExecutiveBriefItem = {
+  id: string;
+  title: string;
+  summary: string | null;
+  source: string | null;
+  priority: "high" | "medium" | "low" | null;
+  recommendedAction: string | null;
+  dueAt: string | null;
+};
+
+export type StructuredExecutiveBrief = {
+  commandSummary: string[];
+  topMoves: StructuredExecutiveBriefItem[];
+  decisionsNeeded: StructuredExecutiveBriefItem[];
+  meetingPrep: StructuredExecutiveBriefItem[];
+  carryForward: StructuredExecutiveBriefItem[];
+  taskCandidates: StructuredExecutiveBriefItem[];
 };
 
 type JsonExtraction = {
@@ -46,7 +71,7 @@ type JsonExtraction = {
 };
 
 const EXECUTIVE_BRIEF_SNAPSHOT_SELECT =
-  "id, subject, slot, generated_at, display_date, raw_email_body, human_brief, json_bundle, source_message_id, created_at";
+  "id, subject, slot, generated_at, display_date, raw_email_body, human_brief, json_bundle, structured_brief, contract_version, validation_warnings, source_message_id, created_at";
 
 function firstHeaderValue(value: string | string[] | null | undefined) {
   if (Array.isArray(value)) {
@@ -81,8 +106,16 @@ function toJsonRecord(value: JsonValue | null): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
+function isJsonRecord(value: JsonValue | undefined): value is JsonRecord {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
 function normalizeSpace(value: string) {
   return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+}
+
+function normalizeOneLine(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.replace(/\s+/g, " ").trim() : null;
 }
 
 function parseDateLike(value: unknown): string | null {
@@ -143,6 +176,171 @@ function humanBriefFromJson(value: JsonRecord | null) {
   return typeof raw === "string" && raw.trim() ? normalizeSpace(raw) : null;
 }
 
+function contractVersionFromJson(value: JsonRecord | null) {
+  return (
+    normalizeOneLine(value?.contract_version) ??
+    normalizeOneLine(value?.contractVersion) ??
+    normalizeOneLine(value?.schema_version) ??
+    normalizeOneLine(value?.schemaVersion)
+  );
+}
+
+function firstJsonValue(record: JsonRecord | null, keys: string[]) {
+  if (!record) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    if (record[key] !== undefined) {
+      return record[key];
+    }
+  }
+
+  return undefined;
+}
+
+function jsonArrayFromKeys(record: JsonRecord | null, keys: string[]) {
+  const value = firstJsonValue(record, keys);
+  return Array.isArray(value) ? value : [];
+}
+
+function normalizePriority(value: unknown): StructuredExecutiveBriefItem["priority"] {
+  const normalized = normalizeOneLine(value)?.toLowerCase();
+  if (normalized === "high" || normalized === "medium" || normalized === "low") {
+    return normalized;
+  }
+
+  return null;
+}
+
+function normalizeStructuredItem(value: JsonValue, fallbackPrefix: string, index: number): StructuredExecutiveBriefItem | null {
+  if (typeof value === "string") {
+    const title = normalizeOneLine(value);
+    return title
+      ? {
+          id: `${fallbackPrefix}-${index + 1}`,
+          title,
+          summary: null,
+          source: null,
+          priority: null,
+          recommendedAction: null,
+          dueAt: null
+        }
+      : null;
+  }
+
+  if (!isJsonRecord(value)) {
+    return null;
+  }
+
+  const title =
+    normalizeOneLine(value.title) ??
+    normalizeOneLine(value.headline) ??
+    normalizeOneLine(value.item) ??
+    normalizeOneLine(value.name);
+
+  if (!title) {
+    return null;
+  }
+
+  return {
+    id: normalizeOneLine(value.id) ?? `${fallbackPrefix}-${index + 1}`,
+    title,
+    summary: normalizeOneLine(value.summary) ?? normalizeOneLine(value.detail) ?? normalizeOneLine(value.why_it_matters),
+    source: normalizeOneLine(value.source) ?? normalizeOneLine(value.source_type),
+    priority: normalizePriority(value.priority ?? value.urgency),
+    recommendedAction:
+      normalizeOneLine(value.recommended_action) ??
+      normalizeOneLine(value.recommendedAction) ??
+      normalizeOneLine(value.action),
+    dueAt: parseDateLike(value.due_at) ?? parseDateLike(value.dueAt)
+  };
+}
+
+function normalizeStructuredItems(record: JsonRecord | null, keys: string[], fallbackPrefix: string) {
+  return jsonArrayFromKeys(record, keys)
+    .map((value, index) => normalizeStructuredItem(value, fallbackPrefix, index))
+    .filter((item): item is StructuredExecutiveBriefItem => Boolean(item));
+}
+
+function normalizeCommandSummary(record: JsonRecord | null) {
+  return jsonArrayFromKeys(record, ["command_summary", "commandSummary", "summary"])
+    .map((value) => (typeof value === "string" ? normalizeOneLine(value) : null))
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 5);
+}
+
+export function normalizeExecutiveBriefJsonBundle(value: JsonValue | null) {
+  const record = toJsonRecord(value);
+  const warnings: string[] = [];
+
+  if (!record) {
+    return { structuredBrief: null, contractVersion: null, validationWarnings: ["No JSON object bundle was found."] };
+  }
+
+  const structuredBrief: StructuredExecutiveBrief = {
+    commandSummary: normalizeCommandSummary(record),
+    topMoves: normalizeStructuredItems(
+      record,
+      ["top_3_executive_moves", "topExecutiveMoves", "top_moves", "topMoves", "executive_moves", "moves"],
+      "move"
+    ),
+    decisionsNeeded: normalizeStructuredItems(
+      record,
+      ["decisions_needed", "decisionsNeeded", "decision_required", "decisionRequired"],
+      "decision"
+    ),
+    meetingPrep: normalizeStructuredItems(
+      record,
+      ["meeting_prep", "meetingPrep", "calendar_prep", "calendarPrep"],
+      "meeting"
+    ),
+    carryForward: normalizeStructuredItems(
+      record,
+      ["carry_forward", "carryForward", "retained_context", "retainedContext"],
+      "carry-forward"
+    ),
+    taskCandidates: normalizeStructuredItems(
+      record,
+      ["task_candidates", "taskCandidates", "recommended_tasks", "recommendedTasks"],
+      "task"
+    )
+  };
+
+  const itemCount =
+    structuredBrief.commandSummary.length +
+    structuredBrief.topMoves.length +
+    structuredBrief.decisionsNeeded.length +
+    structuredBrief.meetingPrep.length +
+    structuredBrief.carryForward.length +
+    structuredBrief.taskCandidates.length;
+
+  if (itemCount === 0) {
+    warnings.push("JSON bundle did not contain recognized Executive Brief sections.");
+  }
+
+  return {
+    structuredBrief: itemCount > 0 ? structuredBrief : null,
+    contractVersion: contractVersionFromJson(record),
+    validationWarnings: warnings
+  };
+}
+
+export function countStructuredExecutiveBriefItems(structuredBrief: StructuredExecutiveBrief | null) {
+  if (!structuredBrief) {
+    return 0;
+  }
+
+  return (
+    structuredBrief.commandSummary.length +
+    structuredBrief.topMoves.length +
+    structuredBrief.decisionsNeeded.length +
+    structuredBrief.meetingPrep.length +
+    structuredBrief.carryForward.length +
+    structuredBrief.taskCandidates.length
+  );
+}
+
 function parseJsonCandidate(raw: string, start: number, end: number): JsonExtraction | null {
   try {
     const parsed = JSON.parse(raw.slice(start, end));
@@ -172,6 +370,26 @@ function extractFencedJson(raw: string): JsonExtraction | null {
   }
 
   return null;
+}
+
+function extractMarkedJson(raw: string): JsonExtraction | null {
+  const markerPattern = /BLACKHAWK_JSON_START([\s\S]*?)BLACKHAWK_JSON_END/i;
+  const match = markerPattern.exec(raw);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const candidate = match[1].trim();
+  const parsed = parseJsonCandidate(candidate, 0, candidate.length);
+  if (!parsed) {
+    return null;
+  }
+
+  return {
+    value: parsed.value,
+    start: match.index,
+    end: match.index + match[0].length
+  };
 }
 
 function findMatchingJsonEnd(raw: string, start: number) {
@@ -239,7 +457,7 @@ function extractInlineJson(raw: string): JsonExtraction | null {
 }
 
 function extractJsonBundle(raw: string) {
-  return extractFencedJson(raw) ?? extractInlineJson(raw);
+  return extractMarkedJson(raw) ?? extractFencedJson(raw) ?? extractInlineJson(raw);
 }
 
 function extractHumanBrief(raw: string, jsonExtraction: JsonExtraction | null, jsonRecord: JsonRecord | null) {
@@ -270,6 +488,9 @@ function mapSnapshotRow(row: ExecutiveBriefSnapshotRow): ExecutiveBriefSnapshot 
     rawEmailBody: row.raw_email_body,
     humanBrief: row.human_brief,
     jsonBundle: row.json_bundle,
+    structuredBrief: toJsonRecord(row.structured_brief) as StructuredExecutiveBrief | null,
+    contractVersion: row.contract_version,
+    validationWarnings: row.validation_warnings ?? [],
     sourceMessageId: row.source_message_id,
     createdAt: row.created_at
   };
@@ -282,6 +503,7 @@ export function parseExecutiveBriefBundleEmail(input: ForwardedEmailInboundInput
   const jsonBundle = jsonExtraction?.value ?? null;
   const jsonRecord = toJsonRecord(jsonBundle);
   const slot = slotFromJson(jsonRecord) ?? slotFromText(subject) ?? slotFromText(rawEmailBody) ?? "Manual";
+  const normalized = normalizeExecutiveBriefJsonBundle(jsonBundle);
 
   return {
     subject,
@@ -291,6 +513,9 @@ export function parseExecutiveBriefBundleEmail(input: ForwardedEmailInboundInput
     rawEmailBody,
     humanBrief: extractHumanBrief(rawEmailBody, jsonExtraction, jsonRecord),
     jsonBundle,
+    structuredBrief: normalized.structuredBrief,
+    contractVersion: normalized.contractVersion,
+    validationWarnings: normalized.validationWarnings,
     sourceMessageId: extractSourceMessageId(input)
   };
 }
@@ -309,6 +534,9 @@ export async function upsertExecutiveBriefSnapshot(params: {
     raw_email_body: params.parsed.rawEmailBody,
     human_brief: params.parsed.humanBrief,
     json_bundle: params.parsed.jsonBundle,
+    structured_brief: params.parsed.structuredBrief,
+    contract_version: params.parsed.contractVersion,
+    validation_warnings: params.parsed.validationWarnings,
     source_message_id: params.parsed.sourceMessageId
   };
 

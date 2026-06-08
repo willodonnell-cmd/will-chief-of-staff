@@ -2,6 +2,9 @@ import { access, readFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { join } from "node:path";
 
+import type { ForwardedEmailInboundInput } from "@/lib/priority-inbox-forwarded";
+
+export const INVESTMENT_COMMITTEE_BUNDLE_SUBJECT_PREFIX = "BLACKHAWK_IC_BUNDLE";
 export const LOCAL_INVESTMENT_COMMITTEE_AGENT_PAYLOAD_PATH = join(
   process.cwd(),
   ".local",
@@ -62,8 +65,42 @@ export type InvestmentCommitteeAgentLoadResult = {
   source: "local" | "fixture";
 };
 
+export type ParsedInvestmentCommitteeBundle = {
+  subject: string;
+  rawEmailBody: string;
+  envelope: InvestmentCommitteeAgentEnvelope;
+  sourceMessageId: string | null;
+};
+
+type JsonExtraction = {
+  value: unknown;
+  start: number;
+  end: number;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function firstHeaderValue(value: string | string[] | null | undefined) {
+  if (Array.isArray(value)) {
+    return value.find((entry) => entry.trim())?.trim() ?? null;
+  }
+
+  return value?.trim() || null;
+}
+
+function normalizeEmailBody(value: string) {
+  return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+}
+
+function extractSourceMessageId(input: ForwardedEmailInboundInput) {
+  const rawMessageId = firstHeaderValue(input.headers?.["message-id"]) ?? firstHeaderValue(input.headers?.["x-message-id"]);
+  return rawMessageId?.replace(/^<|>$/g, "").trim() || null;
+}
+
+export function isInvestmentCommitteeBundleSubject(subject: string | null | undefined) {
+  return Boolean(subject?.trim().toUpperCase().startsWith(INVESTMENT_COMMITTEE_BUNDLE_SUBJECT_PREFIX));
 }
 
 function asNonEmptyString(value: unknown, path: string) {
@@ -203,6 +240,141 @@ export function parseInvestmentCommitteeAgentEnvelope(input: unknown): Investmen
       resetAt: asIsoTimestampOrNull(input.cycle.resetAt, "cycle.resetAt")
     },
     deals: input.deals.map((deal, index) => parseDeal(deal, index))
+  };
+}
+
+function parseJsonCandidate(raw: string, start: number, end: number): JsonExtraction | null {
+  try {
+    return { value: JSON.parse(raw.slice(start, end)) as unknown, start, end };
+  } catch {
+    return null;
+  }
+}
+
+function extractMarkedJson(raw: string): JsonExtraction | null {
+  const markerPattern = /BLACKHAWK_JSON_START([\s\S]*?)BLACKHAWK_JSON_END/i;
+  const match = markerPattern.exec(raw);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const candidate = match[1].trim();
+  const parsed = parseJsonCandidate(candidate, 0, candidate.length);
+  if (!parsed) {
+    return null;
+  }
+
+  return {
+    value: parsed.value,
+    start: match.index,
+    end: match.index + match[0].length
+  };
+}
+
+function extractFencedJson(raw: string): JsonExtraction | null {
+  const fencePattern = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+  while ((match = fencePattern.exec(raw))) {
+    const candidate = match[1];
+    if (!candidate) {
+      continue;
+    }
+
+    const parsed = parseJsonCandidate(candidate.trim(), 0, candidate.trim().length);
+    if (parsed) {
+      return {
+        value: parsed.value,
+        start: match.index,
+        end: match.index + match[0].length
+      };
+    }
+  }
+
+  return null;
+}
+
+function findMatchingJsonEnd(raw: string, start: number) {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < raw.length; index += 1) {
+    const char = raw[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{" || char === "[") {
+      stack.push(char === "{" ? "}" : "]");
+      continue;
+    }
+
+    if (char === "}" || char === "]") {
+      if (stack.pop() !== char) {
+        return null;
+      }
+
+      if (stack.length === 0) {
+        return index + 1;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractInlineJson(raw: string): JsonExtraction | null {
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (char !== "{" && char !== "[") {
+      continue;
+    }
+
+    const end = findMatchingJsonEnd(raw, index);
+    if (!end) {
+      continue;
+    }
+
+    const parsed = parseJsonCandidate(raw, index, end);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function extractInvestmentCommitteeJsonBundle(raw: string) {
+  return extractMarkedJson(raw) ?? extractFencedJson(raw) ?? extractInlineJson(raw);
+}
+
+export function parseInvestmentCommitteeBundleEmail(input: ForwardedEmailInboundInput): ParsedInvestmentCommitteeBundle {
+  const subject = input.subject?.trim() || INVESTMENT_COMMITTEE_BUNDLE_SUBJECT_PREFIX;
+  const rawEmailBody = normalizeEmailBody(input.rawText);
+  const jsonExtraction = extractInvestmentCommitteeJsonBundle(rawEmailBody);
+
+  if (!jsonExtraction) {
+    throw new Error("Investment Committee bundle did not contain JSON.");
+  }
+
+  return {
+    subject,
+    rawEmailBody,
+    envelope: parseInvestmentCommitteeAgentEnvelope(jsonExtraction.value),
+    sourceMessageId: extractSourceMessageId(input)
   };
 }
 
