@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 
+import {
+  isExecutiveBriefBundleSubject,
+  parseExecutiveBriefBundleEmail,
+  upsertExecutiveBriefSnapshot
+} from "@/lib/brief/executive-brief-snapshots";
 import { parseBasicAuthHeader, parseCloudMailinRequest } from "@/lib/priority-inbox-cloudmailin";
 import { parseForwardedEmail } from "@/lib/priority-inbox-forwarded";
 import { resolveForwardingUserByDestination } from "@/lib/priority-inbox-forwarding";
@@ -77,6 +83,31 @@ export async function POST(request: Request) {
     if (!client) {
       logCloudMailinInbound("CloudMailin request could not be processed because service-role access is unavailable.");
       return textResponse(503, "SUPABASE_SERVICE_ROLE_KEY is required for CloudMailin ingestion.");
+    }
+
+    if (isExecutiveBriefBundleSubject(parsedRequest.input.subject)) {
+      const parsedBrief = parseExecutiveBriefBundleEmail(parsedRequest.input);
+      const snapshot = await upsertExecutiveBriefSnapshot({
+        client,
+        userId: forwardingConfig.user_id,
+        parsed: parsedBrief
+      });
+
+      logCloudMailinInbound("Persisted Executive Brief snapshot from CloudMailin.", {
+        snapshotId: snapshot.id,
+        slot: snapshot.slot,
+        sourceMessageId: snapshot.sourceMessageId
+      });
+      revalidatePath("/brief");
+      revalidatePath("/agent-signal-brief");
+
+      return NextResponse.json({
+        ok: true,
+        kind: "executive_brief",
+        snapshotId: snapshot.id,
+        slot: snapshot.slot,
+        generatedAt: snapshot.generatedAt
+      });
     }
 
     const parsedEmail = parseForwardedEmail(parsedRequest.input);
