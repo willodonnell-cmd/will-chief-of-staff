@@ -212,6 +212,129 @@ F. If not sent, why not
 G. Any remaining Agent limitations
 ```
 
+## Metadata Test Email Prompt
+
+Use this narrower prompt when the Agent contract has been updated and you need one metadata-rich test bundle sent through CloudMailIn.
+
+```text
+You are the GPT Agent that produces BLACKHAWK_BRIEF_BUNDLE emails for the Blackhawk / will-chief-of-staff app.
+
+Send one metadata-rich test Executive Brief bundle to:
+
+[PASTE BLACKHAWK / CLOUDMAILIN DESTINATION EMAIL HERE]
+
+Use this exact email subject:
+
+BLACKHAWK_BRIEF_BUNDLE Metadata Test
+
+Goal:
+Test whether Blackhawk can ingest and render real sender/source/calendar metadata. This is a metadata contract test only. Do not invent missing information.
+
+The email body should include a short human-readable brief, then one structured JSON object wrapped exactly like this:
+
+BLACKHAWK_JSON_START
+{ ...json... }
+BLACKHAWK_JSON_END
+
+Do not include markdown fences around the JSON.
+
+Use source lanes exactly:
+
+- email
+- calendar_meetings
+- teams
+
+Create a JSON bundle with these sections:
+
+- contract_version
+- slot
+- generated_at
+- display_date
+- command_summary
+- top_3_executive_moves
+- decisions_needed
+- meeting_prep
+- carry_forward
+- task_candidates
+
+Use contract_version:
+
+executive_brief.v1
+
+Include these test items if real source data is available:
+
+1. One email-derived item in top_3_executive_moves:
+   - sourceLane = "email"
+   - senderName
+   - senderEmail
+   - sourceUrl, only if a real Outlook/source link is available
+   - sourceLabel
+   - receivedAt
+   - sourceRefs with sourceType = "outlook"
+
+2. One calendar/meeting-derived item in meeting_prep:
+   - sourceLane = "calendar_meetings"
+   - startAt
+   - endAt
+   - timezone
+   - attendees
+   - organizerName
+   - organizerEmail
+   - locationOrLink
+   - sourceUrl, only if a real calendar link is available
+   - sourceLabel
+   - calendarEventId, only if actually available
+   - calendarSourceSystemId, only if actually available
+   - descriptionSummary, only if available
+   - relatedCompanyNames, only if source-backed
+   - relatedPeopleNames, only if source-backed
+   - internalExternalClassification: internal | external | mixed | unknown
+   - priorityReasons, only if source-backed
+   - sourceRefs with sourceType = "calendar"
+
+3. One Teams-derived item, if Teams source data is available:
+   - sourceLane = "teams"
+   - senderName, if available
+   - senderEmail, if available
+   - sourceUrl, only if a real Teams link is available
+   - sourceLabel
+   - receivedAt or occurredAt
+   - sourceRefs with sourceType = "teams"
+
+4. One cross-source item if real supporting sources exist:
+   - choose the primary sourceLane
+   - include multiple sourceRefs
+   - do not fabricate fields
+
+Do not fabricate senderName, senderEmail, Outlook links, Teams links, calendar links, sourceUrl, calendarEventId, attendees, organizers, company names, PitchBook data, web/news data, sentiment, priority reasons, or source links.
+
+If metadata is unavailable, omit the field or set it to null. Do not fill gaps with guesses.
+
+Do not include raw email bodies, long quoted messages, private source text, or citations in prose.
+
+Do not auto-create tasks. Task candidates remain candidates only.
+
+Before sending, self-check:
+
+- Subject starts with BLACKHAWK_BRIEF_BUNDLE.
+- JSON is valid.
+- JSON is wrapped between BLACKHAWK_JSON_START and BLACKHAWK_JSON_END.
+- All sourceLane values are email, calendar_meetings, or teams.
+- No metadata was fabricated.
+- At least one item includes a real sourceUrl if a real source URL is available.
+- Missing metadata is omitted or null.
+
+After sending, report back:
+
+A. Whether the email was sent
+B. Destination used
+C. Sample structured JSON sent
+D. Which fields were included
+E. Which fields were omitted because unavailable
+F. Whether any real sourceUrl was available
+G. Any remaining Agent limitations
+```
+
 ## App-Side Parser Support
 
 As of Phase 8A, the app parser accepts and preserves these fields when present:

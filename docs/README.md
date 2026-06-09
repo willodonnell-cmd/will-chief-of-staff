@@ -10,6 +10,7 @@ Project notes, architecture sketches, and runbooks live here as the chief-of-sta
 - `microsoft_graph_native_signal_runs.md` — Production architecture and setup for Blackhawk-native Microsoft Graph signal runs.
 - `chatgpt_agent_signal_prompt.md` — Copy/paste-ready ChatGPT Agent prompt for generating contract-valid Microsoft 365 signal JSON for import.
 - `blackhawk_agent_bundle_contract_update.md` — Copy/paste-ready Agent handoff for richer `BLACKHAWK_BRIEF_BUNDLE` sender/source/calendar metadata.
+- `meeting_research_source_adapter_design.md` — Phase 8C design for Outlook, Vault/Obsidian, PitchBook, web/news, and Teams meeting research adapters.
 - `chatgpt_agent_investment_committee_prompt.md` — Copy/paste-ready ChatGPT Agent prompt for the weekly Investment Committee cycle payload.
 - `agent_signal_local_handoff.md` — Notes for the canonical database import flow and the remaining local/dev fallback path.
 - `investment_committee_agent_handoff.md` — Local-only handoff notes for the dedicated weekly IC payload.
