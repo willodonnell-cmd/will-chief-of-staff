@@ -64,6 +64,10 @@ export function resolveBriefSourceLaneId(input: {
   item: StructuredExecutiveBriefItem;
   section: StructuredBriefSectionKey;
 }): BriefSourceLaneId {
+  if (input.item.sourceLane === "email" || input.item.sourceLane === "calendar_meetings" || input.item.sourceLane === "teams") {
+    return input.item.sourceLane;
+  }
+
   const text = sourceText(input.item);
 
   if (/\b(teams|chat|channel|dm|direct message|mention)\b/.test(text)) {

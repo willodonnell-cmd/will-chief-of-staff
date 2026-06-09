@@ -50,6 +50,8 @@ export type StructuredExecutiveBriefItem = {
   title: string;
   summary: string | null;
   source: string | null;
+  sourceLane?: "email" | "calendar_meetings" | "teams" | null;
+  sourceRefs?: JsonValue[];
   sourceLabel?: string | null;
   sourceUrl?: string | null;
   senderName?: string | null;
@@ -60,10 +62,18 @@ export type StructuredExecutiveBriefItem = {
   dueAt: string | null;
   startAt?: string | null;
   endAt?: string | null;
+  timezone?: string | null;
   attendees?: JsonValue[];
   organizerName?: string | null;
   organizerEmail?: string | null;
   locationOrLink?: string | null;
+  calendarEventId?: string | null;
+  calendarSourceSystemId?: string | null;
+  descriptionSummary?: string | null;
+  relatedCompanyNames?: string[];
+  relatedPeopleNames?: string[];
+  internalExternalClassification?: "internal" | "external" | "mixed" | "unknown" | null;
+  priorityReasons?: string[];
 };
 
 export type StructuredExecutiveBrief = {
@@ -163,6 +173,42 @@ function normalizeSourceUrl(value: unknown) {
   return candidate.match(/https?:\/\/[^\s)\]]+/i)?.[0] ?? candidate;
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map(normalizeOneLine).filter((entry): entry is string => Boolean(entry));
+}
+
+function normalizeSourceRefs(value: unknown): JsonValue[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is JsonValue => isJsonValue(entry));
+}
+
+function normalizeSourceLane(value: unknown): StructuredExecutiveBriefItem["sourceLane"] {
+  const normalized = normalizeOneLine(value)?.toLowerCase();
+  if (normalized === "email" || normalized === "calendar_meetings" || normalized === "teams") {
+    return normalized;
+  }
+
+  return null;
+}
+
+function normalizeInternalExternalClassification(
+  value: unknown
+): StructuredExecutiveBriefItem["internalExternalClassification"] {
+  const normalized = normalizeOneLine(value)?.toLowerCase();
+  if (normalized === "internal" || normalized === "external" || normalized === "mixed" || normalized === "unknown") {
+    return normalized;
+  }
+
+  return null;
+}
+
 function normalizeAttendees(value: unknown): JsonValue[] {
   if (!Array.isArray(value)) {
     return [];
@@ -177,12 +223,23 @@ function normalizeAttendees(value: unknown): JsonValue[] {
       if (isJsonRecord(entry)) {
         const name = normalizeOneLine(entry.name) ?? normalizeOneLine(entry.displayName);
         const email = normalizeOneLine(entry.email) ?? normalizeOneLine(entry.address);
-        return [name, email].filter(Boolean).join(" ") || null;
+        const responseStatus = normalizeOneLine(entry.responseStatus) ?? normalizeOneLine(entry.status);
+        const normalized: JsonRecord = {};
+        if (name) {
+          normalized.name = name;
+        }
+        if (email) {
+          normalized.email = email;
+        }
+        if (responseStatus) {
+          normalized.responseStatus = responseStatus;
+        }
+        return Object.keys(normalized).length > 0 ? normalized : null;
       }
 
       return null;
     })
-    .filter((entry): entry is string => Boolean(entry));
+    .filter((entry): entry is string | JsonRecord => Boolean(entry));
 }
 
 function parseDisplayDate(value: unknown) {
@@ -303,6 +360,8 @@ function normalizeStructuredItem(value: JsonValue, fallbackPrefix: string, index
     title,
     summary: normalizeOneLine(value.summary) ?? normalizeOneLine(value.detail) ?? normalizeOneLine(value.why_it_matters),
     source: normalizeOneLine(value.source) ?? normalizeOneLine(value.source_type),
+    sourceLane: normalizeSourceLane(value.source_lane ?? value.sourceLane),
+    sourceRefs: normalizeSourceRefs(value.source_refs ?? value.sourceRefs),
     sourceLabel:
       normalizeOneLine(value.source_label) ??
       normalizeOneLine(value.sourceLabel) ??
@@ -345,6 +404,7 @@ function normalizeStructuredItem(value: JsonValue, fallbackPrefix: string, index
       parseDateLike(value.endAt) ??
       parseDateLike(value.meeting_end) ??
       parseDateLike(value.meetingEnd),
+    timezone: normalizeOneLine(value.timezone) ?? normalizeOneLine(value.time_zone) ?? normalizeOneLine(value.tz),
     attendees: normalizeAttendees(value.attendees ?? value.participants),
     organizerName:
       normalizeOneLine(value.organizer_name) ??
@@ -355,7 +415,27 @@ function normalizeStructuredItem(value: JsonValue, fallbackPrefix: string, index
       normalizeOneLine(value.location_or_link) ??
       normalizeOneLine(value.locationOrLink) ??
       normalizeOneLine(value.location) ??
-      normalizeSourceUrl(value.meetingLink)
+      normalizeSourceUrl(value.meetingLink),
+    calendarEventId:
+      normalizeOneLine(value.calendar_event_id) ??
+      normalizeOneLine(value.calendarEventId) ??
+      normalizeOneLine(value.event_id) ??
+      normalizeOneLine(value.eventId),
+    calendarSourceSystemId:
+      normalizeOneLine(value.calendar_source_system_id) ??
+      normalizeOneLine(value.calendarSourceSystemId) ??
+      normalizeOneLine(value.calendar_source) ??
+      normalizeOneLine(value.calendarSource),
+    descriptionSummary:
+      normalizeOneLine(value.description_summary) ??
+      normalizeOneLine(value.descriptionSummary) ??
+      normalizeOneLine(value.description),
+    relatedCompanyNames: normalizeStringArray(value.related_company_names ?? value.relatedCompanyNames),
+    relatedPeopleNames: normalizeStringArray(value.related_people_names ?? value.relatedPeopleNames),
+    internalExternalClassification: normalizeInternalExternalClassification(
+      value.internal_external_classification ?? value.internalExternalClassification
+    ),
+    priorityReasons: normalizeStringArray(value.priority_reasons ?? value.priorityReasons)
   };
 }
 

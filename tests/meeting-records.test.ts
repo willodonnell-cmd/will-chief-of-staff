@@ -897,3 +897,84 @@ test("runManualMeetingResearch marks the record failed when the provider is unav
   assert.deepEqual(result.record?.linkedTaskIds, []);
   assert.match(JSON.stringify(result.record?.researchSummary), /no_provider/);
 });
+
+test("runManualMeetingResearch fails cleanly when OPENAI_API_KEY is missing", async () => {
+  const previousApiKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+
+  try {
+    const memory = createMemoryMeetingRecordsRepository();
+    const result = await runManualMeetingResearch(
+      memory.repository,
+      {
+        userId: "user-1",
+        calendarEventId: "event-1",
+        title: "Partner sync"
+      },
+      {
+        now: "2026-06-08T21:00:00.000Z"
+      }
+    );
+
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "no_provider");
+    assert.equal(result.record?.researchStatus, "failed");
+    assert.match(JSON.stringify(result.record?.researchSummary), /no_provider/);
+  } finally {
+    if (previousApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = previousApiKey;
+    }
+  }
+});
+
+test("meeting markdown omits empty unsupported source sections", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const record = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "event-1",
+    title: "Internal partner sync",
+    startAt: "2026-06-09T17:00:00.000Z",
+    attendees: ["Will O'Donnell", "Noemy"]
+  });
+  const markdown = buildMeetingRecordMarkdown({
+    ...record,
+    researchSummary: {
+      meetingRecordId: record.id,
+      generatedAt: "2026-06-08T21:00:00.000Z",
+      sourceCoverage: [
+        {
+          sourceType: "outlook",
+          used: false,
+          itemCount: 0,
+          internalOnlyReason: "Meeting-specific Outlook source adapter is not available in this phase."
+        },
+        {
+          sourceType: "pitchbook",
+          used: false,
+          itemCount: 0,
+          internalOnlyReason: "PitchBook connector is not available to this code path."
+        },
+        {
+          sourceType: "web_news",
+          used: false,
+          itemCount: 0,
+          internalOnlyReason: "Web/news adapter is not enabled for meeting research in this phase."
+        }
+      ],
+      calendarEventDetails: null,
+      highLevelContext: null,
+      recentRelevantActivity: [],
+      situationRead: null,
+      keyPriorities: [],
+      suggestedQuestions: [],
+      relevantLinks: [],
+      taskCandidates: []
+    }
+  });
+
+  assert.doesNotMatch(markdown, /PitchBook/i);
+  assert.doesNotMatch(markdown, /web_news/i);
+  assert.doesNotMatch(markdown, /Outlook source adapter/i);
+});

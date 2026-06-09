@@ -6,7 +6,9 @@ import { redirect } from "next/navigation";
 import {
   createSupabaseMeetingRecordsRepository,
   isMeetingRecordsSchemaUnavailableError,
-  meetingCalendarEventIdFromBriefItemId
+  meetingCalendarEventIdFromBriefItemId,
+  type JsonValue,
+  type MeetingInternalExternalClassification
 } from "@/lib/meetings/meeting-records";
 import { runManualMeetingResearch, type MeetingResearchRunError } from "@/lib/meetings/meeting-research";
 import { exportMeetingRecordToTaskRobin } from "@/lib/meetings/meeting-obsidian-export";
@@ -31,6 +33,35 @@ function formJsonArray(formData: FormData, key: string) {
   } catch {
     return [];
   }
+}
+
+function formJsonStringArray(formData: FormData, key: string) {
+  return formJsonArray(formData, key).filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+}
+
+function parseInternalExternalClassification(value: string): MeetingInternalExternalClassification | null {
+  return value === "internal" || value === "external" || value === "mixed" || value === "unknown" ? value : null;
+}
+
+function buildResearchSourceRefs(formData: FormData, briefItemId: string): JsonValue[] {
+  const refs = formJsonArray(formData, "sourceRefs").filter((value): value is JsonValue => {
+    if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      return true;
+    }
+    if (Array.isArray(value)) {
+      return true;
+    }
+    return Boolean(value && typeof value === "object");
+  });
+
+  return [
+    ...refs,
+    {
+      sourceType: "executive_brief",
+      briefItemId,
+      href: "/brief"
+    }
+  ];
 }
 
 function parseReturnTo(value: string) {
@@ -78,19 +109,17 @@ export async function researchMeetingContextAction(formData: FormData) {
       title,
       startAt: formString(formData, "startAt") || null,
       endAt: formString(formData, "endAt") || null,
-      timezone: resolved.user.timezone || "America/Los_Angeles",
+      timezone: formString(formData, "timezone") || resolved.user.timezone || "America/Los_Angeles",
       organizerName: formString(formData, "organizerName") || null,
       organizerEmail: formString(formData, "organizerEmail") || null,
       attendees: formJsonArray(formData, "attendees"),
       locationOrLink: formString(formData, "locationOrLink") || null,
       descriptionSummary: formString(formData, "descriptionSummary") || null,
-      sourceRefs: [
-        {
-          sourceType: "executive_brief",
-          briefItemId: itemId,
-          href: "/brief"
-        }
-      ]
+      relatedCompanyNames: formJsonStringArray(formData, "relatedCompanyNames"),
+      relatedPeopleNames: formJsonStringArray(formData, "relatedPeopleNames"),
+      internalExternalClassification: parseInternalExternalClassification(formString(formData, "internalExternalClassification")),
+      priorityReasons: formJsonStringArray(formData, "priorityReasons"),
+      sourceRefs: buildResearchSourceRefs(formData, itemId)
     });
   } catch (error) {
     if (isMeetingRecordsSchemaUnavailableError(error)) {

@@ -193,6 +193,15 @@ test("Today brief-derived cards link to source URLs or specific Executive Brief 
   assert.equal(emailLane?.items[0]?.briefHref, "/brief#brief-item-topMoves-move-source");
   assert.equal(model.decisionsNeeded[0]?.href, "/brief#brief-item-decision-decision-1");
   assert.equal(model.meetingPrep[0]?.briefHref, "/brief#brief-item-meeting-meeting-1");
+
+  const fallbackModel = buildTodayViewModel({
+    snapshot: buildSnapshot(),
+    openTasks: []
+  });
+  const fallbackItem = fallbackModel.sourceLanes.find((lane) => lane.id === "email")?.items[0];
+  assert.equal(fallbackItem?.sourceHref, null);
+  assert.equal(fallbackItem?.href, fallbackItem?.briefHref);
+  assert.equal(fallbackItem?.senderLabel, null);
 });
 
 test("Today email cards include sender source labels and task creation metadata", () => {
@@ -206,10 +215,13 @@ test("Today email cards include sender source labels and task creation metadata"
             title: "Reply on approval path",
             summary: "The sender is waiting on Will before the packet moves.",
             source: "Outlook",
+            sourceLane: "email",
+            sourceRefs: [{ sourceType: "outlook", id: "message-2" }],
             sourceLabel: "Approval thread",
             sourceUrl: "https://outlook.example/message-2",
             senderName: "Maya Finance",
             senderEmail: "maya@example.com",
+            receivedAt: "2026-06-08T15:00:00.000Z",
             priority: "high",
             recommendedAction: "Reply today",
             dueAt: "2026-06-08T18:00:00.000Z",
@@ -223,7 +235,11 @@ test("Today email cards include sender source labels and task creation metadata"
   const emailItem = model.sourceLanes.find((lane) => lane.id === "email")?.items[0];
 
   assert.equal(emailItem?.senderLabel, "Maya Finance <maya@example.com>");
+  assert.equal(emailItem?.sourceLane, "email");
+  assert.deepEqual(emailItem?.sourceRefs, [{ sourceType: "outlook", id: "message-2" }]);
   assert.equal(emailItem?.sourceLabel, "Approval thread");
+  assert.equal(emailItem?.receivedAt, "2026-06-08T15:00:00.000Z");
+  assert.match(emailItem?.meta.join(" ") ?? "", /Received Jun 8/);
   assert.equal(emailItem?.sourceQualityLabel, "Source link available");
   assert.equal(emailItem?.canCreateTask, true);
   assert.equal(emailItem?.taskDescription, "Reply on approval path");
@@ -242,15 +258,25 @@ test("Today meeting cards include time attendee and missing-metadata labels", ()
             title: "Customer prep",
             summary: "Prepare for the expansion decision.",
             source: "Calendar",
+            sourceLane: "calendar_meetings",
+            sourceRefs: [{ sourceType: "calendar", id: "calendar-event-1" }],
             priority: "high",
             recommendedAction: "Review scope options",
             dueAt: null,
+            calendarEventId: "calendar-event-1",
+            calendarSourceSystemId: "outlook",
             startAt: "2026-06-08T17:00:00.000Z",
             endAt: "2026-06-08T18:00:00.000Z",
-            attendees: ["Will O'Donnell", "Alex Partner", "Jordan Lee", "Customer COO"],
+            timezone: "America/Los_Angeles",
+            attendees: ["Will O'Donnell", "Alex Partner", { name: "Jordan Lee", email: "jordan@example.com" }, "Customer COO"],
             organizerName: "Alex Partner",
             organizerEmail: "alex@example.com",
-            locationOrLink: "https://outlook.example/calendar"
+            locationOrLink: "https://outlook.example/calendar",
+            descriptionSummary: "Expansion decision agenda.",
+            relatedCompanyNames: ["CustomerCo"],
+            relatedPeopleNames: ["Jordan Lee"],
+            internalExternalClassification: "external",
+            priorityReasons: ["Expansion decision is due."]
           }
         ]
       }
@@ -262,8 +288,19 @@ test("Today meeting cards include time attendee and missing-metadata labels", ()
   assert.match(meetingItem?.timeLabel ?? "", /Jun 8/);
   assert.equal(meetingItem?.attendeeLabel, "Group meeting · 4 attendees");
   assert.equal(meetingItem?.sourceQualityLabel, "Brief-only context");
+  assert.equal(meetingItem?.sourceLane, "calendar_meetings");
+  assert.deepEqual(meetingItem?.sourceRefs, [{ sourceType: "calendar", id: "calendar-event-1" }]);
+  assert.equal(meetingItem?.calendarEventId, "calendar-event-1");
+  assert.equal(meetingItem?.calendarSourceSystemId, "outlook");
+  assert.equal(meetingItem?.timezone, "America/Los_Angeles");
   assert.equal(meetingItem?.organizerName, "Alex Partner");
+  assert.equal(meetingItem?.organizerEmail, "alex@example.com");
   assert.equal(meetingItem?.locationOrLink, "https://outlook.example/calendar");
+  assert.equal(meetingItem?.descriptionSummary, "Expansion decision agenda.");
+  assert.deepEqual(meetingItem?.relatedCompanyNames, ["CustomerCo"]);
+  assert.deepEqual(meetingItem?.relatedPeopleNames, ["Jordan Lee"]);
+  assert.equal(meetingItem?.internalExternalClassification, "external");
+  assert.deepEqual(meetingItem?.priorityReasons, ["Expansion decision is due."]);
 
   const missingModel = buildTodayViewModel({
     snapshot: buildSnapshot(),

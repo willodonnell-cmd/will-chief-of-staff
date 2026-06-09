@@ -72,7 +72,7 @@ async function listMeetingRecordStatusesForSnapshot(params: {
   const meetingCalendarEventIds = buildStructuredBriefSourceLanes({ structuredBrief })
     .flatMap((lane) => lane.entries)
     .filter((entry) => entry.section === "meetingPrep")
-    .map((entry) => meetingCalendarEventIdFromBriefItemId(entry.id));
+    .map((entry) => entry.item.calendarEventId ?? meetingCalendarEventIdFromBriefItemId(entry.id));
 
   if (meetingCalendarEventIds.length === 0) {
     return {};

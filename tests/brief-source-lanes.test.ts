@@ -76,6 +76,38 @@ test("meeting prep is categorized as Calendar / Meetings even without explicit s
   );
 });
 
+test("explicit sourceLane metadata overrides text heuristics without changing lane order", () => {
+  const lanes = buildStructuredBriefSourceLanes({
+    structuredBrief: buildStructuredBrief({
+      topMoves: [
+        buildItem({
+          id: "calendar-explicit",
+          title: "Board calendar hold",
+          source: "Outlook",
+          sourceLane: "calendar_meetings"
+        })
+      ],
+      decisionsNeeded: [
+        buildItem({
+          id: "teams-explicit",
+          title: "Reply to email thread",
+          source: "Email",
+          sourceLane: "teams"
+        })
+      ],
+      meetingPrep: [],
+      taskCandidates: []
+    })
+  });
+
+  assert.deepEqual(
+    lanes.map((lane) => lane.id),
+    ["calendar_meetings", "teams"]
+  );
+  assert.equal(lanes[0]?.entries[0]?.item.id, "calendar-explicit");
+  assert.equal(lanes[1]?.entries[0]?.item.id, "teams-explicit");
+});
+
 test("brief item DOM ids are stable anchors for specific source-lane entries", () => {
   assert.equal(briefItemDomId("topMoves-outlook reply"), "brief-item-topMoves-outlook-reply");
   assert.equal(briefItemDomId(""), "brief-item-item");

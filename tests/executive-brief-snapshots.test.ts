@@ -118,9 +118,12 @@ test("normalizes marked Executive Brief JSON into structured sections", () => {
             title: "Finish board memo",
             summary: "Finance comments arrived after the last draft.",
             source: "Outlook",
+            source_lane: "email",
+            source_refs: [{ sourceType: "outlook", id: "message-1", url: "https://outlook.example/message-1" }],
             sender: "Maya Finance",
             sender_email: "maya@example.com",
             source_url: "https://outlook.example/message-1",
+            source_label: "Finance approval thread",
             received_at: "2026-06-07T18:45:00-07:00",
             priority: "high",
             recommended_action: "Send revised memo before the morning review."
@@ -131,11 +134,22 @@ test("normalizes marked Executive Brief JSON into structured sections", () => {
           {
             title: "9 AM partner sync",
             action: "Bring the IC follow-up list.",
+            source_lane: "calendar_meetings",
+            source_refs: [{ sourceType: "calendar", id: "event-1" }],
+            calendar_event_id: "event-1",
+            calendar_source_system_id: "outlook",
             start_at: "2026-06-08T09:00:00-07:00",
             end_at: "2026-06-08T09:30:00-07:00",
+            timezone: "America/Los_Angeles",
             organizer: "Amelia Hart",
-            attendees: ["Will O'Donnell", "Amelia Hart"],
-            location_or_link: "https://outlook.example/calendar-1"
+            organizer_email: "amelia@example.com",
+            attendees: ["Will O'Donnell", { name: "Amelia Hart", email: "amelia@example.com", responseStatus: "accepted" }],
+            location_or_link: "https://outlook.example/calendar-1",
+            description_summary: "Partner sync agenda.",
+            related_company_names: ["Prologis"],
+            related_people_names: ["Amelia Hart"],
+            internal_external_classification: "internal",
+            priority_reasons: ["IC follow-up is due."]
           }
         ],
         carry_forward: [{ title: "Data-room owner still unresolved" }],
@@ -149,6 +163,11 @@ test("normalizes marked Executive Brief JSON into structured sections", () => {
   assert.deepEqual(parsed.validationWarnings, []);
   assert.equal(parsed.structuredBrief?.commandSummary[0], "Board memo is the highest leverage item.");
   assert.equal(parsed.structuredBrief?.topMoves[0]?.title, "Finish board memo");
+  assert.equal(parsed.structuredBrief?.topMoves[0]?.sourceLane, "email");
+  assert.deepEqual(parsed.structuredBrief?.topMoves[0]?.sourceRefs, [
+    { sourceType: "outlook", id: "message-1", url: "https://outlook.example/message-1" }
+  ]);
+  assert.equal(parsed.structuredBrief?.topMoves[0]?.sourceLabel, "Finance approval thread");
   assert.equal(parsed.structuredBrief?.topMoves[0]?.senderName, "Maya Finance");
   assert.equal(parsed.structuredBrief?.topMoves[0]?.senderEmail, "maya@example.com");
   assert.equal(parsed.structuredBrief?.topMoves[0]?.sourceUrl, "https://outlook.example/message-1");
@@ -156,13 +175,56 @@ test("normalizes marked Executive Brief JSON into structured sections", () => {
   assert.equal(parsed.structuredBrief?.topMoves[0]?.recommendedAction, "Send revised memo before the morning review.");
   assert.equal(parsed.structuredBrief?.decisionsNeeded[0]?.title, "Approve whether to move the portfolio review.");
   assert.equal(parsed.structuredBrief?.meetingPrep[0]?.recommendedAction, "Bring the IC follow-up list.");
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.sourceLane, "calendar_meetings");
+  assert.deepEqual(parsed.structuredBrief?.meetingPrep[0]?.sourceRefs, [{ sourceType: "calendar", id: "event-1" }]);
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.calendarEventId, "event-1");
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.calendarSourceSystemId, "outlook");
   assert.equal(parsed.structuredBrief?.meetingPrep[0]?.startAt, "2026-06-08T16:00:00.000Z");
   assert.equal(parsed.structuredBrief?.meetingPrep[0]?.endAt, "2026-06-08T16:30:00.000Z");
-  assert.deepEqual(parsed.structuredBrief?.meetingPrep[0]?.attendees, ["Will O'Donnell", "Amelia Hart"]);
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.timezone, "America/Los_Angeles");
+  assert.deepEqual(parsed.structuredBrief?.meetingPrep[0]?.attendees, [
+    "Will O'Donnell",
+    { name: "Amelia Hart", email: "amelia@example.com", responseStatus: "accepted" }
+  ]);
   assert.equal(parsed.structuredBrief?.meetingPrep[0]?.organizerName, "Amelia Hart");
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.organizerEmail, "amelia@example.com");
   assert.equal(parsed.structuredBrief?.meetingPrep[0]?.locationOrLink, "https://outlook.example/calendar-1");
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.descriptionSummary, "Partner sync agenda.");
+  assert.deepEqual(parsed.structuredBrief?.meetingPrep[0]?.relatedCompanyNames, ["Prologis"]);
+  assert.deepEqual(parsed.structuredBrief?.meetingPrep[0]?.relatedPeopleNames, ["Amelia Hart"]);
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.internalExternalClassification, "internal");
+  assert.deepEqual(parsed.structuredBrief?.meetingPrep[0]?.priorityReasons, ["IC follow-up is due."]);
   assert.equal(parsed.structuredBrief?.carryForward[0]?.title, "Data-room owner still unresolved");
   assert.equal(parsed.structuredBrief?.taskCandidates[0]?.priority, "medium");
   assert.match(parsed.humanBrief ?? "", /Focus on the board memo/);
   assert.doesNotMatch(parsed.humanBrief ?? "", /BLACKHAWK_JSON_START/);
+});
+
+test("normalizes old thin Executive Brief bundles without requiring metadata", () => {
+  const parsed = parseExecutiveBriefBundleEmail({
+    destinationAddress: "priority+will@example.com",
+    subject: "BLACKHAWK_BRIEF_BUNDLE Manual",
+    forwardedAt: "2026-06-08T02:00:00.000Z",
+    rawText: JSON.stringify({
+      top_moves: [
+        {
+          id: "thin-1",
+          title: "Reply to investor",
+          summary: "Investor asked for the latest package.",
+          source: "Outlook",
+          priority: "high",
+          recommendedAction: "Reply today",
+          dueAt: "2026-06-08T22:00:00.000Z"
+        }
+      ]
+    })
+  });
+
+  const item = parsed.structuredBrief?.topMoves[0];
+  assert.equal(item?.title, "Reply to investor");
+  assert.equal(item?.senderName, null);
+  assert.equal(item?.senderEmail, null);
+  assert.equal(item?.sourceUrl, null);
+  assert.deepEqual(item?.sourceRefs, []);
+  assert.deepEqual(item?.attendees, []);
 });

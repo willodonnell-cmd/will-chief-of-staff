@@ -3,6 +3,7 @@ import {
   updateMeetingResearchSummary,
   type CalendarEventDetails,
   type JsonValue,
+  type MeetingInternalExternalClassification,
   type MeetingRecord,
   type MeetingRecordsRepository,
   type MeetingResearchSummary,
@@ -25,6 +26,10 @@ export type ManualMeetingResearchInput = {
   attendees?: JsonValue[] | null;
   locationOrLink?: string | null;
   descriptionSummary?: string | null;
+  relatedCompanyNames?: string[] | null;
+  relatedPeopleNames?: string[] | null;
+  internalExternalClassification?: MeetingInternalExternalClassification | null;
+  priorityReasons?: string[] | null;
   sourceRefs?: JsonValue[] | null;
 };
 
@@ -366,6 +371,10 @@ export async function runManualMeetingResearch(
       organizerName: input.organizerName ?? null,
       organizerEmail: input.organizerEmail ?? null,
       attendees: input.attendees ?? [],
+      internalExternalClassification: input.internalExternalClassification ?? null,
+      relatedCompanyNames: input.relatedCompanyNames ?? [],
+      relatedPeopleNames: input.relatedPeopleNames ?? [],
+      priorityReasons: input.priorityReasons ?? [],
       sourceRefs: input.sourceRefs ?? []
     });
     const researchingRecord = await repository.update({

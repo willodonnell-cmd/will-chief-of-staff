@@ -40,6 +40,23 @@ function formatTimestamp(value: string | null | undefined) {
   }).format(parsed);
 }
 
+function formatOptionalTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "America/Los_Angeles"
+  }).format(parsed);
+}
+
 function BriefSlotCard({ slot }: { slot: ExecutiveBriefSlot }) {
   const snapshot = slot.snapshot;
 
@@ -85,6 +102,58 @@ function LatestProcessedSnapshotCard({
         </span>
       </div>
     </section>
+  );
+}
+
+function ExecutiveBriefSummaryDetails({
+  latest,
+  commandSummary
+}: {
+  latest: NonNullable<ExecutiveBriefPageData["latestSnapshot"]>;
+  commandSummary: string[];
+}) {
+  return (
+    <details
+      className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4"
+      data-brief-section="executive-brief-summary"
+    >
+      <summary className="cursor-pointer list-none">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Executive Brief Summary</p>
+            <h3 className="mt-1 text-sm font-semibold tracking-[-0.01em] text-text">
+              {latest.displayDate ?? latest.subject}
+            </h3>
+          </div>
+          <span className="w-fit rounded-full border border-line/70 bg-white/76 px-3 py-1 text-[0.68rem] uppercase tracking-[0.16em] text-text-subtle">
+            Processed {formatTimestamp(latest.generatedAt ?? latest.createdAt)}
+          </span>
+        </div>
+      </summary>
+
+      <div className="mt-4 space-y-4 border-t border-line/60 pt-4">
+        <LatestProcessedSnapshotCard latest={latest} />
+        {latest.humanBrief ? (
+          <section className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+            <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Summary</p>
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-text-muted">{latest.humanBrief}</p>
+          </section>
+        ) : null}
+
+        {commandSummary.length > 0 ? (
+          <section className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
+            <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Command summary</p>
+            <ul className="mt-3 space-y-2">
+              {commandSummary.map((summary) => (
+                <li key={summary} className="text-sm leading-6 text-text-muted">
+                  {summary}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+      </div>
+    </details>
   );
 }
 
@@ -217,12 +286,14 @@ function StructuredItemCard({
               Open Source
             </a>
           ) : null}
-          <a
-            href={`#${briefItemDomId(entry.id)}`}
-            className="rounded-full border border-line/75 bg-white/70 px-3.5 py-2 text-sm font-medium text-text-muted transition hover:bg-white hover:text-text"
-          >
-            Open in Brief
-          </a>
+          {!item.sourceUrl ? (
+            <a
+              href={`#${briefItemDomId(entry.id)}`}
+              className="rounded-full border border-line/75 bg-white/70 px-3.5 py-2 text-sm font-medium text-text-muted transition hover:bg-white hover:text-text"
+            >
+              Open in Brief
+            </a>
+          ) : null}
           {!taskCandidate ? <BriefItemTaskForm item={item} entryId={entry.id} /> : null}
         </div>
       ) : null}
@@ -404,13 +475,17 @@ function attendeeLabel(item: StructuredExecutiveBriefItem) {
 }
 
 function formatMeetingWindow(item: StructuredExecutiveBriefItem) {
-  const start = formatTimestamp(item.startAt);
-  const end = formatTimestamp(item.endAt);
+  const start = formatOptionalTimestamp(item.startAt);
+  const end = formatOptionalTimestamp(item.endAt);
   if (start && end) {
     return `${start} - ${end}`;
   }
 
   return start ?? end ?? null;
+}
+
+function listDetail(values: string[] | null | undefined) {
+  return values && values.length > 0 ? values.join(", ") : null;
 }
 
 function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -434,7 +509,8 @@ function MeetingContextCard({
   status: MeetingRecordStatusSummary | null;
 }) {
   const item = entry.item;
-  const calendarEventId = meetingCalendarEventIdFromBriefItemId(entry.id);
+  const calendarEventId = item.calendarEventId ?? meetingCalendarEventIdFromBriefItemId(entry.id);
+  const calendarSourceSystemId = item.calendarSourceSystemId ?? "executive_brief";
   const indicators = meetingStatusIndicators(status);
 
   return (
@@ -458,15 +534,21 @@ function MeetingContextCard({
             <input type="hidden" name="returnTo" value="/brief" />
             <input type="hidden" name="briefItemId" value={entry.id} />
             <input type="hidden" name="calendarEventId" value={calendarEventId} />
-            <input type="hidden" name="calendarSourceSystemId" value="executive_brief" />
+            <input type="hidden" name="calendarSourceSystemId" value={calendarSourceSystemId} />
             <input type="hidden" name="title" value={item.title} />
             <input type="hidden" name="startAt" value={item.startAt ?? item.dueAt ?? ""} />
             <input type="hidden" name="endAt" value={item.endAt ?? ""} />
+            <input type="hidden" name="timezone" value={item.timezone ?? ""} />
             <input type="hidden" name="organizerName" value={item.organizerName ?? ""} />
             <input type="hidden" name="organizerEmail" value={item.organizerEmail ?? ""} />
             <input type="hidden" name="attendees" value={JSON.stringify(item.attendees ?? [])} />
             <input type="hidden" name="locationOrLink" value={item.locationOrLink ?? item.sourceUrl ?? ""} />
-            <input type="hidden" name="descriptionSummary" value={item.summary ?? ""} />
+            <input type="hidden" name="descriptionSummary" value={item.descriptionSummary ?? item.summary ?? ""} />
+            <input type="hidden" name="relatedCompanyNames" value={JSON.stringify(item.relatedCompanyNames ?? [])} />
+            <input type="hidden" name="relatedPeopleNames" value={JSON.stringify(item.relatedPeopleNames ?? [])} />
+            <input type="hidden" name="internalExternalClassification" value={item.internalExternalClassification ?? ""} />
+            <input type="hidden" name="priorityReasons" value={JSON.stringify(item.priorityReasons ?? [])} />
+            <input type="hidden" name="sourceRefs" value={JSON.stringify(item.sourceRefs ?? [])} />
             <button
               type="submit"
               className="rounded-full border border-[rgba(20,29,38,0.24)] bg-[rgb(var(--color-shell))] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[rgb(var(--color-shell))]/90"
@@ -484,9 +566,13 @@ function MeetingContextCard({
           <DetailRow label="Organizer" value={[item.organizerName, item.organizerEmail].filter(Boolean).join(" · ") || null} />
           <DetailRow label="Attendees" value={attendeeLabel(item)} />
           <DetailRow label="Location / Link" value={item.locationOrLink ?? item.sourceUrl} />
-          <DetailRow label="Summary" value={item.summary} />
+          <DetailRow label="Summary" value={item.descriptionSummary ?? item.summary} />
           <DetailRow label="Action" value={item.recommendedAction} />
           <DetailRow label="Research" value={status?.researchStatus ?? "not researched"} />
+          <DetailRow label="Companies" value={listDetail(item.relatedCompanyNames)} />
+          <DetailRow label="People" value={listDetail(item.relatedPeopleNames)} />
+          <DetailRow label="Classification" value={item.internalExternalClassification} />
+          <DetailRow label="Priority Reasons" value={listDetail(item.priorityReasons)} />
           <DetailRow label="Source" value={[sourceQualityLabel(item, "calendar_meetings"), item.sourceLabel ?? item.source].filter(Boolean).join(" · ")} />
         </div>
         {status ? (
@@ -537,7 +623,7 @@ function SourceLaneSection({
             <MeetingContextCard
               key={entry.id}
               entry={entry}
-              status={meetingRecordStatuses[meetingCalendarEventIdFromBriefItemId(entry.id)] ?? null}
+              status={meetingRecordStatuses[entry.item.calendarEventId ?? meetingCalendarEventIdFromBriefItemId(entry.id)] ?? null}
             />
           ) : (
             <StructuredItemCard
@@ -593,26 +679,6 @@ export function ExecutiveBriefWorkspace({
         <section className="rounded-[1.75rem] border border-line/75 bg-white/72 p-5 md:p-6">
           {structuredBrief ? (
             <div className="space-y-6">
-              {latest.humanBrief ? (
-                <section className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-                  <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Summary</p>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-text-muted">{latest.humanBrief}</p>
-                </section>
-              ) : null}
-
-              {structuredBrief.commandSummary.length > 0 ? (
-                <section className="rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">
-                  <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Command summary</p>
-                  <ul className="mt-3 space-y-2">
-                    {structuredBrief.commandSummary.map((summary) => (
-                      <li key={summary} className="text-sm leading-6 text-text-muted">
-                        {summary}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ) : null}
-
               {sourceLanes.map((lane) => (
                 <SourceLaneSection
                   key={lane.id}
@@ -622,7 +688,7 @@ export function ExecutiveBriefWorkspace({
                 />
               ))}
 
-              <LatestProcessedSnapshotCard latest={latest} />
+              <ExecutiveBriefSummaryDetails latest={latest} commandSummary={structuredBrief.commandSummary} />
             </div>
           ) : (
             <div className="space-y-4">

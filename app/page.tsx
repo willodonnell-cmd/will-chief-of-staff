@@ -117,12 +117,14 @@ function EmailSummaryList({
                 Open Source
               </a>
             ) : null}
-            <a
-              href={item.briefHref}
-              className="rounded-full border border-line/75 bg-white/70 px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-white hover:text-text"
-            >
-              Open in Brief
-            </a>
+            {!item.sourceHref ? (
+              <a
+                href={item.briefHref}
+                className="rounded-full border border-line/75 bg-white/70 px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-white hover:text-text"
+              >
+                Open in Brief
+              </a>
+            ) : null}
             {item.canCreateTask ? <BriefItemTaskForm item={item} returnTo="/" /> : null}
           </div>
         </article>
@@ -280,6 +282,10 @@ function attendeeDetail(item: TodayBriefItem) {
   return item.attendees.length === 0 ? null : `${item.attendees.length} attendees`;
 }
 
+function listDetail(values: string[]) {
+  return values.length > 0 ? values.join(", ") : null;
+}
+
 function MeetingContextList({
   items,
   meetingRecordStatuses
@@ -290,7 +296,8 @@ function MeetingContextList({
   return (
     <div className="space-y-3">
       {items.map((item) => {
-        const calendarEventId = meetingCalendarEventIdFromBriefItemId(item.id);
+        const calendarEventId = item.calendarEventId ?? meetingCalendarEventIdFromBriefItemId(item.id);
+        const calendarSourceSystemId = item.calendarSourceSystemId ?? "executive_brief";
         const status = meetingRecordStatuses[calendarEventId] ?? null;
         const indicators = meetingStatusIndicators(status);
         return (
@@ -315,15 +322,21 @@ function MeetingContextList({
                   <input type="hidden" name="returnTo" value="/" />
                   <input type="hidden" name="briefItemId" value={item.id} />
                   <input type="hidden" name="calendarEventId" value={calendarEventId} />
-                  <input type="hidden" name="calendarSourceSystemId" value="executive_brief" />
+                  <input type="hidden" name="calendarSourceSystemId" value={calendarSourceSystemId} />
                   <input type="hidden" name="title" value={item.title} />
                   <input type="hidden" name="startAt" value={item.startAt ?? ""} />
                   <input type="hidden" name="endAt" value={item.endAt ?? ""} />
+                  <input type="hidden" name="timezone" value={item.timezone ?? ""} />
                   <input type="hidden" name="organizerName" value={item.organizerName ?? ""} />
                   <input type="hidden" name="organizerEmail" value={item.organizerEmail ?? ""} />
                   <input type="hidden" name="attendees" value={JSON.stringify(item.attendees)} />
                   <input type="hidden" name="locationOrLink" value={item.locationOrLink ?? item.sourceHref ?? ""} />
-                  <input type="hidden" name="descriptionSummary" value={item.summary ?? ""} />
+                  <input type="hidden" name="descriptionSummary" value={item.descriptionSummary ?? item.summary ?? ""} />
+                  <input type="hidden" name="relatedCompanyNames" value={JSON.stringify(item.relatedCompanyNames)} />
+                  <input type="hidden" name="relatedPeopleNames" value={JSON.stringify(item.relatedPeopleNames)} />
+                  <input type="hidden" name="internalExternalClassification" value={item.internalExternalClassification ?? ""} />
+                  <input type="hidden" name="priorityReasons" value={JSON.stringify(item.priorityReasons)} />
+                  <input type="hidden" name="sourceRefs" value={JSON.stringify(item.sourceRefs)} />
                   <button
                     type="submit"
                     className="rounded-full border border-[rgba(20,29,38,0.24)] bg-[rgb(var(--color-shell))] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[rgb(var(--color-shell))]/90"
@@ -341,9 +354,13 @@ function MeetingContextList({
                 <DetailRow label="Organizer" value={[item.organizerName, item.organizerEmail].filter(Boolean).join(" · ") || null} />
                 <DetailRow label="Attendees" value={attendeeDetail(item)} />
                 <DetailRow label="Location / Link" value={item.locationOrLink ?? item.sourceHref} />
-                <DetailRow label="Summary" value={item.summary} />
+                <DetailRow label="Summary" value={item.descriptionSummary ?? item.summary} />
                 <DetailRow label="Action" value={item.actionLabel} />
                 <DetailRow label="Research" value={status?.researchStatus ?? "not researched"} />
+                <DetailRow label="Companies" value={listDetail(item.relatedCompanyNames)} />
+                <DetailRow label="People" value={listDetail(item.relatedPeopleNames)} />
+                <DetailRow label="Classification" value={item.internalExternalClassification} />
+                <DetailRow label="Priority Reasons" value={listDetail(item.priorityReasons)} />
                 <DetailRow label="Source" value={[item.sourceQualityLabel, item.sourceLabel].filter(Boolean).join(" · ")} />
               </div>
               {item.actionLabel ? (

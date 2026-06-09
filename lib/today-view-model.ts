@@ -20,16 +20,27 @@ export type TodayBriefItem = {
   href: string;
   sourceHref: string | null;
   briefHref: string;
+  sourceLane: BriefSourceLaneId | null;
+  sourceRefs: JsonValue[];
   senderLabel: string | null;
   sourceLabel: string | null;
+  receivedAt: string | null;
   timeLabel: string | null;
   attendeeLabel: string | null;
   startAt: string | null;
   endAt: string | null;
+  timezone: string | null;
   attendees: JsonValue[];
   organizerName: string | null;
   organizerEmail: string | null;
   locationOrLink: string | null;
+  calendarEventId: string | null;
+  calendarSourceSystemId: string | null;
+  descriptionSummary: string | null;
+  relatedCompanyNames: string[];
+  relatedPeopleNames: string[];
+  internalExternalClassification: "internal" | "external" | "mixed" | "unknown" | null;
+  priorityReasons: string[];
   sourceQualityLabel: string;
   canCreateTask: boolean;
   taskDescription: string;
@@ -113,6 +124,7 @@ function itemMeta(item: StructuredExecutiveBriefItem) {
   return [
     item.priority ? `${item.priority} priority` : null,
     item.sourceLabel ?? item.source,
+    item.receivedAt ? `Received ${formatTimestamp(item.receivedAt) ?? item.receivedAt}` : null,
     item.dueAt ? `Due ${formatTimestamp(item.dueAt) ?? item.dueAt}` : null
   ].filter((value): value is string => Boolean(compactText(value)));
 }
@@ -201,16 +213,27 @@ function mapBriefItem(
     href: sourceHref ?? briefHref,
     sourceHref,
     briefHref,
+    sourceLane: laneId ?? item.sourceLane ?? null,
+    sourceRefs: item.sourceRefs ?? [],
     senderLabel: senderLabel(item),
     sourceLabel: compactText(item.sourceLabel) || compactText(item.source) || null,
+    receivedAt: item.receivedAt ?? null,
     timeLabel: formatTimeWindow(item),
     attendeeLabel: attendeeLabel(item),
     startAt: item.startAt ?? null,
     endAt: item.endAt ?? null,
+    timezone: compactText(item.timezone) || null,
     attendees: item.attendees ?? [],
     organizerName: compactText(item.organizerName) || null,
     organizerEmail: compactText(item.organizerEmail) || null,
     locationOrLink: compactText(item.locationOrLink) || null,
+    calendarEventId: compactText(item.calendarEventId) || null,
+    calendarSourceSystemId: compactText(item.calendarSourceSystemId) || null,
+    descriptionSummary: compactText(item.descriptionSummary) || null,
+    relatedCompanyNames: item.relatedCompanyNames ?? [],
+    relatedPeopleNames: item.relatedPeopleNames ?? [],
+    internalExternalClassification: item.internalExternalClassification ?? null,
+    priorityReasons: item.priorityReasons ?? [],
     sourceQualityLabel: sourceQualityLabel(item, laneId),
     canCreateTask: laneId === "email",
     taskDescription: title,

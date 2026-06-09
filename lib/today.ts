@@ -55,7 +55,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
   const calendarEventIds =
     model.sourceLanes
       .find((lane) => lane.id === "calendar_meetings")
-      ?.items.map((item) => meetingCalendarEventIdFromBriefItemId(item.id)) ?? [];
+      ?.items.map((item) => item.calendarEventId ?? meetingCalendarEventIdFromBriefItemId(item.id)) ?? [];
 
   if (calendarEventIds.length === 0) {
     return model;
