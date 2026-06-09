@@ -1,0 +1,59 @@
+{
+  "slot": "7 AM",
+  "generated_at": "2026-06-09T14:00:00.000Z",
+  "display_date": "Tuesday, Jun 9",
+  "source_run_id": "codex-sites-example-run",
+  "json_bundle": {
+    "contract_version": "executive_brief.v1",
+    "command_summary": [
+      "Focus on the lender memo, the IC follow-up, and the partner sync."
+    ],
+    "top_3_executive_moves": [
+      {
+        "id": "move-lender-memo",
+        "title": "Finish lender memo",
+        "summary": "Finance comments are ready for review.",
+        "source_lane": "email",
+        "source_refs": [
+          {
+            "sourceType": "outlook",
+            "id": "message-1",
+            "url": "https://outlook.example/message-1",
+            "body": "This raw message body must not be stored in D1."
+          }
+        ],
+        "priority": "high",
+        "recommended_action": "Send the revised memo before the morning review.",
+        "raw_email_body": "This raw email body must not be stored in D1."
+      }
+    ],
+    "decisions_needed": [
+      {
+        "id": "decision-portfolio-review",
+        "title": "Decide whether to move the portfolio review",
+        "summary": "The current meeting time conflicts with lender prep.",
+        "source_lane": "calendar_meetings",
+        "calendar_description": "This raw calendar description must not be stored in D1."
+      }
+    ],
+    "meeting_prep": [],
+    "carry_forward": [],
+    "task_candidates": [
+      {
+        "id": "task-maya-lender-update",
+        "title": "Ask Maya for lender update",
+        "summary": "Confirm the updated lender package owner.",
+        "priority": "medium",
+        "recommended_action": "Ask Maya for owner and deadline.",
+        "source_refs": [
+          {
+            "sourceType": "teams",
+            "id": "chat-message-1",
+            "message_text": "This raw Teams message must not be stored in D1."
+          }
+        ]
+      }
+    ],
+    "protected_context": "This protected context must not be stored in D1."
+  }
+}

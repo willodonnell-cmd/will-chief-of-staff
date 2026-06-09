@@ -4,6 +4,15 @@ Will O'Donnell's Agentic Chief of Staff.
 
 **Agent & docs:** see [`AGENTS.md`](AGENTS.md) and [`docs/`](docs/).
 
+## Codex Sites / D1 migration foundation
+
+- The repo now includes a new Sites hosting contract at [`.openai/hosting.json`](/Users/willodonnell/Documents/will-chief-of-staff/.openai/hosting.json) with logical D1 binding `DB`.
+- The initial structured D1 schema is in [`drizzle/0001_sites_d1_initial.sql`](/Users/willodonnell/Documents/will-chief-of-staff/drizzle/0001_sites_d1_initial.sql), with table and slot constants in [`db/schema.ts`](/Users/willodonnell/Documents/will-chief-of-staff/db/schema.ts).
+- Direct Codex/GPT Executive Brief ingestion is available at `POST /api/brief/agent-ingest`. It writes structured snapshots and task candidates only; it does not auto-create durable tasks.
+- Sites/D1 parallel-run status is available at `/sites-d1-health` and `/api/sites-d1-health`.
+- Supabase, Vercel, and CloudMailIn remain parallel-run fallback infrastructure until D1 structured-read parity is verified.
+- See [`docs/sites_d1_migration.md`](/Users/willodonnell/Documents/will-chief-of-staff/docs/sites_d1_migration.md) for the structured-only migration rules and cutover notes.
+
 ## Supabase auth + bootstrap mode
 
 - The app now includes Supabase auth/session plumbing through:

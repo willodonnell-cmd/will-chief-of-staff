@@ -9,7 +9,6 @@ module.exports = tseslint.config(
       ".next-build/**",
       "node_modules/**",
       "next-env.d.ts",
-      "eslint.config.js",
       "tsconfig.tsbuildinfo"
     ]
   },
@@ -29,6 +28,16 @@ module.exports = tseslint.config(
     rules: {
       ...nextPlugin.configs.recommended.rules,
       ...nextPlugin.configs["core-web-vitals"].rules
+    }
+  },
+  {
+    files: ["eslint.config.js"],
+    languageOptions: {
+      globals: {
+        __dirname: "readonly",
+        module: "readonly",
+        require: "readonly"
+      }
     }
   }
 );
