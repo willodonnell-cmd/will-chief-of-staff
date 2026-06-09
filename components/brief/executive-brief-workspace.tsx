@@ -3,8 +3,15 @@ import {
   dismissBriefTaskCandidateAction,
   requestExecutiveBriefRefreshAction
 } from "@/app/brief/actions";
+import { researchMeetingContextAction } from "@/app/meetings/actions";
 import type { StructuredExecutiveBriefItem } from "@/lib/brief/executive-brief-snapshots";
 import type { ExecutiveBriefPageData, ExecutiveBriefSlot } from "@/lib/brief/load-executive-brief-page-data";
+import {
+  buildStructuredBriefSourceLanes,
+  type StructuredBriefLaneEntry,
+  type StructuredBriefSourceLane
+} from "@/lib/brief/source-lanes";
+import { meetingCalendarEventIdFromBriefItemId, type MeetingRecordStatusSummary } from "@/lib/meetings/meeting-records";
 
 function formatTimestamp(value: string | null | undefined) {
   if (!value) {
@@ -57,10 +64,12 @@ function sanitizeFlashMessage(value?: string) {
 
 function StructuredItemCard({
   item,
+  contextLabel,
   taskCandidate = false,
   snapshotId = null
 }: {
   item: StructuredExecutiveBriefItem;
+  contextLabel?: string;
   taskCandidate?: boolean;
   snapshotId?: string | null;
 }) {
@@ -85,6 +94,7 @@ function StructuredItemCard({
       ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2 text-[0.68rem] uppercase tracking-[0.16em] text-text-subtle">
+        {contextLabel ? <span>{contextLabel}</span> : null}
         {item.source ? <span>{item.source}</span> : null}
         {item.dueAt ? <span>Due {formatTimestamp(item.dueAt)}</span> : null}
       </div>
@@ -136,32 +146,127 @@ function StructuredItemCard({
   );
 }
 
-function StructuredSection({
-  title,
-  eyebrow,
-  items,
-  taskCandidate = false,
-  snapshotId = null
+function meetingStatusIndicators(status: MeetingRecordStatusSummary | null) {
+  if (!status) {
+    return [];
+  }
+
+  return [
+    status.researchStatus === "researched" ? "researched" : null,
+    status.researchStatus === "researching" ? "researching" : null,
+    status.researchStatus === "failed" ? "research failed" : null,
+    status.transcriptStatus !== "none" ? "transcript attached" : null,
+    status.taskCandidateCount > 0 ? "task candidates available" : null,
+    status.obsidianExportStatus === "sent_to_taskrobin" ? "sent to TaskRobin" : null
+  ].filter((value): value is string => Boolean(value));
+}
+
+function MeetingContextCard({
+  entry,
+  status
 }: {
-  title: string;
-  eyebrow: string;
-  items: StructuredExecutiveBriefItem[];
-  taskCandidate?: boolean;
-  snapshotId?: string | null;
+  entry: StructuredBriefLaneEntry;
+  status: MeetingRecordStatusSummary | null;
 }) {
-  if (items.length === 0) {
+  const item = entry.item;
+  const calendarEventId = meetingCalendarEventIdFromBriefItemId(entry.id);
+  const indicators = meetingStatusIndicators(status);
+
+  return (
+    <details className="rounded-[1.15rem] border border-line/70 bg-white/66 px-4 py-4">
+      <summary className="cursor-pointer list-none">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h4 className="text-sm font-semibold leading-5 text-text">{item.title}</h4>
+            {indicators.length > 0 ? (
+              <p className="mt-1 text-[0.62rem] uppercase tracking-[0.16em] text-text-subtle">
+                {indicators.join(" · ")}
+              </p>
+            ) : null}
+          </div>
+          <form action={researchMeetingContextAction} className="shrink-0">
+            <input type="hidden" name="returnTo" value="/brief" />
+            <input type="hidden" name="briefItemId" value={entry.id} />
+            <input type="hidden" name="calendarEventId" value={calendarEventId} />
+            <input type="hidden" name="calendarSourceSystemId" value="executive_brief" />
+            <input type="hidden" name="title" value={item.title} />
+            <input type="hidden" name="startAt" value={item.dueAt ?? ""} />
+            <input type="hidden" name="descriptionSummary" value={item.summary ?? ""} />
+            <button
+              type="submit"
+              className="rounded-full border border-line/75 bg-white/70 px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-white hover:text-text"
+            >
+              Research Context
+            </button>
+          </form>
+        </div>
+      </summary>
+
+      <div className="mt-4 border-t border-line/60 pt-4">
+        <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">Calendar Event Details</p>
+        {item.summary ? <p className="mt-3 text-sm leading-6 text-text-muted">{item.summary}</p> : null}
+        {item.recommendedAction ? (
+          <p className="mt-3 rounded-[0.9rem] bg-[rgba(248,246,240,0.9)] px-3 py-2 text-xs leading-5 text-text-muted">
+            Action: {item.recommendedAction}
+          </p>
+        ) : null}
+        <div className="mt-3 flex flex-wrap gap-2 text-[0.68rem] uppercase tracking-[0.16em] text-text-subtle">
+          {item.source ? <span>{item.source}</span> : null}
+          {item.dueAt ? <span>Due {formatTimestamp(item.dueAt)}</span> : null}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function sourceLaneTitle(lane: StructuredBriefSourceLane) {
+  switch (lane.id) {
+    case "calendar_meetings":
+      return "Today and high-priority meeting context.";
+    case "teams":
+      return "Internal urgency and coordination signals.";
+    case "email":
+    default:
+      return "Priority threads, decisions, follow-ups, and task candidates.";
+  }
+}
+
+function SourceLaneSection({
+  lane,
+  snapshotId = null,
+  meetingRecordStatuses
+}: {
+  lane: StructuredBriefSourceLane;
+  snapshotId?: string | null;
+  meetingRecordStatuses: Record<string, MeetingRecordStatusSummary>;
+}) {
+  if (lane.entries.length === 0) {
     return null;
   }
 
   return (
     <section className="space-y-3">
       <div>
-        <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">{eyebrow}</p>
-        <h3 className="mt-1 text-[1rem] font-semibold tracking-[-0.01em] text-text">{title}</h3>
+        <p className="text-[0.68rem] uppercase tracking-[0.22em] text-text-subtle">{lane.label}</p>
+        <h3 className="mt-1 text-[1rem] font-semibold tracking-[-0.01em] text-text">{sourceLaneTitle(lane)}</h3>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
-        {items.map((item) => (
-          <StructuredItemCard key={item.id} item={item} taskCandidate={taskCandidate} snapshotId={snapshotId} />
+        {lane.entries.map((entry) => (
+          entry.section === "meetingPrep" ? (
+            <MeetingContextCard
+              key={entry.id}
+              entry={entry}
+              status={meetingRecordStatuses[meetingCalendarEventIdFromBriefItemId(entry.id)] ?? null}
+            />
+          ) : (
+            <StructuredItemCard
+              key={entry.id}
+              item={entry.item}
+              contextLabel={entry.sectionLabel}
+              taskCandidate={entry.taskCandidate}
+              snapshotId={snapshotId}
+            />
+          )
         ))}
       </div>
     </section>
@@ -181,6 +286,9 @@ export function ExecutiveBriefWorkspace({
   const structuredBrief = latest?.structuredBrief ?? null;
   const visibleTaskCandidates =
     structuredBrief?.taskCandidates.filter((item) => !data.dismissedTaskCandidateIds.includes(item.id)) ?? [];
+  const sourceLanes = structuredBrief
+    ? buildStructuredBriefSourceLanes({ structuredBrief, taskCandidates: visibleTaskCandidates })
+    : [];
   const successMessage = sanitizeFlashMessage(notice);
   const errorMessage = sanitizeFlashMessage(error);
 
@@ -237,17 +345,14 @@ export function ExecutiveBriefWorkspace({
                 </section>
               ) : null}
 
-              <StructuredSection eyebrow="Top 3" title="Executive moves" items={structuredBrief.topMoves} />
-              <StructuredSection eyebrow="Decisions" title="Needs Will" items={structuredBrief.decisionsNeeded} />
-              <StructuredSection eyebrow="Calendar" title="Meeting prep" items={structuredBrief.meetingPrep} />
-              <StructuredSection eyebrow="Memory" title="Carry forward" items={structuredBrief.carryForward} />
-              <StructuredSection
-                eyebrow="Tasks"
-                title="Task candidates"
-                items={visibleTaskCandidates}
-                taskCandidate
-                snapshotId={latest.id}
-              />
+              {sourceLanes.map((lane) => (
+                <SourceLaneSection
+                  key={lane.id}
+                  lane={lane}
+                  snapshotId={latest.id}
+                  meetingRecordStatuses={data.meetingRecordStatuses}
+                />
+              ))}
             </div>
           ) : (
             <div className="mt-5 rounded-[1.25rem] border border-line/70 bg-white/66 px-4 py-4">

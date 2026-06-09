@@ -1,192 +1,130 @@
 import Link from "next/link";
-import { PageIntro } from "@/components/shell/page-intro";
+
+import { researchMeetingContextAction } from "@/app/meetings/actions";
 import { CompactExecutiveList, type CompactExecutiveListItem } from "@/components/today/compact-executive-list";
 import { ExecutiveCockpitSection } from "@/components/today/executive-cockpit-section";
 import { GlanceChip } from "@/components/today/glance-chip";
-import { QuietlyHandledDetails } from "@/components/today/quietly-handled-details";
-import { TopNextActionCard } from "@/components/today/top-next-action-card";
-import { sanitizeDisplayText } from "@/lib/agent-signal-brief";
-import {
-  getExecutiveRecommendedActionLabel,
-  type ExecutiveRecommendedAction
-} from "@/lib/executive-work";
+import { PageIntro } from "@/components/shell/page-intro";
+import { meetingCalendarEventIdFromBriefItemId, type MeetingRecordStatusSummary } from "@/lib/meetings/meeting-records";
 import { getTodayPageData } from "@/lib/today";
-import {
-  getDecisionsSectionStatusNote,
-  getMeetingSectionCountLabel,
-  getMeetingSectionStatusNote,
-  type TodayExecutiveLeverageViewModel
-} from "@/lib/today-executive-leverage";
+import type { TodayBriefItem, TodaySourceLane, TodayTaskItem } from "@/lib/today-view-model";
 
-const EMPTY_EXECUTIVE_LEVERAGE: TodayExecutiveLeverageViewModel = {
-  generated_at: "",
-  topNextBestActions: [],
-  consequentialMeetings: [],
-  decisionsNeeded: [],
-  protectedValueCreation: [],
-  opportunityQueue: [],
-  delegateWaitingOn: [],
-  quietlyHandled: [],
-  sourceCounts: {
-    work_type: {},
-    priority: {},
-    source_type: {}
-  },
-  sectionOverlapCounts: {
-    consequentialMeetings: 0,
-    decisionsNeeded: 0,
-    protectedValueCreation: 0,
-    opportunityQueue: 0,
-    delegateWaitingOn: 0,
-    quietlyHandled: 0
-  },
-  sectionOverflowCounts: {
-    consequentialMeetings: 0,
-    decisionsNeeded: 0,
-    protectedValueCreation: 0,
-    opportunityQueue: 0,
-    delegateWaitingOn: 0,
-    quietlyHandled: 0
-  },
-  meetingSourceAttribution: {
-    eligibleBySourceType: {},
-    visibleBySourceType: {},
-    surfacedAboveBySourceType: {},
-    liveCalendarVisibleCount: 0,
-    liveCalendarSurfacedAboveCount: 0
-  },
-  crossSectionCounts: {
-    meetingItemsInTop3: 0,
-    decisionRelevantMeetingsInMeetings: 0,
-    decisionRelevantMeetingsInTop3: 0,
-    decisionItemsSuppressedBecauseMeetingPrimary: 0,
-    totalIcItems: 0,
-    icItemsRequiringWillAction: 0,
-    icItemsRoutedToIcLaneOnly: 0
-  },
-  emptyState: {
-    title: "No executive leverage signals yet.",
-    detail: "Today can stay quiet until decisions, meetings, opportunities, or follow-through signals accumulate."
-  }
-};
+export const dynamic = "force-dynamic";
 
-function formatTimestamp(value: string | null | undefined) {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(date);
+function briefItemsToCompactList(items: TodayBriefItem[]): CompactExecutiveListItem[] {
+  return items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    summary: item.summary,
+    href: item.href,
+    actionLabel: item.actionLabel,
+    meta: item.meta
+  }));
 }
 
-function actionLabel(value: ExecutiveRecommendedAction | null | undefined) {
-  if (!value) {
-    return null;
-  }
-
-  return getExecutiveRecommendedActionLabel(value);
+function tasksToCompactList(items: TodayTaskItem[]): CompactExecutiveListItem[] {
+  return items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    summary: item.detail,
+    href: item.href,
+    actionLabel: item.sourcePath === "/brief" ? "Brief task" : null,
+    meta: item.sourcePath ? [item.sourcePath] : []
+  }));
 }
 
-function compactMeta(values: Array<string | null | undefined>) {
-  return values
-    .map((value) => (value ? sanitizeDisplayText(value) : value))
-    .filter((value): value is string => Boolean(value && value.trim()));
+function meetingStatusIndicators(status: MeetingRecordStatusSummary | null) {
+  if (!status) {
+    return [];
+  }
+
+  return [
+    status.researchStatus === "researched" ? "researched" : null,
+    status.researchStatus === "researching" ? "researching" : null,
+    status.researchStatus === "failed" ? "research failed" : null,
+    status.transcriptStatus !== "none" ? "transcript attached" : null,
+    status.taskCandidateCount > 0 ? "task candidates available" : null,
+    status.obsidianExportStatus === "sent_to_taskrobin" ? "sent to TaskRobin" : null
+  ].filter((value): value is string => Boolean(value));
 }
 
-function countSummary(visible: number, overlap: number, overflow: number, emptyFallback: string) {
-  if (visible === 0 && overlap === 0 && overflow === 0) {
-    return emptyFallback;
-  }
+function MeetingContextList({
+  items,
+  meetingRecordStatuses
+}: {
+  items: TodayBriefItem[];
+  meetingRecordStatuses: Record<string, MeetingRecordStatusSummary>;
+}) {
+  return (
+    <div className="space-y-3">
+      {items.map((item) => {
+        const calendarEventId = meetingCalendarEventIdFromBriefItemId(item.id);
+        const indicators = meetingStatusIndicators(meetingRecordStatuses[calendarEventId] ?? null);
+        return (
+          <details
+            key={item.id}
+            className="rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.62)] px-4 py-4"
+          >
+            <summary className="cursor-pointer list-none">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-6 text-text">{item.title}</p>
+                  {indicators.length > 0 ? (
+                    <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-text-subtle">
+                      {indicators.join(" · ")}
+                    </p>
+                  ) : null}
+                </div>
+                <form action={researchMeetingContextAction} className="shrink-0">
+                  <input type="hidden" name="returnTo" value="/" />
+                  <input type="hidden" name="briefItemId" value={item.id} />
+                  <input type="hidden" name="calendarEventId" value={calendarEventId} />
+                  <input type="hidden" name="calendarSourceSystemId" value="executive_brief" />
+                  <input type="hidden" name="title" value={item.title} />
+                  <input type="hidden" name="descriptionSummary" value={item.summary ?? ""} />
+                  <button
+                    type="submit"
+                    className="rounded-full border border-line/75 bg-white/70 px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-white hover:text-text"
+                  >
+                    Research Context
+                  </button>
+                </form>
+              </div>
+            </summary>
 
-  if (overlap === 0 && overflow === 0) {
-    return `${visible} visible`;
-  }
-
-  const parts = [`${visible} visible`];
-
-  if (overlap > 0) {
-    parts.push(`${overlap} surfaced above`);
-  }
-
-  if (overflow > 0) {
-    parts.push(`${overflow} kept out of the foreground`);
-  }
-
-  return parts.join(" · ");
+            <div className="mt-4 border-t border-line/60 pt-4">
+              <p className="section-label">Calendar Event Details</p>
+              {item.summary ? <p className="mt-3 text-sm leading-6 text-text-muted">{item.summary}</p> : null}
+              {item.actionLabel ? (
+                <p className="mt-3 rounded-[0.9rem] bg-[rgba(248,246,240,0.9)] px-3 py-2 text-xs leading-5 text-text-muted">
+                  Action: {item.actionLabel}
+                </p>
+              ) : null}
+              {item.meta.length > 0 ? (
+                <p className="mt-3 text-[12px] leading-5 text-text-subtle">{item.meta.join(" · ")}</p>
+              ) : null}
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  );
 }
 
-function sectionCountLabel(visible: number, overflow: number) {
-  if (overflow > 0) {
-    return `${visible} shown`;
+function sourceLaneTitle(lane: TodaySourceLane) {
+  switch (lane.id) {
+    case "calendar_meetings":
+      return "Meeting context from the latest brief.";
+    case "teams":
+      return "Internal urgency and coordination.";
+    case "email":
+    default:
+      return "Priority asks, decisions, and follow-up.";
   }
-
-  return `${visible} visible`;
 }
 
-function sectionStatusNote(overlap: number, overflow: number, overflowLabel: string) {
-  if (overlap === 0 && overflow === 0) {
-    return undefined;
-  }
-
-  const parts: string[] = [];
-
-  if (overlap > 0) {
-    parts.push(`${overlap} already surfaced above.`);
-  }
-
-  if (overflow > 0) {
-    parts.push(`${overflow} more ${overflowLabel} kept out of the foreground.`);
-  }
-
-  return parts.join(" ");
-}
-
-function decisionSignalSummary(leverage: TodayExecutiveLeverageViewModel) {
-  const parts: string[] = [];
-  parts.push(`${leverage.decisionsNeeded.length} visible`);
-
-  if (leverage.crossSectionCounts.decisionItemsSuppressedBecauseMeetingPrimary > 0) {
-    parts.push(`${leverage.crossSectionCounts.decisionItemsSuppressedBecauseMeetingPrimary} in meetings or Top 3`);
-  }
-
-  if (leverage.sectionOverlapCounts.decisionsNeeded > 0) {
-    parts.push(`${leverage.sectionOverlapCounts.decisionsNeeded} surfaced above`);
-  }
-
-  if (leverage.sectionOverflowCounts.decisionsNeeded > 0) {
-    parts.push(`${leverage.sectionOverflowCounts.decisionsNeeded} kept out of the foreground`);
-  }
-
-  return parts.join(" · ");
-}
-
-function investmentCommitteeSummary(leverage: TodayExecutiveLeverageViewModel) {
-  const total = leverage.crossSectionCounts.totalIcItems;
-  if (total <= 0) {
-    return null;
-  }
-
-  const requiresWillAction = leverage.crossSectionCounts.icItemsRequiringWillAction;
-  const laneOnly = leverage.crossSectionCounts.icItemsRoutedToIcLaneOnly;
-  const parts = [
-    `${total} IC ${total === 1 ? "item" : "items"} detected`,
-    `${requiresWillAction} ${requiresWillAction === 1 ? "requires" : "require"} Will action`
-  ];
-
-  if (laneOnly > 0) {
-    parts.push(`${laneOnly} kept in the IC lane`);
-  }
-
-  return parts.join(" · ");
+function countLabel(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 export default async function TodayPage() {
@@ -197,351 +135,105 @@ export default async function TodayPage() {
       <div className="space-y-6 lg:space-y-8">
         <PageIntro
           eyebrow="Today"
-          title="Executive leverage cockpit."
-          description="Sign in to see the decisions, opportunities, meetings, delegation, and strategic work that need attention now."
+          title="Executive operating surface."
+          description="Sign in to see the current Executive Brief, open tasks, and day-level operating context."
         />
       </div>
     );
   }
 
-  const leverage = todayData.executiveLeverage ?? EMPTY_EXECUTIVE_LEVERAGE;
-  const calendarSourceStatus = todayData.calendarSourceStatus;
-  const microsoftSourceMode = todayData.microsoftSourceMode;
-  const totalDecisionSignals =
-    leverage.decisionsNeeded.length +
-    leverage.crossSectionCounts.decisionItemsSuppressedBecauseMeetingPrimary +
-    leverage.sectionOverlapCounts.decisionsNeeded +
-    leverage.sectionOverflowCounts.decisionsNeeded;
-  const totalOpportunitySignals =
-    leverage.opportunityQueue.length +
-    leverage.sectionOverlapCounts.opportunityQueue +
-    leverage.sectionOverflowCounts.opportunityQueue;
-  const totalQuietSignals =
-    leverage.quietlyHandled.length +
-    leverage.sectionOverlapCounts.quietlyHandled +
-    leverage.sectionOverflowCounts.quietlyHandled;
-  const totalSuppressedQuietSignals =
-    leverage.quietlyHandled.length + leverage.sectionOverflowCounts.quietlyHandled;
-  const icSummary = investmentCommitteeSummary(leverage);
-  const trustRow = [
-    {
-      label: "Visible now",
-      value: `${leverage.topNextBestActions.length} foreground`,
-      detail: "Top actions on the command surface",
-      tone: "default" as const
-    },
-    {
-      label: "Decision signals",
-      value: `${totalDecisionSignals} total`,
-      detail:
-        totalDecisionSignals > 0
-          ? decisionSignalSummary(leverage)
-          : "No decision signals",
-      tone: "default" as const
-    },
-    {
-      label: "Opportunity signals",
-      value: `${totalOpportunitySignals} total`,
-      detail: countSummary(
-        leverage.opportunityQueue.length,
-        leverage.sectionOverlapCounts.opportunityQueue,
-        leverage.sectionOverflowCounts.opportunityQueue,
-        "No opportunity signals"
-      ),
-      tone: "quiet" as const
-    },
-    {
-      label: "Quiet signals",
-      value: `${totalQuietSignals} total`,
-      detail: countSummary(
-        leverage.quietlyHandled.length,
-        leverage.sectionOverlapCounts.quietlyHandled,
-        leverage.sectionOverflowCounts.quietlyHandled,
-        "No quiet signals"
-      ),
-      tone: "protected" as const
-    }
-  ];
-
-  const meetingItems: CompactExecutiveListItem[] = leverage.consequentialMeetings.map((item) => ({
-    id: item.id,
-    title: item.title,
-    summary: sanitizeDisplayText(item.summary || item.why_consequential),
-    actionLabel: actionLabel(item.recommended_action),
-    href: item.href ?? null,
-    meta: compactMeta([item.source_label_compact, formatTimestamp(item.meeting_time)])
-  }));
-  const meetingStatusNote = getMeetingSectionStatusNote({
-    meetingSourceAttribution: leverage.meetingSourceAttribution,
-    microsoftSourceMode,
-    calendarSourceStatus,
-    surfacedAboveCount: leverage.crossSectionCounts.meetingItemsInTop3,
-    overflowCount: leverage.sectionOverflowCounts.consequentialMeetings
-  });
-  const compactMeetingState =
-    leverage.crossSectionCounts.meetingItemsInTop3 > 0
-      ? leverage.crossSectionCounts.meetingItemsInTop3 === 1
-        ? "1 meeting item is already in Top 3."
-        : `${leverage.crossSectionCounts.meetingItemsInTop3} meeting items are already in Top 3.`
-      : "No meeting-prep items need foreground attention right now.";
-
-  const decisionItems: CompactExecutiveListItem[] = leverage.decisionsNeeded.map((item) => ({
-    id: item.id,
-    title: item.title,
-    summary: sanitizeDisplayText(item.decision_question),
-    actionLabel: actionLabel(item.recommended_action),
-    href: item.href ?? null,
-    meta: compactMeta([
-      item.priority ? `${item.priority} priority` : null,
-      formatTimestamp(item.deadline)
-    ])
-  }));
-
-  const protectedValueItems: CompactExecutiveListItem[] = leverage.protectedValueCreation.map((item) => ({
-    id: item.id,
-    title: item.title,
-    summary: sanitizeDisplayText(item.current_focus ?? item.latest_movement ?? "No recent movement surfaced."),
-    actionLabel: actionLabel(item.recommended_action),
-    href: item.href ?? null,
-    meta: compactMeta([
-      item.blocker ? `Blocker: ${item.blocker}` : null,
-      item.related_signal_count > 0 ? `${item.related_signal_count} related signals` : null
-    ])
-  }));
-
-  const opportunityItems: CompactExecutiveListItem[] = leverage.opportunityQueue.map((item) => ({
-    id: item.id,
-    title:
-      item.company_or_counterparty && item.company_or_counterparty !== item.title
-        ? `${item.company_or_counterparty} · ${item.title}`
-        : item.title,
-    summary: sanitizeDisplayText(item.strategic_relevance ?? "No strategic relevance note surfaced."),
-    actionLabel: item.recommended_action_label,
-    href: item.href ?? null,
-    meta: compactMeta([formatTimestamp(item.last_touch_at), item.owner])
-  }));
-
-  const delegationItems: CompactExecutiveListItem[] = leverage.delegateWaitingOn.map((item) => ({
-    id: item.id,
-    title: item.title,
-    summary: sanitizeDisplayText(item.expected_outcome ?? item.waiting_on ?? "Follow-through is still open."),
-    actionLabel: actionLabel(item.recommended_action),
-    href: item.href ?? null,
-    meta: compactMeta([
-      item.delegated_to ? `Delegated to ${item.delegated_to}` : null,
-      item.waiting_on ? `Waiting on ${item.waiting_on}` : null,
-      formatTimestamp(item.last_touch_at)
-    ])
-  }));
+  const briefFreshness = todayData.briefFreshness;
+  const emailLane = todayData.sourceLanes.find((lane) => lane.id === "email");
+  const calendarLane = todayData.sourceLanes.find((lane) => lane.id === "calendar_meetings");
+  const teamsLane = todayData.sourceLanes.find((lane) => lane.id === "teams");
 
   return (
     <div className="space-y-8 lg:space-y-10">
       <PageIntro
         eyebrow="Today"
-        title="Executive leverage cockpit."
-        description="A ranked view of the decisions, opportunities, meetings, delegation, and strategic work that need Will&apos;s attention now."
+        title="Executive operating surface."
+        description="A thin view over the latest Executive Brief snapshot and the current task library."
       />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {trustRow.map((item) => (
-          <GlanceChip
-            key={item.label}
-            label={item.label}
-            value={item.value}
-            detail={item.detail}
-            tone={item.tone}
-          />
-        ))}
+        <GlanceChip
+          label="Brief freshness"
+          value={briefFreshness.label}
+          detail={briefFreshness.detail}
+          tone={briefFreshness.status === "processed" ? "default" : "protected"}
+          href="/brief"
+        />
+        <GlanceChip
+          label="Email"
+          value={String((emailLane?.items.length ?? 0) + (emailLane?.tasks.length ?? 0))}
+          detail="Priority asks, decisions, and follow-up"
+          href="/brief"
+        />
+        <GlanceChip
+          label="Calendar / Meetings"
+          value={String(calendarLane?.items.length ?? 0)}
+          detail="Meeting context from the latest brief"
+          href="/brief"
+        />
+        <GlanceChip
+          label="Teams"
+          value={String(teamsLane?.items.length ?? 0)}
+          detail="Internal urgency and coordination"
+          tone="quiet"
+          href="/brief"
+        />
       </section>
 
-      {icSummary ? (
-        <Link
-          href="/investment-committee"
-          className="refined-b block rounded-[1.4rem] px-4 py-3 transition hover:bg-[rgba(255,255,255,0.68)]"
-        >
-          <p className="section-label">IC routing</p>
-          <p className="mt-2 text-sm leading-6 text-text-muted">{icSummary}</p>
-        </Link>
+      {todayData.emptyState ? (
+        <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="section-label">Executive Brief status</p>
+              <h3 className="mt-3 text-[1.25rem] font-semibold tracking-[-0.02em] text-text">
+                {todayData.emptyState.title}
+              </h3>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-text-muted">{todayData.emptyState.detail}</p>
+            </div>
+            <Link href="/brief" className="text-sm font-medium text-text-muted transition hover:text-text">
+              Open full brief
+            </Link>
+          </div>
+        </section>
       ) : null}
 
-      <section className="space-y-4">
-        <div>
-          <p className="section-label">Now</p>
-          <h3 className="page-title mt-2 text-[1.9rem] md:text-[2.2rem]">Top 3 next best actions.</h3>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-text-muted">
-            The highest-leverage actions that deserve foreground attention right now.
-          </p>
-        </div>
+      {todayData.sourceLanes.length > 0 ? (
+        <section className="space-y-4">
+          {todayData.sourceLanes.map((lane) => {
+            const laneItems = [
+              ...briefItemsToCompactList(lane.items),
+              ...tasksToCompactList(lane.tasks).map((item) => ({
+                ...item,
+                id: `lane-task-${item.id}`
+              }))
+            ];
 
-        {leverage.topNextBestActions.length > 0 ? (
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
-            <TopNextActionCard item={leverage.topNextBestActions[0]} rank={1} featured />
-
-            <div className="grid gap-4">
-              {leverage.topNextBestActions.slice(1).map((item, index) => (
-                <TopNextActionCard key={item.id} item={item} rank={index + 2} />
-              ))}
-            </div>
-          </div>
-        ) : (
-          <section className="refined-b rounded-[1.9rem] p-5 md:p-7">
-            <p className="section-label">Now</p>
-            <p className="mt-3 text-[1.08rem] font-medium text-text">
-              No high-leverage actions need foreground attention right now.
-            </p>
-          </section>
-        )}
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <p className="section-label">Today&apos;s leverage context</p>
-          <h3 className="text-[1.35rem] font-semibold leading-snug tracking-[-0.02em] text-text">
-            Meeting context and decisions that shape the day.
-          </h3>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          <ExecutiveCockpitSection
-            eyebrow="Meetings & prep"
-            title="Upcoming meetings and prep context."
-            count={getMeetingSectionCountLabel({
-              visibleCount: leverage.consequentialMeetings.length,
-              surfacedAboveCount: leverage.crossSectionCounts.meetingItemsInTop3,
-              microsoftSourceMode,
-              calendarSourceStatus
-            })}
-            statusNote={meetingStatusNote}
-            compact={meetingItems.length === 0}
-            className="self-start"
-          >
-            <CompactExecutiveList
-              items={meetingItems}
-              emptyState={
-                compactMeetingState
-              }
-            />
-          </ExecutiveCockpitSection>
-
-          <ExecutiveCockpitSection
-            eyebrow="Decisions needed"
-            title="Judgment calls waiting on Will."
-            count={sectionCountLabel(leverage.decisionsNeeded.length, leverage.sectionOverflowCounts.decisionsNeeded)}
-            statusNote={getDecisionsSectionStatusNote({
-              overlapCount: leverage.sectionOverlapCounts.decisionsNeeded,
-              overflowCount: leverage.sectionOverflowCounts.decisionsNeeded,
-              crossSectionCounts: leverage.crossSectionCounts
-            })}
-            className="self-start"
-          >
-            <CompactExecutiveList
-              items={decisionItems}
-              emptyState={
-                leverage.sectionOverlapCounts.decisionsNeeded > 0
-                  ? "Decision items that need attention are already surfaced above."
-                  : "No decisions are waiting on Will."
-              }
-            />
-          </ExecutiveCockpitSection>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <p className="section-label">Active workstreams</p>
-          <h3 className="text-[1.35rem] font-semibold leading-snug tracking-[-0.02em] text-text">
-            Strategic motion and opportunity flow.
-          </h3>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          <ExecutiveCockpitSection
-            eyebrow="Protected value creation"
-            title="Initiatives that should keep moving."
-            count={sectionCountLabel(
-              leverage.protectedValueCreation.length,
-              leverage.sectionOverflowCounts.protectedValueCreation
-            )}
-            statusNote={sectionStatusNote(
-              leverage.sectionOverlapCounts.protectedValueCreation,
-              leverage.sectionOverflowCounts.protectedValueCreation,
-              "initiative signals"
-            )}
-          >
-            <CompactExecutiveList
-              items={protectedValueItems}
-              emptyState={
-                leverage.sectionOverlapCounts.protectedValueCreation > 0
-                  ? "Initiative movement needing attention is already surfaced above."
-                  : "No active initiative movement surfaced."
-              }
-            />
-          </ExecutiveCockpitSection>
-
-          <ExecutiveCockpitSection
-            eyebrow="Deal / opportunity queue"
-            title="Short queue of opportunities worth watching."
-            count={sectionCountLabel(
-              leverage.opportunityQueue.length,
-              leverage.sectionOverflowCounts.opportunityQueue
-            )}
-            statusNote={sectionStatusNote(
-              leverage.sectionOverlapCounts.opportunityQueue,
-              leverage.sectionOverflowCounts.opportunityQueue,
-              "opportunity items"
-            )}
-          >
-            <CompactExecutiveList
-              items={opportunityItems}
-              emptyState={
-                leverage.sectionOverlapCounts.opportunityQueue > 0
-                  ? "Opportunity items needing attention are already surfaced above."
-                  : "No active opportunities surfaced."
-              }
-            />
-          </ExecutiveCockpitSection>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <p className="section-label">Follow-through and noise control</p>
-          <h3 className="text-[1.35rem] font-semibold leading-snug tracking-[-0.02em] text-text">
-            What is waiting, and what can stay quiet.
-          </h3>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.88fr)]">
-          <ExecutiveCockpitSection
-            eyebrow="Delegate / waiting on"
-            title="Open follow-through that still matters."
-            count={sectionCountLabel(
-              leverage.delegateWaitingOn.length,
-              leverage.sectionOverflowCounts.delegateWaitingOn
-            )}
-            statusNote={sectionStatusNote(
-              leverage.sectionOverlapCounts.delegateWaitingOn,
-              leverage.sectionOverflowCounts.delegateWaitingOn,
-              "waiting items"
-            )}
-          >
-            <CompactExecutiveList
-              items={delegationItems}
-              emptyState={
-                leverage.sectionOverlapCounts.delegateWaitingOn > 0
-                  ? "Delegated follow-through requiring attention is already surfaced above."
-                  : "No delegated follow-through is waiting."
-              }
-            />
-          </ExecutiveCockpitSection>
-
-          <QuietlyHandledDetails
-            items={leverage.quietlyHandled}
-            totalCount={totalSuppressedQuietSignals}
-            hiddenCount={leverage.sectionOverflowCounts.quietlyHandled}
-          />
-        </div>
-      </section>
+            return (
+              <ExecutiveCockpitSection
+                key={lane.id}
+                eyebrow={lane.label}
+                title={sourceLaneTitle(lane)}
+                count={countLabel(laneItems.length, "item")}
+                statusNote={
+                  lane.id === "email" && todayData.openTasks.length > 0
+                    ? "Brief-created tasks are included when available."
+                    : undefined
+                }
+              >
+                {lane.id === "calendar_meetings" ? (
+                  <MeetingContextList items={lane.items} meetingRecordStatuses={todayData.meetingRecordStatuses} />
+                ) : (
+                  <CompactExecutiveList items={laneItems} emptyState="" />
+                )}
+              </ExecutiveCockpitSection>
+            );
+          })}
+        </section>
+      ) : null}
     </div>
   );
 }

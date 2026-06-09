@@ -9,6 +9,15 @@ import {
   type ExecutiveBriefSnapshot,
   type ExecutiveBriefSlotLabel
 } from "@/lib/brief/executive-brief-snapshots";
+import { buildStructuredBriefSourceLanes } from "@/lib/brief/source-lanes";
+import {
+  createSupabaseMeetingRecordsRepository,
+  isMeetingRecordsSchemaUnavailableError,
+  listMeetingRecordsForCalendarEvents,
+  meetingCalendarEventIdFromBriefItemId,
+  summarizeMeetingRecordStatus,
+  type MeetingRecordStatusSummary
+} from "@/lib/meetings/meeting-records";
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 
 export type ExecutiveBriefSlot = {
@@ -22,6 +31,7 @@ export type ExecutiveBriefSlot = {
 export type ExecutiveBriefPageData = {
   latestSnapshot: ExecutiveBriefSnapshot | null;
   dismissedTaskCandidateIds: string[];
+  meetingRecordStatuses: Record<string, MeetingRecordStatusSummary>;
   slots: ExecutiveBriefSlot[];
   emptyState: {
     title: string;
@@ -33,6 +43,7 @@ function buildEmptyExecutiveBriefPageData(): ExecutiveBriefPageData {
   return {
     latestSnapshot: null,
     dismissedTaskCandidateIds: [],
+    meetingRecordStatuses: {},
     slots: EXECUTIVE_BRIEF_SLOT_LABELS.map((label) => ({
       label,
       status: "waiting",
@@ -48,8 +59,72 @@ function buildEmptyExecutiveBriefPageData(): ExecutiveBriefPageData {
   };
 }
 
+async function listMeetingRecordStatusesForSnapshot(params: {
+  client: SupabaseClient;
+  userId: string;
+  snapshot: ExecutiveBriefSnapshot | null;
+}) {
+  const structuredBrief = params.snapshot?.structuredBrief ?? null;
+  if (!structuredBrief) {
+    return {};
+  }
+
+  const meetingCalendarEventIds = buildStructuredBriefSourceLanes({ structuredBrief })
+    .flatMap((lane) => lane.entries)
+    .filter((entry) => entry.section === "meetingPrep")
+    .map((entry) => meetingCalendarEventIdFromBriefItemId(entry.id));
+
+  if (meetingCalendarEventIds.length === 0) {
+    return {};
+  }
+
+  try {
+    const repository = createSupabaseMeetingRecordsRepository(params.client);
+    const records = await listMeetingRecordsForCalendarEvents(repository, {
+      userId: params.userId,
+      calendarSourceSystemId: "executive_brief",
+      calendarEventIds: meetingCalendarEventIds
+    });
+
+    return Object.fromEntries(records.map((record) => {
+      const status = summarizeMeetingRecordStatus(record);
+      return [status.calendarEventId, status];
+    }));
+  } catch (error) {
+    if (!isMeetingRecordsSchemaUnavailableError(error)) {
+      console.error("[brief] Failed to load meeting record statuses.", error);
+    }
+    return {};
+  }
+}
+
 function snapshotSortTime(snapshot: ExecutiveBriefSnapshot) {
   return Date.parse(snapshot.generatedAt ?? snapshot.createdAt) || 0;
+}
+
+function selectLatestExecutiveBriefSnapshot(snapshots: ExecutiveBriefSnapshot[]) {
+  return snapshots.reduce<ExecutiveBriefSnapshot | null>((latest, snapshot) => {
+    if (!latest || snapshotSortTime(snapshot) > snapshotSortTime(latest)) {
+      return snapshot;
+    }
+
+    return latest;
+  }, null);
+}
+
+export async function getLatestExecutiveBriefForUser(): Promise<ExecutiveBriefSnapshot | null> {
+  const resolved = await resolveCurrentAppUser();
+
+  if (!resolved) {
+    return null;
+  }
+
+  const snapshots = await listExecutiveBriefSnapshotsForUser({
+    client: resolved.client,
+    userId: resolved.user.id
+  });
+
+  return selectLatestExecutiveBriefSnapshot(snapshots);
 }
 
 async function listDismissedTaskCandidateIds(params: {
@@ -94,13 +169,7 @@ export async function loadExecutiveBriefPageData(): Promise<ExecutiveBriefPageDa
       }
     }
 
-    const latestSnapshot = snapshots.reduce<ExecutiveBriefSnapshot | null>((latest, snapshot) => {
-      if (!latest || snapshotSortTime(snapshot) > snapshotSortTime(latest)) {
-        return snapshot;
-      }
-
-      return latest;
-    }, null);
+    const latestSnapshot = selectLatestExecutiveBriefSnapshot(snapshots);
     const dismissedTaskCandidateIds = latestSnapshot
       ? await listDismissedTaskCandidateIds({
           client: resolved.client,
@@ -108,10 +177,16 @@ export async function loadExecutiveBriefPageData(): Promise<ExecutiveBriefPageDa
           snapshotId: latestSnapshot.id
         })
       : [];
+    const meetingRecordStatuses = await listMeetingRecordStatusesForSnapshot({
+      client: resolved.client,
+      userId: resolved.user.id,
+      snapshot: latestSnapshot
+    });
 
     return {
       latestSnapshot,
       dismissedTaskCandidateIds,
+      meetingRecordStatuses,
       slots: EXECUTIVE_BRIEF_SLOT_LABELS.map((label) => {
         const snapshot = latestBySlot.get(label) ?? null;
         return {

@@ -4,7 +4,7 @@ import Link from "next/link";
 type CompactExecutiveListItem = {
   id: string;
   title: string;
-  summary: string;
+  summary?: string | null;
   href?: string | null;
   actionLabel?: string | null;
   meta?: string[];
@@ -23,7 +23,9 @@ function CompactExecutiveListRow({ item }: { item: CompactExecutiveListItem }) {
         {item.actionLabel ? <span className="chip shrink-0">{item.actionLabel}</span> : null}
       </div>
 
-      <p className="mt-1.5 line-clamp-2 text-sm leading-6 text-text-muted">{item.summary}</p>
+      {item.summary ? (
+        <p className="mt-1.5 line-clamp-2 text-sm leading-6 text-text-muted">{item.summary}</p>
+      ) : null}
 
       {item.meta && item.meta.length > 0 ? (
         <p className="mt-3 text-[12px] leading-5 text-text-subtle">
