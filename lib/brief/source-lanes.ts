@@ -28,6 +28,11 @@ export type StructuredBriefSourceLane = {
   entries: StructuredBriefLaneEntry[];
 };
 
+export function briefItemDomId(entryId: string) {
+  const stable = compactText(entryId).replace(/[^a-zA-Z0-9_-]+/g, "-") || "item";
+  return `brief-item-${stable}`;
+}
+
 const SECTION_LABELS: Record<StructuredBriefSectionKey, string> = {
   topMoves: "Executive move",
   decisionsNeeded: "Decision",
@@ -41,7 +46,18 @@ function compactText(value: string | null | undefined) {
 }
 
 function sourceText(item: StructuredExecutiveBriefItem) {
-  return [item.source, item.title, item.summary, item.recommendedAction].map(compactText).join(" ").toLowerCase();
+  return [
+    item.source,
+    item.sourceLabel,
+    item.senderName,
+    item.senderEmail,
+    item.title,
+    item.summary,
+    item.recommendedAction
+  ]
+    .map(compactText)
+    .join(" ")
+    .toLowerCase();
 }
 
 export function resolveBriefSourceLaneId(input: {

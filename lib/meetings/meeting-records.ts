@@ -85,6 +85,10 @@ export type MeetingTaskCandidate = {
   dedupeKey: string;
   meetingRecordId: string;
   taskType: MeetingTaskType;
+  status?: "candidate" | "created" | "already_exists";
+  linkedTaskId?: string | null;
+  linkedTaskHref?: string | null;
+  linkedAt?: string | null;
 };
 
 export type MeetingResearchSummary = {
@@ -152,6 +156,7 @@ export type MeetingRecordStatusSummary = {
   researchStatus: MeetingResearchStatus;
   transcriptStatus: MeetingTranscriptStatus;
   taskCandidateCount: number;
+  taskCandidates: MeetingTaskCandidate[];
   obsidianExportStatus: MeetingObsidianExportStatus;
 };
 
@@ -327,14 +332,59 @@ export function mapMeetingRecordRow(row: MeetingRecordRow): MeetingRecord {
 }
 
 export function summarizeMeetingRecordStatus(record: MeetingRecord): MeetingRecordStatusSummary {
+  const taskCandidates = normalizeMeetingTaskCandidates(record.taskCandidates, record.id);
   return {
     id: record.id,
     calendarEventId: record.calendarEventId,
     researchStatus: record.researchStatus,
     transcriptStatus: record.transcriptStatus,
-    taskCandidateCount: record.taskCandidates.length,
+    taskCandidateCount: taskCandidates.length,
+    taskCandidates,
     obsidianExportStatus: record.obsidianExportStatus
   };
+}
+
+export function normalizeMeetingTaskCandidates(values: JsonValue[] | null | undefined, meetingRecordId: string) {
+  return (values ?? [])
+    .map((value): MeetingTaskCandidate | null => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return null;
+      }
+
+      const record = value as Record<string, JsonValue>;
+      const title = typeof record.title === "string" ? compactText(record.title) : "";
+      const dedupeKey = typeof record.dedupeKey === "string" ? compactText(record.dedupeKey) : "";
+      if (!title || !dedupeKey) {
+        return null;
+      }
+
+      const taskType = typeof record.taskType === "string" ? record.taskType : "follow_up";
+      const allowedTaskType = ["prep", "follow_up", "decision", "review", "delegate", "schedule", "monitor"].includes(taskType)
+        ? taskType as MeetingTaskType
+        : "follow_up";
+      const status = record.status === "created" || record.status === "already_exists" ? record.status : "candidate";
+      const priority =
+        record.priority === "low" || record.priority === "medium" || record.priority === "high"
+          ? record.priority
+          : null;
+
+      return {
+        title,
+        description: typeof record.description === "string" ? compactText(record.description) || null : null,
+        owner: typeof record.owner === "string" ? compactText(record.owner) || null : null,
+        priority,
+        dueDate: typeof record.dueDate === "string" ? compactText(record.dueDate) || null : null,
+        sourceRefs: Array.isArray(record.sourceRefs) ? record.sourceRefs : [],
+        dedupeKey,
+        meetingRecordId: typeof record.meetingRecordId === "string" ? compactText(record.meetingRecordId) || meetingRecordId : meetingRecordId,
+        taskType: allowedTaskType,
+        status,
+        linkedTaskId: typeof record.linkedTaskId === "string" ? compactText(record.linkedTaskId) || null : null,
+        linkedTaskHref: typeof record.linkedTaskHref === "string" ? compactText(record.linkedTaskHref) || null : null,
+        linkedAt: typeof record.linkedAt === "string" ? compactText(record.linkedAt) || null : null
+      };
+    })
+    .filter((candidate): candidate is MeetingTaskCandidate => Boolean(candidate));
 }
 
 export function buildMeetingRecordInsert(input: CalendarEventMeetingRecordInput): MeetingRecordInsertRow {
@@ -604,6 +654,47 @@ export async function updateMeetingObsidianExportStatus(
       obsidian_export_status: input.obsidianExportStatus,
       obsidian_exported_at: input.obsidianExportedAt,
       obsidian_email_to: normalizeRequiredText(input.obsidianEmailTo, TASKROBIN_OBSIDIAN_EMAIL)
+    }
+  });
+}
+
+export async function updateMeetingTaskCandidateLinks(
+  repository: MeetingRecordsRepository,
+  input: {
+    userId: string;
+    meetingRecord: MeetingRecord;
+    dedupeKey: string;
+    linkedTaskId: string;
+    status: "created" | "already_exists";
+    linkedTaskHref?: string | null;
+    linkedAt?: string | null;
+  }
+) {
+  const normalizedDedupeKey = compactText(input.dedupeKey);
+  if (!normalizedDedupeKey) {
+    return null;
+  }
+
+  const linkedAt = input.linkedAt ?? new Date().toISOString();
+  const updatedCandidates = normalizeMeetingTaskCandidates(input.meetingRecord.taskCandidates, input.meetingRecord.id).map((candidate) =>
+    candidate.dedupeKey === normalizedDedupeKey
+      ? {
+          ...candidate,
+          status: input.status,
+          linkedTaskId: input.linkedTaskId,
+          linkedTaskHref: input.linkedTaskHref ?? `/library/${input.linkedTaskId}?from=%2Flibrary%2Ftasks`,
+          linkedAt
+        }
+      : candidate
+  );
+  const linkedTaskIds = [...new Set([...input.meetingRecord.linkedTaskIds, input.linkedTaskId])];
+
+  return repository.update({
+    userId: input.userId,
+    meetingRecordId: input.meetingRecord.id,
+    row: {
+      task_candidates: updatedCandidates,
+      linked_task_ids: linkedTaskIds
     }
   });
 }

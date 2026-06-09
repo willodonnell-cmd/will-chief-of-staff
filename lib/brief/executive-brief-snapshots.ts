@@ -50,9 +50,20 @@ export type StructuredExecutiveBriefItem = {
   title: string;
   summary: string | null;
   source: string | null;
+  sourceLabel?: string | null;
+  sourceUrl?: string | null;
+  senderName?: string | null;
+  senderEmail?: string | null;
+  receivedAt?: string | null;
   priority: "high" | "medium" | "low" | null;
   recommendedAction: string | null;
   dueAt: string | null;
+  startAt?: string | null;
+  endAt?: string | null;
+  attendees?: JsonValue[];
+  organizerName?: string | null;
+  organizerEmail?: string | null;
+  locationOrLink?: string | null;
 };
 
 export type StructuredExecutiveBrief = {
@@ -141,6 +152,37 @@ function parseDateLike(value: unknown): string | null {
   }
 
   return parsed.toISOString();
+}
+
+function normalizeSourceUrl(value: unknown) {
+  const candidate = normalizeOneLine(value);
+  if (!candidate) {
+    return null;
+  }
+
+  return candidate.match(/https?:\/\/[^\s)\]]+/i)?.[0] ?? candidate;
+}
+
+function normalizeAttendees(value: unknown): JsonValue[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return normalizeOneLine(entry);
+      }
+
+      if (isJsonRecord(entry)) {
+        const name = normalizeOneLine(entry.name) ?? normalizeOneLine(entry.displayName);
+        const email = normalizeOneLine(entry.email) ?? normalizeOneLine(entry.address);
+        return [name, email].filter(Boolean).join(" ") || null;
+      }
+
+      return null;
+    })
+    .filter((entry): entry is string => Boolean(entry));
 }
 
 function parseDisplayDate(value: unknown) {
@@ -236,7 +278,8 @@ function normalizeStructuredItem(value: JsonValue, fallbackPrefix: string, index
           source: null,
           priority: null,
           recommendedAction: null,
-          dueAt: null
+          dueAt: null,
+          attendees: []
         }
       : null;
   }
@@ -260,12 +303,59 @@ function normalizeStructuredItem(value: JsonValue, fallbackPrefix: string, index
     title,
     summary: normalizeOneLine(value.summary) ?? normalizeOneLine(value.detail) ?? normalizeOneLine(value.why_it_matters),
     source: normalizeOneLine(value.source) ?? normalizeOneLine(value.source_type),
+    sourceLabel:
+      normalizeOneLine(value.source_label) ??
+      normalizeOneLine(value.sourceLabel) ??
+      normalizeOneLine(value.thread) ??
+      normalizeOneLine(value.threadLabel),
+    sourceUrl:
+      normalizeSourceUrl(value.source_url) ??
+      normalizeSourceUrl(value.sourceUrl) ??
+      normalizeSourceUrl(value.webLink) ??
+      normalizeSourceUrl(value.url) ??
+      normalizeSourceUrl(value.link),
+    senderName:
+      normalizeOneLine(value.sender_name) ??
+      normalizeOneLine(value.senderName) ??
+      normalizeOneLine(value.sender) ??
+      normalizeOneLine(value.from),
+    senderEmail:
+      normalizeOneLine(value.sender_email) ??
+      normalizeOneLine(value.senderEmail) ??
+      normalizeOneLine(value.fromEmail) ??
+      normalizeOneLine(value.from_email),
+    receivedAt:
+      parseDateLike(value.received_at) ??
+      parseDateLike(value.receivedAt) ??
+      parseDateLike(value.occurredAt) ??
+      parseDateLike(value.occurred_at),
     priority: normalizePriority(value.priority ?? value.urgency),
     recommendedAction:
       normalizeOneLine(value.recommended_action) ??
       normalizeOneLine(value.recommendedAction) ??
       normalizeOneLine(value.action),
-    dueAt: parseDateLike(value.due_at) ?? parseDateLike(value.dueAt)
+    dueAt: parseDateLike(value.due_at) ?? parseDateLike(value.dueAt),
+    startAt:
+      parseDateLike(value.start_at) ??
+      parseDateLike(value.startAt) ??
+      parseDateLike(value.meeting_start) ??
+      parseDateLike(value.meetingStart),
+    endAt:
+      parseDateLike(value.end_at) ??
+      parseDateLike(value.endAt) ??
+      parseDateLike(value.meeting_end) ??
+      parseDateLike(value.meetingEnd),
+    attendees: normalizeAttendees(value.attendees ?? value.participants),
+    organizerName:
+      normalizeOneLine(value.organizer_name) ??
+      normalizeOneLine(value.organizerName) ??
+      normalizeOneLine(value.organizer),
+    organizerEmail: normalizeOneLine(value.organizer_email) ?? normalizeOneLine(value.organizerEmail),
+    locationOrLink:
+      normalizeOneLine(value.location_or_link) ??
+      normalizeOneLine(value.locationOrLink) ??
+      normalizeOneLine(value.location) ??
+      normalizeSourceUrl(value.meetingLink)
   };
 }
 

@@ -9,12 +9,28 @@ import {
   meetingCalendarEventIdFromBriefItemId
 } from "@/lib/meetings/meeting-records";
 import { runManualMeetingResearch, type MeetingResearchRunError } from "@/lib/meetings/meeting-research";
+import { exportMeetingRecordToTaskRobin } from "@/lib/meetings/meeting-obsidian-export";
+import { createTaskFromMeetingTaskCandidate } from "@/lib/meetings/meeting-task-candidates";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function formJsonArray(formData: FormData, key: string) {
+  const raw = formString(formData, key);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function parseReturnTo(value: string) {
@@ -65,7 +81,7 @@ export async function researchMeetingContextAction(formData: FormData) {
       timezone: resolved.user.timezone || "America/Los_Angeles",
       organizerName: formString(formData, "organizerName") || null,
       organizerEmail: formString(formData, "organizerEmail") || null,
-      attendees: [],
+      attendees: formJsonArray(formData, "attendees"),
       locationOrLink: formString(formData, "locationOrLink") || null,
       descriptionSummary: formString(formData, "descriptionSummary") || null,
       sourceRefs: [
@@ -91,4 +107,93 @@ export async function researchMeetingContextAction(formData: FormData) {
   }
 
   redirectWithStatus(returnTo, "notice", "meeting-researched");
+}
+
+export async function createTaskFromMeetingCandidateAction(formData: FormData) {
+  const returnTo = parseReturnTo(formString(formData, "returnTo"));
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
+    redirectWithStatus(returnTo, "error", "no-active-user");
+  }
+
+  const meetingRecordId = formString(formData, "meetingRecordId");
+  const dedupeKey = formString(formData, "dedupeKey");
+  if (!meetingRecordId || !dedupeKey) {
+    redirectWithStatus(returnTo, "error", "missing-meeting-task-candidate");
+  }
+
+  const client = createSupabaseAdminClient() ?? resolved.client;
+  const repository = createSupabaseMeetingRecordsRepository(client);
+  let result: Awaited<ReturnType<typeof createTaskFromMeetingTaskCandidate>>;
+
+  try {
+    result = await createTaskFromMeetingTaskCandidate({
+      client,
+      repository,
+      userId: resolved.user.id,
+      meetingRecordId,
+      dedupeKey
+    });
+  } catch (error) {
+    if (isMeetingRecordsSchemaUnavailableError(error)) {
+      redirectWithStatus(returnTo, "error", "meeting-records-schema-missing");
+    }
+    result = { ok: false, error: "storage" };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/brief");
+  revalidatePath("/library/tasks");
+  if (result.ok) {
+    revalidatePath(`/library/${result.captureId}`);
+  }
+
+  if (!result.ok) {
+    redirectWithStatus(returnTo, "error", `meeting-task-${result.error}`);
+  }
+
+  redirectWithStatus(
+    returnTo,
+    "notice",
+    result.status === "already_exists" ? "meeting-task-already-exists" : "meeting-task-created"
+  );
+}
+
+export async function saveMeetingToObsidianAction(formData: FormData) {
+  const returnTo = parseReturnTo(formString(formData, "returnTo"));
+  const resolved = await resolveCurrentAppUser();
+  if (!resolved) {
+    redirectWithStatus(returnTo, "error", "no-active-user");
+  }
+
+  const meetingRecordId = formString(formData, "meetingRecordId");
+  if (!meetingRecordId) {
+    redirectWithStatus(returnTo, "error", "missing-meeting-record");
+  }
+
+  const client = createSupabaseAdminClient() ?? resolved.client;
+  const repository = createSupabaseMeetingRecordsRepository(client);
+  let result: Awaited<ReturnType<typeof exportMeetingRecordToTaskRobin>>;
+
+  try {
+    result = await exportMeetingRecordToTaskRobin({
+      repository,
+      userId: resolved.user.id,
+      meetingRecordId
+    });
+  } catch (error) {
+    if (isMeetingRecordsSchemaUnavailableError(error)) {
+      redirectWithStatus(returnTo, "error", "meeting-records-schema-missing");
+    }
+    redirectWithStatus(returnTo, "error", "meeting-obsidian-storage");
+  }
+
+  revalidatePath("/");
+  revalidatePath("/brief");
+
+  if (!result.ok) {
+    redirectWithStatus(returnTo, "error", `meeting-obsidian-${result.error}`);
+  }
+
+  redirectWithStatus(returnTo, "notice", "sent-to-taskrobin-for-obsidian-capture");
 }

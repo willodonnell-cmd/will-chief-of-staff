@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  briefItemDomId,
   buildStructuredBriefSourceLanes,
   resolveBriefSourceLaneId
 } from "../lib/brief/source-lanes";
@@ -73,4 +74,9 @@ test("meeting prep is categorized as Calendar / Meetings even without explicit s
     }),
     "calendar_meetings"
   );
+});
+
+test("brief item DOM ids are stable anchors for specific source-lane entries", () => {
+  assert.equal(briefItemDomId("topMoves-outlook reply"), "brief-item-topMoves-outlook-reply");
+  assert.equal(briefItemDomId(""), "brief-item-item");
 });

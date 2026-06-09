@@ -118,12 +118,26 @@ test("normalizes marked Executive Brief JSON into structured sections", () => {
             title: "Finish board memo",
             summary: "Finance comments arrived after the last draft.",
             source: "Outlook",
+            sender: "Maya Finance",
+            sender_email: "maya@example.com",
+            source_url: "https://outlook.example/message-1",
+            received_at: "2026-06-07T18:45:00-07:00",
             priority: "high",
             recommended_action: "Send revised memo before the morning review."
           }
         ],
         decisions_needed: ["Approve whether to move the portfolio review."],
-        meeting_prep: [{ title: "9 AM partner sync", action: "Bring the IC follow-up list." }],
+        meeting_prep: [
+          {
+            title: "9 AM partner sync",
+            action: "Bring the IC follow-up list.",
+            start_at: "2026-06-08T09:00:00-07:00",
+            end_at: "2026-06-08T09:30:00-07:00",
+            organizer: "Amelia Hart",
+            attendees: ["Will O'Donnell", "Amelia Hart"],
+            location_or_link: "https://outlook.example/calendar-1"
+          }
+        ],
         carry_forward: [{ title: "Data-room owner still unresolved" }],
         task_candidates: [{ title: "Ask Maya for data-room owner", priority: "medium" }]
       }),
@@ -135,9 +149,18 @@ test("normalizes marked Executive Brief JSON into structured sections", () => {
   assert.deepEqual(parsed.validationWarnings, []);
   assert.equal(parsed.structuredBrief?.commandSummary[0], "Board memo is the highest leverage item.");
   assert.equal(parsed.structuredBrief?.topMoves[0]?.title, "Finish board memo");
+  assert.equal(parsed.structuredBrief?.topMoves[0]?.senderName, "Maya Finance");
+  assert.equal(parsed.structuredBrief?.topMoves[0]?.senderEmail, "maya@example.com");
+  assert.equal(parsed.structuredBrief?.topMoves[0]?.sourceUrl, "https://outlook.example/message-1");
+  assert.equal(parsed.structuredBrief?.topMoves[0]?.receivedAt, "2026-06-08T01:45:00.000Z");
   assert.equal(parsed.structuredBrief?.topMoves[0]?.recommendedAction, "Send revised memo before the morning review.");
   assert.equal(parsed.structuredBrief?.decisionsNeeded[0]?.title, "Approve whether to move the portfolio review.");
   assert.equal(parsed.structuredBrief?.meetingPrep[0]?.recommendedAction, "Bring the IC follow-up list.");
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.startAt, "2026-06-08T16:00:00.000Z");
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.endAt, "2026-06-08T16:30:00.000Z");
+  assert.deepEqual(parsed.structuredBrief?.meetingPrep[0]?.attendees, ["Will O'Donnell", "Amelia Hart"]);
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.organizerName, "Amelia Hart");
+  assert.equal(parsed.structuredBrief?.meetingPrep[0]?.locationOrLink, "https://outlook.example/calendar-1");
   assert.equal(parsed.structuredBrief?.carryForward[0]?.title, "Data-room owner still unresolved");
   assert.equal(parsed.structuredBrief?.taskCandidates[0]?.priority, "medium");
   assert.match(parsed.humanBrief ?? "", /Focus on the board memo/);

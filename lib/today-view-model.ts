@@ -1,9 +1,11 @@
 import type {
   ExecutiveBriefSnapshot,
+  JsonValue,
   StructuredExecutiveBrief,
   StructuredExecutiveBriefItem
 } from "@/lib/brief/executive-brief-snapshots";
 import {
+  briefItemDomId,
   buildStructuredBriefSourceLanes,
   type BriefSourceLaneId,
   type StructuredBriefLaneEntry
@@ -16,6 +18,26 @@ export type TodayBriefItem = {
   title: string;
   summary: string | null;
   href: string;
+  sourceHref: string | null;
+  briefHref: string;
+  senderLabel: string | null;
+  sourceLabel: string | null;
+  timeLabel: string | null;
+  attendeeLabel: string | null;
+  startAt: string | null;
+  endAt: string | null;
+  attendees: JsonValue[];
+  organizerName: string | null;
+  organizerEmail: string | null;
+  locationOrLink: string | null;
+  sourceQualityLabel: string;
+  canCreateTask: boolean;
+  taskDescription: string;
+  taskNextStep: string | null;
+  taskDesiredOutcome: string | null;
+  taskPriority: "high" | "medium" | "low" | null;
+  taskDueAt: string | null;
+  taskSource: string | null;
   actionLabel: string | null;
   meta: string[];
 };
@@ -90,22 +112,113 @@ function itemSummary(item: StructuredExecutiveBriefItem) {
 function itemMeta(item: StructuredExecutiveBriefItem) {
   return [
     item.priority ? `${item.priority} priority` : null,
-    item.source,
+    item.sourceLabel ?? item.source,
     item.dueAt ? `Due ${formatTimestamp(item.dueAt) ?? item.dueAt}` : null
   ].filter((value): value is string => Boolean(compactText(value)));
 }
 
-function mapBriefItem(item: StructuredExecutiveBriefItem, section: string, sectionLabel?: string): TodayBriefItem | null {
+function senderLabel(item: StructuredExecutiveBriefItem) {
+  const sender = compactText(item.senderName);
+  const email = compactText(item.senderEmail);
+  if (sender && email && sender.toLowerCase() !== email.toLowerCase()) {
+    return `${sender} <${email}>`;
+  }
+
+  return sender || email || null;
+}
+
+function formatTimeWindow(item: StructuredExecutiveBriefItem) {
+  const start = formatTimestamp(item.startAt);
+  const end = formatTimestamp(item.endAt);
+  if (start && end) {
+    return `${start} - ${end}`;
+  }
+
+  return start ?? end ?? null;
+}
+
+function attendeeText(value: JsonValue) {
+  if (typeof value === "string") {
+    return compactText(value);
+  }
+
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, JsonValue>;
+    return compactText(typeof record.name === "string" ? record.name : null) || compactText(typeof record.email === "string" ? record.email : null);
+  }
+
+  return "";
+}
+
+function attendeeLabel(item: StructuredExecutiveBriefItem) {
+  const attendees = (item.attendees ?? []).map(attendeeText).filter(Boolean);
+  if (attendees.length === 0) {
+    return null;
+  }
+
+  if (attendees.length > 3) {
+    return `Group meeting · ${attendees.length} attendees`;
+  }
+
+  return attendees.join(", ");
+}
+
+function sourceQualityLabel(item: StructuredExecutiveBriefItem, laneId?: BriefSourceLaneId) {
+  if (item.sourceUrl) {
+    return "Source link available";
+  }
+
+  if (laneId === "calendar_meetings" && !item.startAt && !item.attendees?.length) {
+    return "Calendar metadata unavailable";
+  }
+
+  if (laneId === "email" && !senderLabel(item)) {
+    return "Sender unavailable";
+  }
+
+  return "Brief-only context";
+}
+
+function mapBriefItem(
+  item: StructuredExecutiveBriefItem,
+  section: string,
+  sectionLabel?: string,
+  entryId = `${section}-${item.id}`,
+  laneId?: BriefSourceLaneId
+): TodayBriefItem | null {
   const title = compactText(item.title);
   if (!title) {
     return null;
   }
 
+  const briefHref = `/brief#${briefItemDomId(entryId)}`;
+  const sourceHref = compactText(item.sourceUrl) || null;
+
   return {
-    id: `${section}-${item.id}`,
+    id: entryId,
     title,
     summary: itemSummary(item),
-    href: "/brief",
+    href: sourceHref ?? briefHref,
+    sourceHref,
+    briefHref,
+    senderLabel: senderLabel(item),
+    sourceLabel: compactText(item.sourceLabel) || compactText(item.source) || null,
+    timeLabel: formatTimeWindow(item),
+    attendeeLabel: attendeeLabel(item),
+    startAt: item.startAt ?? null,
+    endAt: item.endAt ?? null,
+    attendees: item.attendees ?? [],
+    organizerName: compactText(item.organizerName) || null,
+    organizerEmail: compactText(item.organizerEmail) || null,
+    locationOrLink: compactText(item.locationOrLink) || null,
+    sourceQualityLabel: sourceQualityLabel(item, laneId),
+    canCreateTask: laneId === "email",
+    taskDescription: title,
+    taskNextStep: compactText(item.recommendedAction) || null,
+    taskDesiredOutcome: itemSummary(item),
+    taskPriority: item.priority,
+    taskDueAt: item.dueAt,
+    taskSource: [senderLabel(item), compactText(item.sourceLabel) || compactText(item.source)].filter(Boolean).join(" · ") || null,
     actionLabel: compactText(item.recommendedAction) || null,
     meta: [sectionLabel, ...itemMeta(item)].filter((value): value is string => Boolean(compactText(value)))
   };
@@ -143,8 +256,8 @@ function compactStringList(items: string[] | undefined) {
   return (items ?? []).map(compactText).filter((item) => item.length > 0);
 }
 
-function mapLaneEntry(entry: StructuredBriefLaneEntry) {
-  return mapBriefItem(entry.item, entry.section, entry.sectionLabel);
+function mapLaneEntry(entry: StructuredBriefLaneEntry, laneId: BriefSourceLaneId) {
+  return mapBriefItem(entry.item, entry.section, entry.sectionLabel, entry.id, laneId);
 }
 
 function taskPriorityLabel(item: LibraryItemSummary) {
@@ -226,7 +339,7 @@ export function buildTodayViewModel(input: {
         .map((lane) => ({
           id: lane.id,
           label: lane.label,
-          items: lane.entries.map(mapLaneEntry).filter((item): item is TodayBriefItem => Boolean(item)),
+          items: lane.entries.map((entry) => mapLaneEntry(entry, lane.id)).filter((item): item is TodayBriefItem => Boolean(item)),
           tasks: lane.id === "email" ? briefOriginTasks : []
         }))
         .filter((lane) => lane.items.length > 0 || lane.tasks.length > 0),

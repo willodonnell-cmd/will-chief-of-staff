@@ -35,6 +35,17 @@ function CompactExecutiveListRow({ item }: { item: CompactExecutiveListItem }) {
     </>
   );
 
+  if (item.href?.startsWith("http")) {
+    return (
+      <a
+        href={item.href}
+        className="block rounded-[1.35rem] border border-line/70 bg-[rgba(255,255,255,0.62)] px-4 py-4 transition hover:bg-white/78"
+      >
+        {content}
+      </a>
+    );
+  }
+
   if (item.href) {
     return (
       <Link

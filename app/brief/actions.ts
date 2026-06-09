@@ -30,6 +30,27 @@ function formString(formData: FormData, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function safeReturnTo(value: string) {
+  if (value === "/" || value === "/brief" || value === "/library/tasks") {
+    return value;
+  }
+
+  return "/brief";
+}
+
+function redirectWithStatus(path: string, key: "notice" | "error", value: string): never {
+  const encoded = encodeURIComponent(value);
+  if (path === "/") {
+    redirect(key === "notice" ? `/?notice=${encoded}` : `/?error=${encoded}`);
+  }
+
+  if (path === "/library/tasks") {
+    redirect(key === "notice" ? `/library/tasks?notice=${encoded}` : `/library/tasks?error=${encoded}`);
+  }
+
+  redirect(key === "notice" ? `/brief?notice=${encoded}` : `/brief?error=${encoded}`);
+}
+
 function parseTaskPriority(value: string): TaskPriority {
   return isTaskPriority(value) ? value : "medium";
 }
@@ -41,20 +62,24 @@ function parseDismissReason(value: string) {
 }
 
 export async function createTaskFromBriefCandidateAction(formData: FormData) {
+  const returnTo = safeReturnTo(formString(formData, "returnTo"));
   const resolved = await resolveCurrentAppUser();
   if (!resolved) {
-    redirect("/brief?error=no-active-user");
+    redirectWithStatus(returnTo, "error", "no-active-user");
   }
 
   const description = formString(formData, "description");
   if (!description) {
-    redirect("/brief?error=missing-task-description");
+    redirectWithStatus(returnTo, "error", "missing-task-description");
   }
 
   const priority = parseTaskPriority(formString(formData, "priority"));
   const nextStep = formString(formData, "nextStep");
   const desiredOutcome = formString(formData, "desiredOutcome");
   const source = formString(formData, "source");
+  const sourceUrl = formString(formData, "sourceUrl");
+  const briefItemId = formString(formData, "briefItemId");
+  const sender = formString(formData, "sender");
   const dueAt = formString(formData, "dueAt") || null;
   const client = createSupabaseAdminClient() ?? resolved.client;
 
@@ -72,7 +97,7 @@ export async function createTaskFromBriefCandidateAction(formData: FormData) {
     null;
 
   if (!selectedCategory) {
-    redirect("/brief?error=task-category-missing");
+    redirectWithStatus(returnTo, "error", "task-category-missing");
   }
 
   const workingContent = buildTaskWorkingContent(
@@ -102,7 +127,9 @@ export async function createTaskFromBriefCandidateAction(formData: FormData) {
       privacy: "open",
       summary: description,
       follow_up: followUp || null,
-      private_context: source ? `Executive Brief source: ${source}` : null,
+      private_context: [source ? `Executive Brief source: ${source}` : null, sourceUrl ? `Source URL: ${sourceUrl}` : null]
+        .filter(Boolean)
+        .join("\n") || null,
       type: "task",
       title,
       task_description: description,
@@ -120,6 +147,9 @@ export async function createTaskFromBriefCandidateAction(formData: FormData) {
       capture_metadata: {
         captureType: "task",
         owner: source || null,
+        sender: sender || null,
+        sourceUrl: sourceUrl || null,
+        briefItemId: briefItemId || null,
         nextAction: nextStep || null,
         expectedOutcome: desiredOutcome || null
       },
@@ -129,12 +159,13 @@ export async function createTaskFromBriefCandidateAction(formData: FormData) {
   );
 
   if (insert.error) {
-    redirect("/brief?error=task-create-failed");
+    redirectWithStatus(returnTo, "error", "task-create-failed");
   }
 
+  revalidatePath("/");
   revalidatePath("/brief");
   revalidatePath("/library/tasks");
-  redirect("/brief?notice=task-created");
+  redirectWithStatus(returnTo, "notice", "task-created");
 }
 
 export async function dismissBriefTaskCandidateAction(formData: FormData) {

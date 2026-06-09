@@ -8,6 +8,7 @@ import {
   listMeetingRecordsForCalendarEvents,
   summarizeMeetingRecordStatus,
   updateMeetingObsidianExportStatus,
+  updateMeetingTaskCandidateLinks,
   updateMeetingResearchSummary,
   updateMeetingTranscriptRefs,
   type JsonValue,
@@ -16,6 +17,17 @@ import {
   type MeetingRecordUpdateRow,
   type MeetingRecordsRepository
 } from "../lib/meetings/meeting-records";
+import {
+  buildMeetingTaskCaptureInsert,
+  findExistingTaskForMeetingCandidate,
+  meetingTaskCandidateToTaskFields,
+  stableMeetingTaskDedupeKey
+} from "../lib/meetings/meeting-task-candidates";
+import {
+  buildMeetingRecordMarkdown,
+  buildTaskRobinMeetingEmail,
+  exportMeetingRecordToTaskRobin
+} from "../lib/meetings/meeting-obsidian-export";
 import { runManualMeetingResearch } from "../lib/meetings/meeting-research";
 import {
   attachTranscriptAndGeneratePostMeetingSummary,
@@ -252,6 +264,7 @@ test("listMeetingRecordsForCalendarEvents returns scoped status summaries for ma
     researchStatus: "not_researched",
     transcriptStatus: "none",
     taskCandidateCount: 0,
+    taskCandidates: [],
     obsidianExportStatus: "not_exported"
   });
 });
@@ -321,6 +334,345 @@ test("update helpers persist research, transcript, and Obsidian state without cr
   assert.equal(exported?.obsidianExportStatus, "sent_to_taskrobin");
   assert.equal(exported?.obsidianExportedAt, "2026-06-08T20:12:00.000Z");
   assert.equal(exported?.obsidianEmailTo, TASKROBIN_OBSIDIAN_EMAIL);
+});
+
+test("meeting research task candidate maps to a task payload with meeting metadata and source refs", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const record = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "event-1",
+    calendarSourceSystemId: "executive_brief",
+    title: "Board prep",
+    startAt: "2026-06-09T17:00:00.000Z",
+    relatedCompanyNames: ["Example Co"]
+  });
+  const candidate = {
+    title: "Prepare approval path",
+    description: "Use the latest board packet.",
+    owner: "Will",
+    priority: "high" as const,
+    dueDate: "2026-06-09T16:00:00.000Z",
+    sourceRefs: [{ sourceType: "executive_brief", briefItemId: "meetingPrep-board" }] as JsonValue[],
+    dedupeKey: "board-prep-approval-path",
+    meetingRecordId: record.id,
+    taskType: "prep" as const
+  };
+
+  const fields = meetingTaskCandidateToTaskFields(candidate);
+  assert.equal(fields.description, "Prepare approval path");
+  assert.equal(fields.nextStep, "Use the latest board packet.");
+  assert.equal(fields.desiredOutcome, "Owner: Will");
+  assert.equal(fields.priority, "high");
+  assert.equal(fields.dueAt, "2026-06-09T16:00:00.000Z");
+  assert.equal(stableMeetingTaskDedupeKey(candidate), "board-prep-approval-path");
+
+  const insert = buildMeetingTaskCaptureInsert({
+    userId: "user-1",
+    meetingRecord: record,
+    candidate,
+    category: {
+      id: "category-1",
+      name: "TBD",
+      status: "active",
+      is_fallback: true
+    },
+    now: "2026-06-08T22:00:00.000Z"
+  });
+
+  assert.equal(insert.type, "task");
+  assert.equal(insert.source_path, "/meetings");
+  assert.equal(insert.priority, "high");
+  assert.equal(insert.due_at, "2026-06-09T16:00:00.000Z");
+  assert.equal(insert.capture_metadata.meetingRecordId, record.id);
+  assert.equal(insert.capture_metadata.meetingTaskCandidateDedupeKey, "board-prep-approval-path");
+  assert.deepEqual(insert.capture_metadata.meetingTaskCandidateSourceRefs, candidate.sourceRefs);
+  assert.match(insert.original_content, /MeetingRecord/);
+});
+
+test("post-meeting action candidate maps to a stable follow-up task payload", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const record = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "event-2",
+    title: "Finance debrief"
+  });
+  const candidate = {
+    title: "Follow up with finance",
+    description: null,
+    owner: null,
+    priority: null,
+    dueDate: null,
+    sourceRefs: [{ sourceType: "zoom", id: "recording-1" }] as JsonValue[],
+    dedupeKey: `${record.id}:finance-follow-up`,
+    meetingRecordId: record.id,
+    taskType: "follow_up" as const
+  };
+
+  const fields = meetingTaskCandidateToTaskFields(candidate);
+  assert.equal(fields.description, "Follow up with finance");
+  assert.equal(fields.nextStep, "Follow up with finance");
+  assert.equal(fields.desiredOutcome, "");
+  assert.equal(fields.priority, "medium");
+  assert.equal(stableMeetingTaskDedupeKey(candidate), `${record.id}:finance-follow-up`);
+});
+
+test("meeting task dedupe finds existing tasks by candidate key before creating a duplicate", () => {
+  const candidate = {
+    title: "Prepare approval path",
+    description: null,
+    owner: null,
+    priority: "high" as const,
+    dueDate: null,
+    sourceRefs: [] as JsonValue[],
+    dedupeKey: "board-prep-approval-path",
+    meetingRecordId: "meeting-record-1",
+    taskType: "prep" as const
+  };
+
+  const existing = findExistingTaskForMeetingCandidate(
+    [
+      {
+        id: "capture-1",
+        title: "Prepare approval path",
+        task_description: "Prepare approval path",
+        capture_metadata: {
+          meetingRecordId: "meeting-record-1",
+          meetingTaskCandidateDedupeKey: "board-prep-approval-path"
+        }
+      }
+    ],
+    candidate
+  );
+
+  assert.equal(existing?.id, "capture-1");
+});
+
+test("meeting task candidate status updates after task creation without auto-creating tasks", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const record = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "event-1",
+    title: "Board prep"
+  });
+  const candidate = {
+    title: "Prepare approval path",
+    description: null,
+    owner: null,
+    priority: "high" as const,
+    dueDate: null,
+    sourceRefs: [] as JsonValue[],
+    dedupeKey: "board-prep-approval-path",
+    meetingRecordId: record.id,
+    taskType: "prep" as const
+  };
+  const withCandidate = await updateMeetingResearchSummary(memory.repository, {
+    userId: "user-1",
+    meetingRecordId: record.id,
+    researchSummary: null,
+    taskCandidates: [candidate]
+  });
+
+  assert.deepEqual(withCandidate?.linkedTaskIds, []);
+
+  const linked = await updateMeetingTaskCandidateLinks(memory.repository, {
+    userId: "user-1",
+    meetingRecord: withCandidate!,
+    dedupeKey: "board-prep-approval-path",
+    linkedTaskId: "capture-1",
+    linkedTaskHref: "/library/capture-1?from=%2Flibrary%2Ftasks",
+    status: "created",
+    linkedAt: "2026-06-08T22:10:00.000Z"
+  });
+  const status = summarizeMeetingRecordStatus(linked!);
+
+  assert.deepEqual(linked?.linkedTaskIds, ["capture-1"]);
+  assert.equal(status.taskCandidates[0]?.status, "created");
+  assert.equal(status.taskCandidates[0]?.linkedTaskId, "capture-1");
+  assert.equal(status.taskCandidates[0]?.linkedTaskHref, "/library/capture-1?from=%2Flibrary%2Ftasks");
+});
+
+test("meeting record markdown omits empty optional sections and preserves links", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const record = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "event-1",
+    title: "Board prep",
+    startAt: "2026-06-09T17:00:00.000Z",
+    relatedCompanyNames: ["Example Co"],
+    relatedPeopleNames: ["Alex"]
+  });
+  const researched = await updateMeetingResearchSummary(memory.repository, {
+    userId: "user-1",
+    meetingRecordId: record.id,
+    researchSummary: {
+      meetingRecordId: record.id,
+      generatedAt: "2026-06-08T20:10:00.000Z",
+      sourceCoverage: [],
+      calendarEventDetails: {
+        title: "Board prep",
+        startAt: "2026-06-09T17:00:00.000Z",
+        endAt: null,
+        organizer: "Will",
+        attendees: [],
+        locationOrLink: "https://meet.example/board",
+        descriptionSummary: null
+      },
+      highLevelContext: "Prepare the approval path.",
+      recentRelevantActivity: [],
+      situationRead: null,
+      keyPriorities: [],
+      suggestedQuestions: [],
+      relevantLinks: [{ title: "Board packet", url: "https://example.com/packet" }],
+      taskCandidates: []
+    }
+  });
+
+  const markdown = buildMeetingRecordMarkdown(researched!);
+  assert.match(markdown, /type: meeting/);
+  assert.match(markdown, /# Board prep/);
+  assert.match(markdown, /Calendar Event Details/);
+  assert.match(markdown, /https:\/\/example.com\/packet/);
+  assert.doesNotMatch(markdown, /Suggested Questions/);
+  assert.doesNotMatch(markdown, /Key Priorities/);
+  assert.doesNotMatch(markdown, /Situation Read/);
+});
+
+test("meeting record markdown omits unsupported research and transcript sections even when populated", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const record = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "event-1",
+    title: "Unsupported section check"
+  });
+  const researched = await updateMeetingResearchSummary(memory.repository, {
+    userId: "user-1",
+    meetingRecordId: record.id,
+    researchSummary: {
+      meetingRecordId: record.id,
+      generatedAt: "2026-06-08T20:10:00.000Z",
+      sourceCoverage: [
+        {
+          sourceType: "pitchbook",
+          used: false,
+          itemCount: 0,
+          internalOnlyReason: "PitchBook connector is not available to this code path."
+        },
+        {
+          sourceType: "web_news",
+          used: false,
+          itemCount: 0,
+          internalOnlyReason: "Web/news adapter is not enabled for meeting research in this phase."
+        }
+      ],
+      calendarEventDetails: null,
+      highLevelContext: "Supported context stays in the note.",
+      recentRelevantActivity: [],
+      situationRead: {
+        categories: ["urgency"],
+        summary: "Unsupported situation read should stay out.",
+        confidence: "medium",
+        evidenceRefs: []
+      },
+      keyPriorities: [
+        {
+          title: "Unsupported priority",
+          reason: "This should stay out of the export.",
+          sourceRefs: []
+        }
+      ],
+      suggestedQuestions: [
+        {
+          question: "Unsupported question?",
+          reason: "This should stay out of the export.",
+          sourceRefs: []
+        }
+      ],
+      relevantLinks: [],
+      taskCandidates: []
+    }
+  });
+  const withTranscript = await updateMeetingTranscriptRefs(memory.repository, {
+    userId: "user-1",
+    meetingRecordId: record.id,
+    transcriptStatus: "attached",
+    transcriptRefs: [{ title: "Unsupported transcript reference", url: "https://example.com/transcript" }]
+  });
+
+  const markdown = buildMeetingRecordMarkdown(withTranscript ?? researched!);
+  assert.match(markdown, /Supported context stays in the note/);
+  assert.doesNotMatch(markdown, /Situation Read/);
+  assert.doesNotMatch(markdown, /Unsupported situation read/);
+  assert.doesNotMatch(markdown, /Key Priorities/);
+  assert.doesNotMatch(markdown, /Unsupported priority/);
+  assert.doesNotMatch(markdown, /Suggested Questions/);
+  assert.doesNotMatch(markdown, /Unsupported question/);
+  assert.doesNotMatch(markdown, /Transcript Reference/);
+  assert.doesNotMatch(markdown, /Unsupported transcript reference/);
+  assert.doesNotMatch(markdown, /PitchBook/);
+  assert.doesNotMatch(markdown, /Web\/news/);
+});
+
+test("TaskRobin meeting email uses the configured MeetingRecord destination and subject", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const record = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "event-1",
+    title: "Partner sync",
+    startAt: "2026-06-09T17:00:00.000Z"
+  });
+  const email = buildTaskRobinMeetingEmail(record);
+
+  assert.equal(email.to, TASKROBIN_OBSIDIAN_EMAIL);
+  assert.equal(email.subject, "Blackhawk Meeting Note - Partner sync - 2026-06-09");
+  assert.match(email.body, /calendar_event_id/);
+});
+
+test("exportMeetingRecordToTaskRobin marks sent only after email provider succeeds", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const record = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "event-1",
+    title: "Partner sync",
+    startAt: "2026-06-09T17:00:00.000Z"
+  });
+  let sentTo: string | null = null;
+
+  const result = await exportMeetingRecordToTaskRobin({
+    repository: memory.repository,
+    userId: "user-1",
+    meetingRecordId: record.id,
+    now: "2026-06-09T18:00:00.000Z",
+    provider: async (email) => {
+      sentTo = email.to;
+      assert.match(email.body, /Partner sync/);
+      return { ok: true, providerMessageId: "email-1" };
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(sentTo, TASKROBIN_OBSIDIAN_EMAIL);
+  assert.equal(result.record?.obsidianExportStatus, "sent_to_taskrobin");
+  assert.equal(result.record?.obsidianExportedAt, "2026-06-09T18:00:00.000Z");
+});
+
+test("exportMeetingRecordToTaskRobin marks failed when email provider is unavailable", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const record = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "event-1",
+    title: "Partner sync"
+  });
+
+  const result = await exportMeetingRecordToTaskRobin({
+    repository: memory.repository,
+    userId: "user-1",
+    meetingRecordId: record.id,
+    provider: async () => ({ ok: false, error: "not_configured" })
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.record?.obsidianExportStatus, "failed");
+  assert.equal(result.record?.obsidianExportedAt, null);
 });
 
 test("matchTranscriptCandidate uses meeting metadata beyond title for confidence", async () => {

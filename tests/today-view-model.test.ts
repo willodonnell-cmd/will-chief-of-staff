@@ -25,9 +25,15 @@ function buildSnapshot(overrides: Partial<ExecutiveBriefSnapshot> = {}): Executi
           title: "Board approval path",
           summary: "Confirm the recommendation and owner before the readout.",
           source: "Executive Brief",
+          sourceLabel: null,
+          sourceUrl: null,
+          senderName: null,
+          senderEmail: null,
+          receivedAt: null,
           priority: "high",
           recommendedAction: "Decide",
-          dueAt: "2026-06-08T18:00:00.000Z"
+          dueAt: "2026-06-08T18:00:00.000Z",
+          attendees: []
         }
       ],
       decisionsNeeded: [
@@ -38,7 +44,8 @@ function buildSnapshot(overrides: Partial<ExecutiveBriefSnapshot> = {}): Executi
           source: "Legal",
           priority: "high",
           recommendedAction: "Approve",
-          dueAt: null
+          dueAt: null,
+          attendees: []
         }
       ],
       meetingPrep: [
@@ -47,9 +54,13 @@ function buildSnapshot(overrides: Partial<ExecutiveBriefSnapshot> = {}): Executi
           title: "LP call prep",
           summary: "Review talking points before the LP call.",
           source: "Calendar",
+          sourceUrl: null,
           priority: "medium",
           recommendedAction: "Prepare",
-          dueAt: null
+          dueAt: null,
+          startAt: null,
+          endAt: null,
+          attendees: []
         }
       ],
       carryForward: [
@@ -60,7 +71,8 @@ function buildSnapshot(overrides: Partial<ExecutiveBriefSnapshot> = {}): Executi
           source: "Prior brief",
           priority: "medium",
           recommendedAction: "Monitor",
-          dueAt: null
+          dueAt: null,
+          attendees: []
         }
       ],
       taskCandidates: [
@@ -71,7 +83,8 @@ function buildSnapshot(overrides: Partial<ExecutiveBriefSnapshot> = {}): Executi
           source: "Executive Brief",
           priority: "medium",
           recommendedAction: "Create task",
-          dueAt: null
+          dueAt: null,
+          attendees: []
         }
       ]
     },
@@ -149,16 +162,117 @@ test("Today view model uses latest Executive Brief structured sections", () => {
   assert.equal(model.taskCandidates[0]?.title, "Ask finance for lender update");
 });
 
-test("Today brief-derived cards link to the full Executive Brief", () => {
+test("Today brief-derived cards link to source URLs or specific Executive Brief anchors", () => {
   const model = buildTodayViewModel({
-    snapshot: buildSnapshot(),
+    snapshot: buildSnapshot({
+      structuredBrief: {
+        ...buildSnapshot().structuredBrief!,
+        topMoves: [
+          {
+            id: "move-source",
+            title: "Reply to board observer",
+            summary: "Board observer needs an answer.",
+            source: "Outlook",
+            sourceUrl: "https://outlook.example/message-1",
+            senderName: "Board Observer",
+            senderEmail: "observer@example.com",
+            priority: "high",
+            recommendedAction: "Reply",
+            dueAt: null,
+            attendees: []
+          }
+        ]
+      }
+    }),
     openTasks: []
   });
 
-  assert.equal(model.currentFocus[0]?.href, "/brief");
-  assert.equal(model.decisionsNeeded[0]?.href, "/brief");
-  assert.equal(model.meetingPrep[0]?.href, "/brief");
-  assert.equal(model.carryForward[0]?.href, "/brief");
+  const emailLane = model.sourceLanes.find((lane) => lane.id === "email");
+  assert.equal(emailLane?.items[0]?.href, "https://outlook.example/message-1");
+  assert.equal(emailLane?.items[0]?.sourceHref, "https://outlook.example/message-1");
+  assert.equal(emailLane?.items[0]?.briefHref, "/brief#brief-item-topMoves-move-source");
+  assert.equal(model.decisionsNeeded[0]?.href, "/brief#brief-item-decision-decision-1");
+  assert.equal(model.meetingPrep[0]?.briefHref, "/brief#brief-item-meeting-meeting-1");
+});
+
+test("Today email cards include sender source labels and task creation metadata", () => {
+  const model = buildTodayViewModel({
+    snapshot: buildSnapshot({
+      structuredBrief: {
+        ...buildSnapshot().structuredBrief!,
+        topMoves: [
+          {
+            id: "move-email",
+            title: "Reply on approval path",
+            summary: "The sender is waiting on Will before the packet moves.",
+            source: "Outlook",
+            sourceLabel: "Approval thread",
+            sourceUrl: "https://outlook.example/message-2",
+            senderName: "Maya Finance",
+            senderEmail: "maya@example.com",
+            priority: "high",
+            recommendedAction: "Reply today",
+            dueAt: "2026-06-08T18:00:00.000Z",
+            attendees: []
+          }
+        ]
+      }
+    }),
+    openTasks: []
+  });
+  const emailItem = model.sourceLanes.find((lane) => lane.id === "email")?.items[0];
+
+  assert.equal(emailItem?.senderLabel, "Maya Finance <maya@example.com>");
+  assert.equal(emailItem?.sourceLabel, "Approval thread");
+  assert.equal(emailItem?.sourceQualityLabel, "Source link available");
+  assert.equal(emailItem?.canCreateTask, true);
+  assert.equal(emailItem?.taskDescription, "Reply on approval path");
+  assert.equal(emailItem?.taskNextStep, "Reply today");
+});
+
+test("Today meeting cards include time attendee and missing-metadata labels", () => {
+  const baseSnapshot = buildSnapshot();
+  const model = buildTodayViewModel({
+    snapshot: buildSnapshot({
+      structuredBrief: {
+        ...baseSnapshot.structuredBrief!,
+        meetingPrep: [
+          {
+            id: "meeting-rich",
+            title: "Customer prep",
+            summary: "Prepare for the expansion decision.",
+            source: "Calendar",
+            priority: "high",
+            recommendedAction: "Review scope options",
+            dueAt: null,
+            startAt: "2026-06-08T17:00:00.000Z",
+            endAt: "2026-06-08T18:00:00.000Z",
+            attendees: ["Will O'Donnell", "Alex Partner", "Jordan Lee", "Customer COO"],
+            organizerName: "Alex Partner",
+            organizerEmail: "alex@example.com",
+            locationOrLink: "https://outlook.example/calendar"
+          }
+        ]
+      }
+    }),
+    openTasks: []
+  });
+  const meetingItem = model.sourceLanes.find((lane) => lane.id === "calendar_meetings")?.items[0];
+
+  assert.match(meetingItem?.timeLabel ?? "", /Jun 8/);
+  assert.equal(meetingItem?.attendeeLabel, "Group meeting · 4 attendees");
+  assert.equal(meetingItem?.sourceQualityLabel, "Brief-only context");
+  assert.equal(meetingItem?.organizerName, "Alex Partner");
+  assert.equal(meetingItem?.locationOrLink, "https://outlook.example/calendar");
+
+  const missingModel = buildTodayViewModel({
+    snapshot: buildSnapshot(),
+    openTasks: []
+  });
+  assert.equal(
+    missingModel.sourceLanes.find((lane) => lane.id === "calendar_meetings")?.items[0]?.sourceQualityLabel,
+    "Calendar metadata unavailable"
+  );
 });
 
 test("Today source lanes are ordered as Email, Calendar / Meetings, Teams", () => {
