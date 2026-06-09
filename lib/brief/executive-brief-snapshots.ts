@@ -661,6 +661,8 @@ function extractHumanBrief(raw: string, jsonExtraction: JsonExtraction | null, j
 }
 
 function mapSnapshotRow(row: ExecutiveBriefSnapshotRow): ExecutiveBriefSnapshot {
+  const normalizedJsonBundle = normalizeExecutiveBriefJsonBundle(row.json_bundle);
+
   return {
     id: row.id,
     subject: row.subject,
@@ -670,7 +672,8 @@ function mapSnapshotRow(row: ExecutiveBriefSnapshotRow): ExecutiveBriefSnapshot 
     rawEmailBody: row.raw_email_body,
     humanBrief: stripWillEmailSignature(row.human_brief),
     jsonBundle: row.json_bundle,
-    structuredBrief: toJsonRecord(row.structured_brief) as StructuredExecutiveBrief | null,
+    structuredBrief:
+      normalizedJsonBundle.structuredBrief ?? (toJsonRecord(row.structured_brief) as StructuredExecutiveBrief | null),
     contractVersion: row.contract_version,
     validationWarnings: row.validation_warnings ?? [],
     sourceMessageId: row.source_message_id,

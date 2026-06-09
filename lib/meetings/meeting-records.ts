@@ -154,6 +154,8 @@ export type MeetingRecordStatusSummary = {
   id: string;
   calendarEventId: string;
   researchStatus: MeetingResearchStatus;
+  researchCompletedAt: string | null;
+  researchSummary: JsonValue | null;
   transcriptStatus: MeetingTranscriptStatus;
   taskCandidateCount: number;
   taskCandidates: MeetingTaskCandidate[];
@@ -337,6 +339,8 @@ export function summarizeMeetingRecordStatus(record: MeetingRecord): MeetingReco
     id: record.id,
     calendarEventId: record.calendarEventId,
     researchStatus: record.researchStatus,
+    researchCompletedAt: record.researchCompletedAt,
+    researchSummary: record.researchSummary,
     transcriptStatus: record.transcriptStatus,
     taskCandidateCount: taskCandidates.length,
     taskCandidates,
@@ -562,6 +566,47 @@ export async function listMeetingRecordsForCalendarEvents(
   }
 ) {
   return repository.listByCalendarEvents(input);
+}
+
+export async function listMeetingRecordsForCalendarEventLookups(
+  repository: MeetingRecordsRepository,
+  input: {
+    userId: string;
+    lookups: Array<{
+      calendarSourceSystemId: string;
+      calendarEventId: string;
+    }>;
+  }
+) {
+  const bySourceSystem = new Map<string, Set<string>>();
+  for (const lookup of input.lookups) {
+    const calendarSourceSystemId = compactText(lookup.calendarSourceSystemId);
+    const calendarEventId = compactText(lookup.calendarEventId);
+    if (!calendarSourceSystemId || !calendarEventId) {
+      continue;
+    }
+
+    const existing = bySourceSystem.get(calendarSourceSystemId) ?? new Set<string>();
+    existing.add(calendarEventId);
+    bySourceSystem.set(calendarSourceSystemId, existing);
+  }
+
+  const groups = [...bySourceSystem.entries()];
+  if (groups.length === 0) {
+    return [];
+  }
+
+  const records = await Promise.all(
+    groups.map(([calendarSourceSystemId, calendarEventIds]) =>
+      listMeetingRecordsForCalendarEvents(repository, {
+        userId: input.userId,
+        calendarSourceSystemId,
+        calendarEventIds: [...calendarEventIds]
+      })
+    )
+  );
+
+  return records.flat();
 }
 
 export async function updateMeetingResearchSummary(

@@ -341,6 +341,72 @@ test("Today source lanes are ordered as Email, Calendar / Meetings, Teams", () =
   assert.equal(model.sourceLanes[0]?.tasks[0]?.sourcePath, "/brief");
 });
 
+test("Today source lanes collapse duplicate cards that point to the same original source", () => {
+  const baseSnapshot = buildSnapshot();
+  const model = buildTodayViewModel({
+    snapshot: buildSnapshot({
+      structuredBrief: {
+        ...baseSnapshot.structuredBrief!,
+        topMoves: [],
+        decisionsNeeded: [],
+        meetingPrep: [],
+        carryForward: [
+          {
+            id: "teams-jennifer-primary",
+            title: "Send Jennifer World Cup guest names and parking-pass count",
+            summary: "Jennifer asked for guest details.",
+            source: "Teams",
+            sourceLane: "teams",
+            sourceUrl: "https://teams.example/thread-1",
+            senderName: "Nelson, Jennifer",
+            senderEmail: "jennifer@example.com",
+            priority: "high",
+            recommendedAction: "Reply to Jennifer.",
+            dueAt: null,
+            attendees: []
+          },
+          {
+            id: "teams-jennifer-cross-source",
+            title: "Close World Cup logistics using Teams as the operating lane",
+            summary: "Same Teams source with supporting Outlook context.",
+            source: "Teams",
+            sourceLane: "teams",
+            sourceUrl: "https://teams.example/thread-1",
+            senderName: "Nelson, Jennifer",
+            senderEmail: "jennifer@example.com",
+            priority: "high",
+            recommendedAction: "Use the Teams thread.",
+            dueAt: null,
+            attendees: []
+          }
+        ],
+        taskCandidates: [
+          {
+            id: "teams-jennifer-task",
+            title: "Send Jennifer World Cup guest names/emails and parking needs",
+            summary: "Candidate from the same Teams source.",
+            source: "Teams",
+            sourceLane: "teams",
+            sourceUrl: "https://teams.example/thread-1",
+            senderName: "Nelson, Jennifer",
+            senderEmail: "jennifer@example.com",
+            priority: "high",
+            recommendedAction: "Create task",
+            dueAt: null,
+            attendees: []
+          }
+        ]
+      }
+    }),
+    openTasks: []
+  });
+
+  const teamsLane = model.sourceLanes.find((lane) => lane.id === "teams");
+  assert.equal(teamsLane?.items.length, 1);
+  assert.equal(teamsLane?.items[0]?.title, "Send Jennifer World Cup guest names and parking-pass count");
+  assert.equal(teamsLane?.items[0]?.senderLabel, "Nelson, Jennifer <jennifer@example.com>");
+});
+
 test("Today source lanes omit empty source sections", () => {
   const model = buildTodayViewModel({
     snapshot: buildSnapshot({

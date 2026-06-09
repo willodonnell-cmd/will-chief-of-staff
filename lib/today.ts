@@ -4,7 +4,7 @@ import { getLatestExecutiveBriefForUser } from "@/lib/brief/load-executive-brief
 import {
   createSupabaseMeetingRecordsRepository,
   isMeetingRecordsSchemaUnavailableError,
-  listMeetingRecordsForCalendarEvents,
+  listMeetingRecordsForCalendarEventLookups,
   meetingCalendarEventIdFromBriefItemId,
   summarizeMeetingRecordStatus
 } from "@/lib/meetings/meeting-records";
@@ -52,21 +52,23 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     snapshot,
     openTasks: openTasks.slice(0, TODAY_OPEN_TASK_LIMIT)
   });
-  const calendarEventIds =
+  const calendarLookups =
     model.sourceLanes
       .find((lane) => lane.id === "calendar_meetings")
-      ?.items.map((item) => item.calendarEventId ?? meetingCalendarEventIdFromBriefItemId(item.id)) ?? [];
+      ?.items.map((item) => ({
+        calendarEventId: item.calendarEventId ?? meetingCalendarEventIdFromBriefItemId(item.id),
+        calendarSourceSystemId: item.calendarSourceSystemId ?? "executive_brief"
+      })) ?? [];
 
-  if (calendarEventIds.length === 0) {
+  if (calendarLookups.length === 0) {
     return model;
   }
 
   try {
     const repository = createSupabaseMeetingRecordsRepository(resolved.client);
-    const records = await listMeetingRecordsForCalendarEvents(repository, {
+    const records = await listMeetingRecordsForCalendarEventLookups(repository, {
       userId: resolved.user.id,
-      calendarSourceSystemId: "executive_brief",
-      calendarEventIds
+      lookups: calendarLookups
     });
 
     return attachMeetingRecordStatusesToTodayViewModel(model, records.map(summarizeMeetingRecordStatus));

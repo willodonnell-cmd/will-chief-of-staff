@@ -8,8 +8,9 @@ import {
   researchMeetingContextAction,
   saveMeetingToObsidianAction
 } from "@/app/meetings/actions";
-import type { StructuredExecutiveBriefItem } from "@/lib/brief/executive-brief-snapshots";
+import type { JsonValue, StructuredExecutiveBriefItem } from "@/lib/brief/executive-brief-snapshots";
 import type { ExecutiveBriefPageData, ExecutiveBriefSlot } from "@/lib/brief/load-executive-brief-page-data";
+import { MeetingResearchSummaryPanel } from "@/components/meetings/meeting-research-summary-panel";
 import {
   briefItemDomId,
   buildStructuredBriefSourceLanes,
@@ -194,6 +195,58 @@ function sourceQualityLabel(item: StructuredExecutiveBriefItem, laneId: BriefSou
   }
 
   return "Brief-only context";
+}
+
+function sourceRefDedupeKey(value: JsonValue) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, JsonValue>;
+  const url = compactText(typeof record.url === "string" ? record.url : null);
+  const sourceSystemId = compactText(typeof record.sourceSystemId === "string" ? record.sourceSystemId : null);
+  const sourceItemId = compactText(typeof record.sourceItemId === "string" ? record.sourceItemId : null);
+  const sourceType = compactText(typeof record.sourceType === "string" ? record.sourceType : null);
+
+  if (url) {
+    return `url:${url.toLowerCase()}`;
+  }
+
+  if (sourceType && sourceSystemId) {
+    return `system:${sourceType.toLowerCase()}:${sourceSystemId.toLowerCase()}`;
+  }
+
+  if (sourceType && sourceItemId) {
+    return `item:${sourceType.toLowerCase()}:${sourceItemId.toLowerCase()}`;
+  }
+
+  return null;
+}
+
+function briefLaneEntryDedupeKey(entry: StructuredBriefLaneEntry) {
+  if (entry.item.sourceUrl) {
+    return `source:${entry.item.sourceUrl.toLowerCase()}`;
+  }
+
+  const refKey = (entry.item.sourceRefs ?? []).map(sourceRefDedupeKey).find((value): value is string => Boolean(value));
+  return refKey ? `ref:${refKey}` : null;
+}
+
+function dedupeBriefLaneEntries(entries: StructuredBriefLaneEntry[]) {
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    const key = briefLaneEntryDedupeKey(entry);
+    if (!key) {
+      return true;
+    }
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 function BriefItemTaskForm({
@@ -575,6 +628,7 @@ function MeetingContextCard({
           <DetailRow label="Priority Reasons" value={listDetail(item.priorityReasons)} />
           <DetailRow label="Source" value={[sourceQualityLabel(item, "calendar_meetings"), item.sourceLabel ?? item.source].filter(Boolean).join(" · ")} />
         </div>
+        <MeetingResearchSummaryPanel status={status} />
         {status ? (
           <>
             <MeetingTaskCandidateList candidates={status.taskCandidates} meetingRecordId={status.id} />
@@ -611,6 +665,11 @@ function SourceLaneSection({
     return null;
   }
 
+  const entries = dedupeBriefLaneEntries(lane.entries);
+  if (entries.length === 0) {
+    return null;
+  }
+
   return (
     <section className="space-y-3">
       <div>
@@ -618,7 +677,7 @@ function SourceLaneSection({
         <h3 className="mt-1 text-[1rem] font-semibold tracking-[-0.01em] text-text">{sourceLaneTitle(lane)}</h3>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
-        {lane.entries.map((entry) => (
+        {entries.map((entry) => (
           entry.section === "meetingPrep" ? (
             <MeetingContextCard
               key={entry.id}

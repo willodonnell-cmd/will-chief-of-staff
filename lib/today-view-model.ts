@@ -283,6 +283,58 @@ function mapLaneEntry(entry: StructuredBriefLaneEntry, laneId: BriefSourceLaneId
   return mapBriefItem(entry.item, entry.section, entry.sectionLabel, entry.id, laneId);
 }
 
+function sourceRefDedupeKey(value: JsonValue) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, JsonValue>;
+  const url = compactText(typeof record.url === "string" ? record.url : null);
+  const sourceSystemId = compactText(typeof record.sourceSystemId === "string" ? record.sourceSystemId : null);
+  const sourceItemId = compactText(typeof record.sourceItemId === "string" ? record.sourceItemId : null);
+  const sourceType = compactText(typeof record.sourceType === "string" ? record.sourceType : null);
+
+  if (url) {
+    return `url:${url.toLowerCase()}`;
+  }
+
+  if (sourceType && sourceSystemId) {
+    return `system:${sourceType.toLowerCase()}:${sourceSystemId.toLowerCase()}`;
+  }
+
+  if (sourceType && sourceItemId) {
+    return `item:${sourceType.toLowerCase()}:${sourceItemId.toLowerCase()}`;
+  }
+
+  return null;
+}
+
+function todayItemDedupeKey(item: TodayBriefItem) {
+  if (item.sourceHref) {
+    return `source:${item.sourceHref.toLowerCase()}`;
+  }
+
+  const refKey = item.sourceRefs.map(sourceRefDedupeKey).find((value): value is string => Boolean(value));
+  if (refKey) {
+    return `ref:${refKey}`;
+  }
+
+  return `title:${item.title.toLowerCase()}`;
+}
+
+function dedupeTodayLaneItems(items: TodayBriefItem[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = todayItemDedupeKey(item);
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
 function taskPriorityLabel(item: LibraryItemSummary) {
   const priority = item.task?.priority ?? item.priority;
   if (!priority) {
@@ -362,7 +414,9 @@ export function buildTodayViewModel(input: {
         .map((lane) => ({
           id: lane.id,
           label: lane.label,
-          items: lane.entries.map((entry) => mapLaneEntry(entry, lane.id)).filter((item): item is TodayBriefItem => Boolean(item)),
+          items: dedupeTodayLaneItems(
+            lane.entries.map((entry) => mapLaneEntry(entry, lane.id)).filter((item): item is TodayBriefItem => Boolean(item))
+          ),
           tasks: lane.id === "email" ? briefOriginTasks : []
         }))
         .filter((lane) => lane.items.length > 0 || lane.tasks.length > 0),

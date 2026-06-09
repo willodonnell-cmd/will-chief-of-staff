@@ -5,6 +5,7 @@ import {
   TASKROBIN_OBSIDIAN_EMAIL,
   getMeetingRecord,
   getOrCreateMeetingRecordForCalendarEvent,
+  listMeetingRecordsForCalendarEventLookups,
   listMeetingRecordsForCalendarEvents,
   summarizeMeetingRecordStatus,
   updateMeetingObsidianExportStatus,
@@ -262,11 +263,89 @@ test("listMeetingRecordsForCalendarEvents returns scoped status summaries for ma
     id: first.id,
     calendarEventId: "executive-brief:meetingPrep-meeting-1",
     researchStatus: "not_researched",
+    researchCompletedAt: null,
+    researchSummary: null,
     transcriptStatus: "none",
     taskCandidateCount: 0,
     taskCandidates: [],
     obsidianExportStatus: "not_exported"
   });
+});
+
+test("summarizeMeetingRecordStatus includes saved research summary details", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const record = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "event-1",
+    title: "Partner sync"
+  });
+
+  const researched = await updateMeetingResearchSummary(memory.repository, {
+    userId: "user-1",
+    meetingRecordId: record.id,
+    researchCompletedAt: "2026-06-08T21:00:00.000Z",
+    researchSummary: {
+      meetingRecordId: record.id,
+      generatedAt: "2026-06-08T21:00:00.000Z",
+      sourceCoverage: [
+        {
+          sourceType: "calendar_event_details",
+          used: true,
+          itemCount: 1,
+          internalOnlyReason: null
+        }
+      ],
+      calendarEventDetails: null,
+      highLevelContext: "Calendar details were available for the partner sync.",
+      recentRelevantActivity: [],
+      situationRead: null,
+      keyPriorities: [],
+      suggestedQuestions: [],
+      relevantLinks: [],
+      taskCandidates: []
+    }
+  });
+
+  const status = summarizeMeetingRecordStatus(researched!);
+
+  assert.equal(status.researchStatus, "researched");
+  assert.equal(status.researchCompletedAt, "2026-06-08T21:00:00.000Z");
+  assert.match(JSON.stringify(status.researchSummary), /Calendar details were available/);
+});
+
+test("listMeetingRecordsForCalendarEventLookups loads records across source systems", async () => {
+  const memory = createMemoryMeetingRecordsRepository();
+  const executiveBriefRecord = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "executive-brief:meetingPrep-meeting-1",
+    calendarSourceSystemId: "executive_brief",
+    title: "Board prep"
+  });
+  const outlookRecord = await getOrCreateMeetingRecordForCalendarEvent(memory.repository, {
+    userId: "user-1",
+    calendarEventId: "outlook-event-1",
+    calendarSourceSystemId: "outlook",
+    title: "Customer meeting"
+  });
+
+  const records = await listMeetingRecordsForCalendarEventLookups(memory.repository, {
+    userId: "user-1",
+    lookups: [
+      {
+        calendarSourceSystemId: "executive_brief",
+        calendarEventId: "executive-brief:meetingPrep-meeting-1"
+      },
+      {
+        calendarSourceSystemId: "outlook",
+        calendarEventId: "outlook-event-1"
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    records.map((record) => record.id).sort(),
+    [executiveBriefRecord.id, outlookRecord.id].sort()
+  );
 });
 
 test("update helpers persist research, transcript, and Obsidian state without creating tasks", async () => {

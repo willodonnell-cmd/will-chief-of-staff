@@ -13,7 +13,7 @@ import { buildStructuredBriefSourceLanes } from "@/lib/brief/source-lanes";
 import {
   createSupabaseMeetingRecordsRepository,
   isMeetingRecordsSchemaUnavailableError,
-  listMeetingRecordsForCalendarEvents,
+  listMeetingRecordsForCalendarEventLookups,
   meetingCalendarEventIdFromBriefItemId,
   summarizeMeetingRecordStatus,
   type MeetingRecordStatusSummary
@@ -69,21 +69,23 @@ async function listMeetingRecordStatusesForSnapshot(params: {
     return {};
   }
 
-  const meetingCalendarEventIds = buildStructuredBriefSourceLanes({ structuredBrief })
+  const meetingCalendarLookups = buildStructuredBriefSourceLanes({ structuredBrief })
     .flatMap((lane) => lane.entries)
     .filter((entry) => entry.section === "meetingPrep")
-    .map((entry) => entry.item.calendarEventId ?? meetingCalendarEventIdFromBriefItemId(entry.id));
+    .map((entry) => ({
+      calendarEventId: entry.item.calendarEventId ?? meetingCalendarEventIdFromBriefItemId(entry.id),
+      calendarSourceSystemId: entry.item.calendarSourceSystemId ?? "executive_brief"
+    }));
 
-  if (meetingCalendarEventIds.length === 0) {
+  if (meetingCalendarLookups.length === 0) {
     return {};
   }
 
   try {
     const repository = createSupabaseMeetingRecordsRepository(params.client);
-    const records = await listMeetingRecordsForCalendarEvents(repository, {
+    const records = await listMeetingRecordsForCalendarEventLookups(repository, {
       userId: params.userId,
-      calendarSourceSystemId: "executive_brief",
-      calendarEventIds: meetingCalendarEventIds
+      lookups: meetingCalendarLookups
     });
 
     return Object.fromEntries(records.map((record) => {

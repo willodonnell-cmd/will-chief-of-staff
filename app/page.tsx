@@ -6,6 +6,7 @@ import {
   researchMeetingContextAction,
   saveMeetingToObsidianAction
 } from "@/app/meetings/actions";
+import { MeetingResearchSummaryPanel } from "@/components/meetings/meeting-research-summary-panel";
 import { CompactExecutiveList, type CompactExecutiveListItem } from "@/components/today/compact-executive-list";
 import { ExecutiveCockpitSection } from "@/components/today/executive-cockpit-section";
 import { GlanceChip } from "@/components/today/glance-chip";
@@ -363,6 +364,7 @@ function MeetingContextList({
                 <DetailRow label="Priority Reasons" value={listDetail(item.priorityReasons)} />
                 <DetailRow label="Source" value={[item.sourceQualityLabel, item.sourceLabel].filter(Boolean).join(" · ")} />
               </div>
+              <MeetingResearchSummaryPanel status={status ?? null} />
               {item.actionLabel ? (
                 <p className="mt-3 rounded-[0.9rem] bg-[rgba(248,246,240,0.9)] px-3 py-2 text-xs leading-5 text-text-muted">
                   Action: {item.actionLabel}
@@ -401,8 +403,21 @@ function countLabel(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-export default async function TodayPage() {
-  const todayData = await getTodayPageData();
+function sanitizeFlashMessage(value?: string) {
+  return value?.replace(/-/g, " ").replace(/\b\w/g, (match) => match.toUpperCase()) ?? null;
+}
+
+type TodayPageProps = {
+  searchParams: Promise<{
+    notice?: string;
+    error?: string;
+  }>;
+};
+
+export default async function TodayPage({ searchParams }: TodayPageProps) {
+  const [{ notice, error }, todayData] = await Promise.all([searchParams, getTodayPageData()]);
+  const successMessage = sanitizeFlashMessage(notice);
+  const errorMessage = sanitizeFlashMessage(error);
 
   if (!todayData) {
     return (
@@ -428,6 +443,18 @@ export default async function TodayPage() {
         title="Executive operating surface."
         description="A thin view over the latest Executive Brief snapshot and the current task library."
       />
+
+      {(successMessage || errorMessage) ? (
+        <section
+          className={`rounded-[1.35rem] border px-4 py-3 text-sm ${
+            errorMessage
+              ? "border-[rgba(125,35,31,0.18)] bg-[rgba(125,35,31,0.08)] text-[rgb(125,35,31)]"
+              : "border-[rgba(36,92,62,0.18)] bg-[rgba(36,92,62,0.08)] text-[rgb(36,92,62)]"
+          }`}
+        >
+          {errorMessage ?? successMessage}
+        </section>
+      ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <GlanceChip

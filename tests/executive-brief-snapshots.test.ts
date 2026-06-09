@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   isExecutiveBriefBundleSubject,
+  listExecutiveBriefSnapshotsForUser,
   parseExecutiveBriefBundleEmail
 } from "../lib/brief/executive-brief-snapshots";
 
@@ -227,4 +228,96 @@ test("normalizes old thin Executive Brief bundles without requiring metadata", (
   assert.equal(item?.sourceUrl, null);
   assert.deepEqual(item?.sourceRefs, []);
   assert.deepEqual(item?.attendees, []);
+});
+
+test("loads rich json bundle metadata when stored structured brief was produced by an older thin parser", async () => {
+  const row = {
+    id: "snapshot-rich-json",
+    subject: "BLACKHAWK_BRIEF_BUNDLE Metadata Test",
+    slot: "Manual",
+    generated_at: "2026-06-09T05:04:05.000Z",
+    display_date: "June 8, 2026",
+    raw_email_body: "Human brief\nBLACKHAWK_JSON_START\n{}\nBLACKHAWK_JSON_END",
+    human_brief: "Human brief",
+    json_bundle: {
+      contract_version: "executive_brief.v1",
+      top_3_executive_moves: [
+        {
+          id: "email-camel",
+          title: "Confirm calendar deliverables",
+          summary: "Camille sent the source email.",
+          sourceLane: "email",
+          sourceRefs: [{ sourceType: "outlook", url: "https://outlook.example/message" }],
+          senderName: "Camille Garcia-Wong",
+          senderEmail: "camille@example.com",
+          sourceUrl: "https://outlook.example/message",
+          sourceLabel: "BP Planning Calendar",
+          receivedAt: "2026-06-09T05:00:00.000Z"
+        }
+      ],
+      meeting_prep: [
+        {
+          id: "meeting-camel",
+          title: "Rabine & Prologis catch-up",
+          sourceLane: "calendar_meetings",
+          sourceUrl: "https://outlook.example/calendar",
+          startAt: "2026-06-09T18:00:00.000Z",
+          endAt: "2026-06-09T18:30:00.000Z",
+          attendees: [{ name: "Will O'Donnell", email: "will@example.com", responseStatus: "accepted" }],
+          organizerName: "Kristina Nicolaou",
+          organizerEmail: "kristina@example.com",
+          locationOrLink: "Conference Room"
+        }
+      ]
+    },
+    structured_brief: {
+      commandSummary: [],
+      topMoves: [
+        {
+          id: "email-camel",
+          title: "Confirm calendar deliverables",
+          summary: "Camille sent the source email.",
+          source: null,
+          priority: null,
+          recommendedAction: null,
+          dueAt: null
+        }
+      ],
+      decisionsNeeded: [],
+      meetingPrep: [],
+      carryForward: [],
+      taskCandidates: []
+    },
+    contract_version: "executive_brief.v1",
+    validation_warnings: [],
+    source_message_id: "message-rich-json",
+    created_at: "2026-06-09T05:05:00.000Z"
+  };
+  const query = {
+    select: () => query,
+    eq: () => query,
+    order: () => query,
+    returns: () => Promise.resolve({ data: [row], error: null })
+  };
+  const fakeClient = {
+    from: () => query
+  };
+
+  const snapshots = await listExecutiveBriefSnapshotsForUser({
+    client: fakeClient as never,
+    userId: "user-1"
+  });
+
+  const emailItem = snapshots[0]?.structuredBrief?.topMoves[0];
+  const meetingItem = snapshots[0]?.structuredBrief?.meetingPrep[0];
+  assert.equal(emailItem?.sourceLane, "email");
+  assert.equal(emailItem?.senderName, "Camille Garcia-Wong");
+  assert.equal(emailItem?.senderEmail, "camille@example.com");
+  assert.equal(emailItem?.sourceUrl, "https://outlook.example/message");
+  assert.deepEqual(emailItem?.sourceRefs, [{ sourceType: "outlook", url: "https://outlook.example/message" }]);
+  assert.equal(meetingItem?.sourceLane, "calendar_meetings");
+  assert.equal(meetingItem?.startAt, "2026-06-09T18:00:00.000Z");
+  assert.deepEqual(meetingItem?.attendees, [
+    { name: "Will O'Donnell", email: "will@example.com", responseStatus: "accepted" }
+  ]);
 });

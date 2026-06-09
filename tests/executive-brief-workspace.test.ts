@@ -50,6 +50,8 @@ function buildData(sourceUrl: string | null): ExecutiveBriefPageData {
             summary: "Prepare the approval path.",
             source: "Calendar",
             sourceLane: "calendar_meetings",
+            calendarEventId: "event-1",
+            calendarSourceSystemId: "outlook",
             priority: "medium",
             recommendedAction: "Prepare",
             dueAt: null,
@@ -103,4 +105,110 @@ test("Executive Brief cards render Open Source only for sourceUrl and Open in Br
 
   assert.doesNotMatch(fallbackText, /Open Source/);
   assert.match(fallbackText, /Open in Brief/);
+});
+
+test("Executive Brief source lanes collapse duplicate cards from the same original source", () => {
+  const data = buildData("https://outlook.example/message-1");
+  const structuredBrief = data.latestSnapshot!.structuredBrief!;
+  const duplicateSource = "https://outlook.example/message-1";
+
+  data.latestSnapshot!.structuredBrief = {
+    ...structuredBrief,
+    decisionsNeeded: [
+      {
+        id: "decision-email-1",
+        title: "Decide what the BP Planning Calendar milestones require",
+        summary: null,
+        source: "Outlook",
+        sourceLane: "email",
+        sourceLabel: "Approval thread",
+        sourceUrl: duplicateSource,
+        senderName: "Maya Finance",
+        senderEmail: "maya@example.com",
+        priority: null,
+        recommendedAction: null,
+        dueAt: null,
+        attendees: []
+      }
+    ],
+    taskCandidates: [
+      {
+        id: "task-email-1",
+        title: "Confirm BP Planning Calendar deliverables",
+        summary: null,
+        source: "Outlook",
+        sourceLane: "email",
+        sourceLabel: "Approval thread",
+        sourceUrl: duplicateSource,
+        senderName: "Maya Finance",
+        senderEmail: "maya@example.com",
+        priority: "high",
+        recommendedAction: null,
+        dueAt: null,
+        attendees: []
+      }
+    ]
+  };
+
+  const text = renderWorkspaceText(data);
+
+  assert.equal(text.split("Reply to Maya").length - 1, 1);
+  assert.equal(text.split("Decide what the BP Planning Calendar milestones require").length - 1, 0);
+  assert.equal(text.split("Confirm BP Planning Calendar deliverables").length - 1, 0);
+});
+
+test("Executive Brief meeting cards render saved research summary and adapter limits", () => {
+  const data = buildData("https://outlook.example/message-1");
+  data.meetingRecordStatuses = {
+    "event-1": {
+      id: "meeting-record-1",
+      calendarEventId: "event-1",
+      researchStatus: "researched",
+      researchCompletedAt: "2026-06-08T21:00:00.000Z",
+      researchSummary: {
+        meetingRecordId: "meeting-record-1",
+        generatedAt: "2026-06-08T21:00:00.000Z",
+        sourceCoverage: [
+          {
+            sourceType: "calendar_event_details",
+            used: true,
+            itemCount: 1,
+            internalOnlyReason: null
+          },
+          {
+            sourceType: "outlook",
+            used: false,
+            itemCount: 0,
+            internalOnlyReason: "Meeting-specific Outlook source adapter is not available in this phase."
+          }
+        ],
+        calendarEventDetails: null,
+        highLevelContext: "Calendar-backed context is saved for this meeting.",
+        recentRelevantActivity: [],
+        situationRead: null,
+        keyPriorities: [
+          {
+            title: "Confirm prep owner",
+            reason: "The meeting needs a named owner.",
+            sourceRefs: []
+          }
+        ],
+        suggestedQuestions: [],
+        relevantLinks: [],
+        taskCandidates: []
+      },
+      transcriptStatus: "none",
+      taskCandidateCount: 0,
+      taskCandidates: [],
+      obsidianExportStatus: "not_exported"
+    }
+  };
+
+  const text = renderWorkspaceText(data);
+
+  assert.match(text, /Research Context/);
+  assert.match(text, /Calendar-backed context is saved for this meeting/);
+  assert.match(text, /Confirm prep owner: The meeting needs a named owner/);
+  assert.match(text, /Used sources: Calendar Event Details \(1\)/);
+  assert.match(text, /Unavailable adapters: Outlook: Meeting-specific Outlook source adapter is not available in this phase/);
 });
