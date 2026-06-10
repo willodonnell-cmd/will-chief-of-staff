@@ -221,7 +221,13 @@ export async function handleAgentBriefIngestRequest(request: Request, dependenci
   const db = dependencies.db ?? runtimeD1Database();
   const repository = dependencies.repository ?? (db ? createExecutiveBriefD1Repository(db) : null);
   if (!repository) {
-    return jsonResponse({ error: "d1_binding_unavailable" }, { status: 503 });
+    return jsonResponse(
+      {
+        error: "d1_binding_unavailable",
+        message: "D1 binding DB is unavailable; configure the Codex Sites D1 binding before running the proof workflow."
+      },
+      { status: 503 }
+    );
   }
 
   const jsonBundle = pickJsonBundle(payload);

@@ -77,6 +77,21 @@ The script:
 
 If this fails, keep `BLACKHAWK_BRIEF_SOURCE=supabase`, keep `BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true`, and treat D1 as non-production until the proof lane is repaired.
 
+## Live Proof Checklist
+
+Use this checklist before attempting a real Sites/D1 proof against a preview or hosted runtime. This PR is safe to merge only as a non-production proof lane. It does not deploy Sites, does not make D1 the production source of truth, and does not remove CloudMailIn.
+
+1. Select or provision one Codex Sites project for this app. `.openai/hosting.json` currently declares only the logical binding metadata; it intentionally has no `project_id` until a Sites project is provisioned.
+2. Bind a D1 database to the Sites project with logical binding name `DB`. The runtime guard returns `d1_binding_unavailable` from `POST /api/brief/agent-ingest` and reports `d1BindingAvailable: false` from `GET /api/sites-d1-health` until this binding exists.
+3. Apply `drizzle/0001_sites_d1_initial.sql` to that D1 database before posting proof payloads.
+4. Configure runtime env vars with `BLACKHAWK_BRIEF_SOURCE=supabase`, `BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true`, `BLACKHAWK_PRIMARY_USER_ID`, `BLACKHAWK_PRIMARY_USER_EMAIL`, and `BLACKHAWK_AGENT_INGEST_SECRET`. Keep `BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST=false` unless intentionally proving workspace-header writes.
+5. Confirm the app still builds and tests locally with `npm run verify`.
+6. Run `npm run prove:sites-d1-brief-ingest -- --base-url <preview-or-sites-url>` with `BLACKHAWK_AGENT_INGEST_SECRET` set locally to the same shared secret.
+7. Verify both `GET /api/sites-d1-health` and `/sites-d1-health` show the latest D1 snapshot produced by the proof run.
+8. Inspect the proof response and D1 records for structured-only storage. The unsafe fixture should report sanitized `excludedColumns`; the D1 schema should not contain raw email, raw Graph payload, protected-context, or CloudMailIn raw payload columns.
+9. Confirm `/brief` remains Supabase-backed. Rendering from D1 is not implemented on this branch.
+10. Roll back by leaving or restoring `BLACKHAWK_BRIEF_SOURCE=supabase`, keeping `BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true`, and stopping posts to `/api/brief/agent-ingest`.
+
 ## Parallel-Run Health
 
 Use these routes to inspect the new lane without changing the current production brief path:

@@ -231,6 +231,48 @@ test("agent brief ingest rejects oversized payloads before persistence", async (
   }
 });
 
+test("agent brief ingest reports a clear error when D1 is unavailable", async () => {
+  const previousPrimaryEmail = process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
+  const previousSecret = process.env.BLACKHAWK_AGENT_INGEST_SECRET;
+  process.env.BLACKHAWK_PRIMARY_USER_EMAIL = "will@example.com";
+  process.env.BLACKHAWK_AGENT_INGEST_SECRET = "proof-secret";
+
+  try {
+    const response = await handleAgentBriefIngestRequest(
+      new Request("http://localhost/api/brief/agent-ingest", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-blackhawk-agent-ingest-secret": "proof-secret"
+        },
+        body: JSON.stringify({
+          json_bundle: {
+            contract_version: "executive_brief.v1",
+            command_summary: ["Confirm Sites D1 binding."]
+          }
+        })
+      })
+    );
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: "d1_binding_unavailable",
+      message: "D1 binding DB is unavailable; configure the Codex Sites D1 binding before running the proof workflow."
+    });
+  } finally {
+    if (previousPrimaryEmail === undefined) {
+      delete process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
+    } else {
+      process.env.BLACKHAWK_PRIMARY_USER_EMAIL = previousPrimaryEmail;
+    }
+    if (previousSecret === undefined) {
+      delete process.env.BLACKHAWK_AGENT_INGEST_SECRET;
+    } else {
+      process.env.BLACKHAWK_AGENT_INGEST_SECRET = previousSecret;
+    }
+  }
+});
+
 test("agent brief ingest rejects mismatched workspace users", async () => {
   const previousPrimaryEmail = process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
   const previousWorkspaceIngest = process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST;
