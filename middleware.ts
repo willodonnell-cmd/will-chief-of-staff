@@ -22,24 +22,24 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const supabase = createServerClient(url, anonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet: CookieToSet[]) {
-        response = NextResponse.next({
-          request
-        });
-
-        cookiesToSet.forEach(({ name, value, options }: CookieToSet) => {
-          response.cookies.set(name, value, options);
-        });
-      }
-    }
-  });
-
   try {
+    const supabase = createServerClient(url, anonKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet: CookieToSet[]) {
+          response = NextResponse.next({
+            request
+          });
+
+          cookiesToSet.forEach(({ name, value, options }: CookieToSet) => {
+            response.cookies.set(name, value, options);
+          });
+        }
+      }
+    });
+
     await withSupabaseTimeout(supabase.auth.getUser(), 1500);
   } catch {
     return response;
