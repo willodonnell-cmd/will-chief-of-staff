@@ -188,7 +188,7 @@ mkdirSync(serverRoot, { recursive: true });
 mkdirSync(resolve(distRoot, "client"), { recursive: true });
 mkdirSync(resolve(distRoot, ".openai"), { recursive: true });
 
-cpSync(resolve(openNextRoot, "worker.js"), resolve(serverRoot, "opennext-worker.js"));
+cpSync(resolve(openNextRoot, "worker.js"), resolve(serverRoot, "index.js"));
 for (const entry of ["cloudflare", "middleware", "server-functions", ".build"]) {
   cpSync(resolve(openNextRoot, entry), resolve(serverRoot, entry), { recursive: true });
 }
@@ -198,46 +198,6 @@ cpSync(resolve(repoRoot, "drizzle"), resolve(distRoot, ".openai/drizzle"), { rec
 
 // Sites rejects this generated SQL manifest as an unsupported artifact content type.
 rmSync(resolve(serverRoot, "cloudflare/cache-assets-manifest.sql"), { force: true });
-
-writeFileSync(
-  resolve(serverRoot, "index.js"),
-  `function serializeStartupError(error) {
-  const name = error && typeof error === "object" && "name" in error ? String(error.name) : "Error";
-  const message = error && typeof error === "object" && "message" in error ? String(error.message) : String(error);
-  const stack = error && typeof error === "object" && "stack" in error ? String(error.stack) : message;
-
-  return JSON.stringify(
-    {
-      ok: false,
-      source: "sites-opennext-startup",
-      name,
-      message,
-      stack: stack.split("\\n").slice(0, 12).join("\\n")
-    },
-    null,
-    2
-  );
-}
-
-export default {
-  async fetch(request, env, ctx) {
-    try {
-      const worker = await import("./opennext-worker.js");
-      return await worker.default.fetch(request, env, ctx);
-    } catch (error) {
-      console.error("[sites-opennext-startup]", error);
-      return new Response(serializeStartupError(error), {
-        status: 500,
-        headers: {
-          "content-type": "application/json; charset=utf-8",
-          "cache-control": "no-store"
-        }
-      });
-    }
-  }
-};
-`
-);
 
 mkdirSync(dirname(outputPath), { recursive: true });
 rmSync(outputPath, { force: true });
