@@ -41,6 +41,7 @@ import * as __sitesStream from "node:stream";
 import * as __sitesStreamWeb from "node:stream/web";
 import * as __sitesUrl from "node:url";
 import * as __sitesUtil from "node:util";
+import * as __sitesVm from "node:vm";
 import * as __sitesZlib from "node:zlib";
 
 const __sitesBuiltinRequire = {
@@ -62,6 +63,8 @@ const __sitesBuiltinRequire = {
   "url": __sitesUrl,
   "node:url": __sitesUrl,
   "util": __sitesUtil,
+  "vm": __sitesVm,
+  "node:vm": __sitesVm,
   "node:zlib": __sitesZlib,
   "@builder.io/partytown/integration": {}
 };
