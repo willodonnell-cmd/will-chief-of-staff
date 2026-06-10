@@ -415,7 +415,13 @@ type TodayPageProps = {
 };
 
 export default async function TodayPage({ searchParams }: TodayPageProps) {
-  const [{ notice, error }, todayData] = await Promise.all([searchParams, getTodayPageData()]);
+  const [{ notice, error }, todayData] = await Promise.all([
+    searchParams,
+    getTodayPageData().catch((dataError) => {
+      console.error("[today] Failed to load Today page data.", dataError);
+      return null;
+    })
+  ]);
   const successMessage = sanitizeFlashMessage(notice);
   const errorMessage = sanitizeFlashMessage(error);
 
