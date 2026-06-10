@@ -6,6 +6,8 @@
     "dev": "WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 next dev",
     "build": "next build",
     "build:sites": "WRANGLER_LOG_PATH=.local/wrangler opennextjs-cloudflare build",
+    "package:sites": "node scripts/package-sites-open-next.mjs",
+    "build:sites:archive": "npm run build:sites && npm run package:sites",
     "preview:sites": "WRANGLER_LOG_PATH=.local/wrangler opennextjs-cloudflare build && WRANGLER_LOG_PATH=.local/wrangler opennextjs-cloudflare preview",
     "cf-typegen": "WRANGLER_LOG_PATH=.local/wrangler wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "start": "next start",

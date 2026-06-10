@@ -8,7 +8,7 @@ Blackhawk is moving toward a new Codex Sites project with D1 as the durable stru
 - The proof-lane Sites project is provisioned as `appgprj_6a28ad7865e481918da8c34aa89a5e4c`.
 - The logical D1 binding is `DB`.
 - The initial D1 schema is `drizzle/0001_sites_d1_initial.sql`, with table names and slot constants mirrored in `db/schema.ts`.
-- OpenNext/Cloudflare Worker build metadata lives in `open-next.config.ts` and `wrangler.jsonc`; `npm run build:sites` produces the Worker artifact.
+- OpenNext/Cloudflare Worker build metadata lives in `open-next.config.ts` and `wrangler.jsonc`; `npm run build:sites:archive` produces the Worker artifact and packages it into the `dist/` layout accepted by Sites.
 - The app uses the Sites workspace-authenticated user email header for Will's single-user workspace mapping. Local fallback values are `BLACKHAWK_PRIMARY_USER_ID` and `BLACKHAWK_PRIMARY_USER_EMAIL`.
 
 ## Direct Agent Brief Ingest
@@ -84,7 +84,7 @@ If this fails, keep `BLACKHAWK_BRIEF_SOURCE=supabase`, keep `BLACKHAWK_CLOUDMAIL
 Use this checklist before attempting a real Sites/D1 proof against a preview or hosted runtime. This PR is safe to merge only as a non-production proof lane. It does not deploy Sites, does not make D1 the production source of truth, and does not remove CloudMailIn.
 
 1. Reuse the provisioned Codex Sites project in `.openai/hosting.json`; do not create a second Sites project for this proof lane.
-2. Build the Worker-compatible artifact with `npm run build:sites`. The route code reads D1 from OpenNext's Cloudflare runtime context and still falls back to the local `globalThis.__BLACKHAWK_D1_DB__` test hook.
+2. Build and package the Worker-compatible artifact with `npm run build:sites:archive`. The route code reads D1 from OpenNext's Cloudflare runtime context and still falls back to the local `globalThis.__BLACKHAWK_D1_DB__` test hook.
 3. Bind a D1 database to the Sites project with logical binding name `DB`. The runtime guard returns `d1_binding_unavailable` from `POST /api/brief/agent-ingest` and reports `d1BindingAvailable: false` from `GET /api/sites-d1-health` until this binding exists.
 4. If using raw Wrangler outside Codex Sites, add the matching `d1_databases` entry to `wrangler.jsonc` with `binding: "DB"`, the selected `database_name`, and the Cloudflare `database_id`. Do not commit placeholder database ids.
 5. Apply `drizzle/0001_sites_d1_initial.sql` to that D1 database before posting proof payloads.
@@ -160,3 +160,12 @@ Rollback is to keep `BLACKHAWK_BRIEF_SOURCE=supabase`, keep `BLACKHAWK_CLOUDMAIL
 ## Known Deployment Blocker
 
 This branch now includes initial OpenNext metadata for a Cloudflare Worker-compatible build path, but it has not yet been deployed through Codex Sites with a live `DB` binding. Until `npm run build:sites`, Sites version save/deploy, D1 migration, and `npm run prove:sites-d1-brief-ingest` all succeed against a hosted URL, this branch remains the D1 proof lane rather than a production Sites cutover.
+
+## Current Sites Proof Status
+
+- Sites project: `appgprj_6a28ad7865e481918da8c34aa89a5e4c`.
+- Deployed URL: `https://will-chief-of-staff.prologis.chatgpt-team.site`.
+- Saved version `1` proved source-only save/deploy reaches the Sites builder, but failed because source deployment did not preserve the full OpenNext relative module layout.
+- Saved version `2` proved the `dist/server/index.js` artifact layout fixes missing OpenNext modules, but failed because Sites rejected the generated `dist/server/cloudflare/cache-assets-manifest.sql` content type.
+- Saved version `3` deployed successfully after packaging the OpenNext output as `dist/server/index.js` and omitting `cache-assets-manifest.sql`.
+- Unauthenticated script access is blocked by Sites OAuth before reaching `/api/sites-d1-health`, so `npm run prove:sites-d1-brief-ingest` still needs an authenticated proof path or an access model that permits the proof script to reach the API route.
