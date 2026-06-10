@@ -1,6 +1,6 @@
 /* global console, process */
 
-import { cpSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -20,6 +20,64 @@ function requirePath(path) {
   }
 }
 
+function patchOpenNextServerHandler() {
+  const handlerPath = resolve(openNextRoot, "server-functions/default/handler.mjs");
+  const source = readFileSync(handlerPath, "utf8");
+
+  if (source.includes("__sitesBuiltinRequire")) {
+    return;
+  }
+
+  writeFileSync(
+    handlerPath,
+    `import * as __sitesAsyncHooks from "node:async_hooks";
+import * as __sitesBuffer from "node:buffer";
+import * as __sitesCrypto from "node:crypto";
+import * as __sitesOs from "node:os";
+import * as __sitesPath from "node:path";
+import * as __sitesStream from "node:stream";
+import * as __sitesStreamWeb from "node:stream/web";
+import * as __sitesUrl from "node:url";
+import * as __sitesUtil from "node:util";
+import * as __sitesZlib from "node:zlib";
+
+const __sitesBuiltinRequire = {
+  "async_hooks": __sitesAsyncHooks,
+  "node:async_hooks": __sitesAsyncHooks,
+  "buffer": __sitesBuffer,
+  "node:buffer": __sitesBuffer,
+  "crypto": __sitesCrypto,
+  "node:crypto": __sitesCrypto,
+  "node:os": __sitesOs,
+  "path": __sitesPath,
+  "node:path": __sitesPath,
+  "stream": __sitesStream,
+  "node:stream": __sitesStream,
+  "node:stream/web": __sitesStreamWeb,
+  "url": __sitesUrl,
+  "node:url": __sitesUrl,
+  "util": __sitesUtil,
+  "node:zlib": __sitesZlib,
+  "@builder.io/partytown/integration": {}
+};
+
+if (typeof globalThis.require !== "function") {
+  Object.defineProperty(globalThis, "require", {
+    configurable: true,
+    value(specifier) {
+      if (specifier in __sitesBuiltinRequire) {
+        return __sitesBuiltinRequire[specifier];
+      }
+
+      throw new Error(\`Unsupported dynamic require in Sites OpenNext bundle: \${specifier}\`);
+    }
+  });
+}
+
+${source}`
+  );
+}
+
 requirePath(resolve(openNextRoot, "worker.js"));
 requirePath(resolve(openNextRoot, "cloudflare"));
 requirePath(resolve(openNextRoot, "middleware"));
@@ -28,6 +86,8 @@ requirePath(resolve(openNextRoot, ".build"));
 requirePath(resolve(openNextRoot, "assets"));
 requirePath(resolve(repoRoot, ".openai/hosting.json"));
 requirePath(resolve(repoRoot, "drizzle"));
+
+patchOpenNextServerHandler();
 
 rmSync(stagingRoot, { force: true, recursive: true });
 mkdirSync(serverRoot, { recursive: true });
