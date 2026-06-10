@@ -13,6 +13,33 @@ const outputPath = resolve(
 const stagingRoot = resolve(repoRoot, ".local/sites-artifact/staging");
 const distRoot = resolve(stagingRoot, "dist");
 const serverRoot = resolve(distRoot, "server");
+const supportedRequireSpecifiers = new Set([
+  "@builder.io/partytown/integration",
+  "async_hooks",
+  "node:async_hooks",
+  "buffer",
+  "node:buffer",
+  "crypto",
+  "node:crypto",
+  "fs",
+  "node:fs",
+  "node:fs/promises",
+  "http",
+  "https",
+  "node:child_process",
+  "node:os",
+  "path",
+  "node:path",
+  "stream",
+  "node:stream",
+  "node:stream/web",
+  "url",
+  "node:url",
+  "util",
+  "vm",
+  "node:vm",
+  "node:zlib"
+]);
 
 function requirePath(path) {
   if (!existsSync(path)) {
@@ -20,13 +47,40 @@ function requirePath(path) {
   }
 }
 
+function assertSupportedStaticRequireSpecifiers(source) {
+  const requireSpecifiers = new Set(
+    [...source.matchAll(/require\((["'`])([^"'`]+)\1\)/g)].map((match) => match[2])
+  );
+  const unsupported = [...requireSpecifiers]
+    .filter((specifier) => !supportedRequireSpecifiers.has(specifier))
+    .sort();
+
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Unsupported static dynamic require specifier(s) in OpenNext handler: ${unsupported.join(", ")}`
+    );
+  }
+}
+
+function removeExistingSitesRequireShim(source) {
+  if (!source.includes("__sitesBuiltinRequire")) {
+    return source;
+  }
+
+  const nextBundleStart = source.indexOf(
+    'import {setInterval, clearInterval, setTimeout, clearTimeout} from "node:timers"'
+  );
+  if (nextBundleStart === -1) {
+    throw new Error("Unable to replace existing Sites OpenNext require shim.");
+  }
+
+  return source.slice(nextBundleStart);
+}
+
 function patchOpenNextServerHandler() {
   const handlerPath = resolve(openNextRoot, "server-functions/default/handler.mjs");
-  const source = readFileSync(handlerPath, "utf8");
-
-  if (source.includes("__sitesBuiltinRequire")) {
-    return;
-  }
+  const source = removeExistingSitesRequireShim(readFileSync(handlerPath, "utf8"));
+  assertSupportedStaticRequireSpecifiers(source);
 
   writeFileSync(
     handlerPath,
@@ -44,6 +98,35 @@ import * as __sitesUtil from "node:util";
 import * as __sitesVm from "node:vm";
 import * as __sitesZlib from "node:zlib";
 
+class __SitesNoopAgent {
+  constructor(options = {}) {
+    this.options = options;
+    this.keepAlive = Boolean(options.keepAlive);
+  }
+
+  destroy() {}
+}
+
+const __sitesHttp = {
+  Agent: __SitesNoopAgent,
+  globalAgent: new __SitesNoopAgent()
+};
+const __sitesHttps = {
+  Agent: __SitesNoopAgent,
+  globalAgent: new __SitesNoopAgent()
+};
+const __sitesChildProcess = new Proxy({}, {
+  get(_target, property) {
+    if (property === "__esModule") {
+      return false;
+    }
+
+    return () => {
+      throw new Error(\`node:child_process.\${String(property)} is unavailable in Sites Workers runtime\`);
+    };
+  }
+});
+
 const __sitesBuiltinRequire = {
   "async_hooks": __sitesAsyncHooks,
   "node:async_hooks": __sitesAsyncHooks,
@@ -54,6 +137,9 @@ const __sitesBuiltinRequire = {
   "fs": __sitesFs,
   "node:fs": __sitesFs,
   "node:fs/promises": __sitesFsPromises,
+  "http": __sitesHttp,
+  "https": __sitesHttps,
+  "node:child_process": __sitesChildProcess,
   "node:os": __sitesOs,
   "path": __sitesPath,
   "node:path": __sitesPath,
