@@ -33,6 +33,7 @@ test("D1 schema keeps the current Executive Brief slot contract", () => {
   assert.match(migrationSql, new RegExp(`CREATE TABLE IF NOT EXISTS ${D1_TABLES.executiveBriefSnapshots}`));
   assert.match(migrationSql, new RegExp(`CREATE TABLE IF NOT EXISTS ${D1_TABLES.executiveBriefTaskCandidates}`));
   assert.match(migrationSql, /status TEXT NOT NULL DEFAULT 'candidate'/);
+  assert.match(migrationSql, /UNIQUE\(user_id, dedupe_key\)/);
 });
 
 test("D1 migration schema does not introduce excluded raw or protected columns", () => {

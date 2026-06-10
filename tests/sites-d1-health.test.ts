@@ -8,11 +8,13 @@ test("Sites D1 health reports configuration without requiring a local D1 binding
   const previousBriefSource = process.env.BLACKHAWK_BRIEF_SOURCE;
   const previousPrimaryEmail = process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
   const previousSecret = process.env.BLACKHAWK_AGENT_INGEST_SECRET;
+  const previousAliasSecret = process.env.BLACKHAWK_BRIEF_INGEST_SECRET;
   const previousFallback = process.env.BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE;
 
   process.env.BLACKHAWK_BRIEF_SOURCE = "parallel";
   process.env.BLACKHAWK_PRIMARY_USER_EMAIL = "will@example.com";
-  process.env.BLACKHAWK_AGENT_INGEST_SECRET = "secret";
+  delete process.env.BLACKHAWK_AGENT_INGEST_SECRET;
+  process.env.BLACKHAWK_BRIEF_INGEST_SECRET = "secret";
   process.env.BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE = "true";
 
   try {
@@ -41,6 +43,11 @@ test("Sites D1 health reports configuration without requiring a local D1 binding
       delete process.env.BLACKHAWK_AGENT_INGEST_SECRET;
     } else {
       process.env.BLACKHAWK_AGENT_INGEST_SECRET = previousSecret;
+    }
+    if (previousAliasSecret === undefined) {
+      delete process.env.BLACKHAWK_BRIEF_INGEST_SECRET;
+    } else {
+      process.env.BLACKHAWK_BRIEF_INGEST_SECRET = previousAliasSecret;
     }
     if (previousFallback === undefined) {
       delete process.env.BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE;

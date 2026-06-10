@@ -44,6 +44,13 @@ function briefSourceMode(): SitesD1Health["briefSourceMode"] {
   return "supabase";
 }
 
+function ingestSecretConfigured() {
+  return Boolean(
+    process.env.BLACKHAWK_AGENT_INGEST_SECRET?.trim() ||
+      process.env.BLACKHAWK_BRIEF_INGEST_SECRET?.trim()
+  );
+}
+
 async function latestSnapshot(db: D1Database | null) {
   if (!db) {
     return null;
@@ -78,9 +85,9 @@ export async function loadSitesD1Health(): Promise<SitesD1Health> {
     d1BindingName: D1_BINDING_NAME,
     d1BindingAvailable: Boolean(db),
     briefSourceMode: briefSourceMode(),
-    workspaceIngestEnabled: process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST !== "false",
+    workspaceIngestEnabled: process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST === "true",
     primaryUserConfigured: Boolean(process.env.BLACKHAWK_PRIMARY_USER_EMAIL?.trim()),
-    agentIngestSecretConfigured: Boolean(process.env.BLACKHAWK_AGENT_INGEST_SECRET?.trim()),
+    agentIngestSecretConfigured: ingestSecretConfigured(),
     cloudMailInFallbackActive: process.env.BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE !== "false",
     latestSnapshot: await latestSnapshot(db),
     checkedAt: new Date().toISOString()

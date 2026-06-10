@@ -42,7 +42,9 @@ class FakeExecutiveBriefRepository implements ExecutiveBriefD1Repository {
 test("agent brief ingest stores structured snapshots and candidate-only tasks", async () => {
   const repository = new FakeExecutiveBriefRepository();
   const previousPrimaryEmail = process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
+  const previousWorkspaceIngest = process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST;
   process.env.BLACKHAWK_PRIMARY_USER_EMAIL = "will@example.com";
+  process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST = "true";
 
   try {
     const request = new Request("http://localhost/api/brief/agent-ingest", {
@@ -98,20 +100,27 @@ test("agent brief ingest stores structured snapshots and candidate-only tasks", 
     } else {
       process.env.BLACKHAWK_PRIMARY_USER_EMAIL = previousPrimaryEmail;
     }
+    if (previousWorkspaceIngest === undefined) {
+      delete process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST;
+    } else {
+      process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST = previousWorkspaceIngest;
+    }
   }
 });
 
 test("agent brief ingest strips unsafe fields from fixture payload before storage", async () => {
   const repository = new FakeExecutiveBriefRepository();
   const previousPrimaryEmail = process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
+  const previousSecret = process.env.BLACKHAWK_AGENT_INGEST_SECRET;
   process.env.BLACKHAWK_PRIMARY_USER_EMAIL = "will@example.com";
+  process.env.BLACKHAWK_AGENT_INGEST_SECRET = "proof-secret";
 
   try {
     const request = new Request("http://localhost/api/brief/agent-ingest", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "oai-authenticated-user-email": "will@example.com"
+        "x-blackhawk-agent-ingest-secret": "proof-secret"
       },
       body: readFileSync("fixtures/codex-sites-executive-brief-payload.json", "utf8")
     });
@@ -141,12 +150,19 @@ test("agent brief ingest strips unsafe fields from fixture payload before storag
     } else {
       process.env.BLACKHAWK_PRIMARY_USER_EMAIL = previousPrimaryEmail;
     }
+    if (previousSecret === undefined) {
+      delete process.env.BLACKHAWK_AGENT_INGEST_SECRET;
+    } else {
+      process.env.BLACKHAWK_AGENT_INGEST_SECRET = previousSecret;
+    }
   }
 });
 
 test("agent brief ingest rejects malformed JSON", async () => {
   const previousPrimaryEmail = process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
+  const previousSecret = process.env.BLACKHAWK_AGENT_INGEST_SECRET;
   process.env.BLACKHAWK_PRIMARY_USER_EMAIL = "will@example.com";
+  process.env.BLACKHAWK_AGENT_INGEST_SECRET = "proof-secret";
 
   try {
     const response = await handleAgentBriefIngestRequest(
@@ -154,7 +170,7 @@ test("agent brief ingest rejects malformed JSON", async () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "oai-authenticated-user-email": "will@example.com"
+          "x-blackhawk-agent-ingest-secret": "proof-secret"
         },
         body: "{not json"
       }),
@@ -169,13 +185,20 @@ test("agent brief ingest rejects malformed JSON", async () => {
     } else {
       process.env.BLACKHAWK_PRIMARY_USER_EMAIL = previousPrimaryEmail;
     }
+    if (previousSecret === undefined) {
+      delete process.env.BLACKHAWK_AGENT_INGEST_SECRET;
+    } else {
+      process.env.BLACKHAWK_AGENT_INGEST_SECRET = previousSecret;
+    }
   }
 });
 
 test("agent brief ingest rejects oversized payloads before persistence", async () => {
   const repository = new FakeExecutiveBriefRepository();
   const previousPrimaryEmail = process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
+  const previousSecret = process.env.BLACKHAWK_AGENT_INGEST_SECRET;
   process.env.BLACKHAWK_PRIMARY_USER_EMAIL = "will@example.com";
+  process.env.BLACKHAWK_AGENT_INGEST_SECRET = "proof-secret";
 
   try {
     const response = await handleAgentBriefIngestRequest(
@@ -184,7 +207,7 @@ test("agent brief ingest rejects oversized payloads before persistence", async (
         headers: {
           "content-type": "application/json",
           "content-length": "500",
-          "oai-authenticated-user-email": "will@example.com"
+          "x-blackhawk-agent-ingest-secret": "proof-secret"
         },
         body: JSON.stringify({ json_bundle: { task_candidates: [{ title: "Too large" }] } })
       }),
@@ -200,12 +223,19 @@ test("agent brief ingest rejects oversized payloads before persistence", async (
     } else {
       process.env.BLACKHAWK_PRIMARY_USER_EMAIL = previousPrimaryEmail;
     }
+    if (previousSecret === undefined) {
+      delete process.env.BLACKHAWK_AGENT_INGEST_SECRET;
+    } else {
+      process.env.BLACKHAWK_AGENT_INGEST_SECRET = previousSecret;
+    }
   }
 });
 
 test("agent brief ingest rejects mismatched workspace users", async () => {
   const previousPrimaryEmail = process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
+  const previousWorkspaceIngest = process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST;
   process.env.BLACKHAWK_PRIMARY_USER_EMAIL = "will@example.com";
+  process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST = "true";
 
   try {
     const response = await handleAgentBriefIngestRequest(
@@ -227,6 +257,11 @@ test("agent brief ingest rejects mismatched workspace users", async () => {
       delete process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
     } else {
       process.env.BLACKHAWK_PRIMARY_USER_EMAIL = previousPrimaryEmail;
+    }
+    if (previousWorkspaceIngest === undefined) {
+      delete process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST;
+    } else {
+      process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST = previousWorkspaceIngest;
     }
   }
 });

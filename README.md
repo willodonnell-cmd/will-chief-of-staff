@@ -10,6 +10,7 @@ Will O'Donnell's Agentic Chief of Staff.
 - The initial structured D1 schema is in [`drizzle/0001_sites_d1_initial.sql`](/Users/willodonnell/Documents/will-chief-of-staff/drizzle/0001_sites_d1_initial.sql), with table and slot constants in [`db/schema.ts`](/Users/willodonnell/Documents/will-chief-of-staff/db/schema.ts).
 - Direct Codex/GPT Executive Brief ingestion is available at `POST /api/brief/agent-ingest`. It writes structured snapshots and task candidates only; it does not auto-create durable tasks.
 - Sites/D1 parallel-run status is available at `/sites-d1-health` and `/api/sites-d1-health`.
+- The manual proof script is `npm run prove:sites-d1-brief-ingest`; it posts a fixture payload and verifies `/api/sites-d1-health` sees the new D1 snapshot.
 - Supabase, Vercel, and CloudMailIn remain parallel-run fallback infrastructure until D1 structured-read parity is verified.
 - See [`docs/sites_d1_migration.md`](/Users/willodonnell/Documents/will-chief-of-staff/docs/sites_d1_migration.md) for the structured-only migration rules and cutover notes.
 

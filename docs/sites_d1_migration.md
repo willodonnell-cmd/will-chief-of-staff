@@ -26,10 +26,56 @@ It does not create durable tasks. Durable task creation remains a separate user-
 
 Authentication uses either:
 
-- the Sites `oai-authenticated-user-email` header, matched to `BLACKHAWK_PRIMARY_USER_EMAIL` when configured; or
+- the Sites `oai-authenticated-user-email` header, matched to `BLACKHAWK_PRIMARY_USER_EMAIL` when configured, only when `BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST=true`; or
 - `x-blackhawk-agent-ingest-secret`, matched to `BLACKHAWK_AGENT_INGEST_SECRET`.
 
-The sample proof payload is checked in at `fixtures/codex-sites-executive-brief-payload.json`. It intentionally includes raw/protected fields so the sanitizer tests can prove those fields do not land in D1.
+The ingest route also accepts `BLACKHAWK_BRIEF_INGEST_SECRET` and `x-blackhawk-brief-ingest-secret` as aliases for the manual proof workflow. Prefer `BLACKHAWK_AGENT_INGEST_SECRET` for new environments.
+
+The unsafe sample proof payload is checked in at `fixtures/codex-sites-executive-brief-payload.json`. It intentionally includes raw/protected fields so the sanitizer tests can prove those fields do not land in D1. A clean contract fixture is checked in at `fixtures/codex-sites-executive-brief-valid-payload.json`.
+
+## Manual Proof Workflow
+
+Use this workflow to prove the D1 lane carries a real structured brief without changing the production `/brief` source.
+
+Required runtime environment on the server:
+
+```text
+BLACKHAWK_PRIMARY_USER_ID=will-primary
+BLACKHAWK_PRIMARY_USER_EMAIL=will@example.com
+BLACKHAWK_AGENT_INGEST_SECRET=<shared-secret>
+BLACKHAWK_BRIEF_SOURCE=supabase
+BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true
+```
+
+Required local environment for the proof command:
+
+```text
+BLACKHAWK_BASE_URL=https://your-preview-or-sites-url.example
+BLACKHAWK_AGENT_INGEST_SECRET=<same-shared-secret>
+```
+
+Run the proof against the unsafe sanitizer fixture:
+
+```bash
+npm run prove:sites-d1-brief-ingest
+```
+
+Or pass an explicit base URL and clean contract fixture:
+
+```bash
+npm run prove:sites-d1-brief-ingest -- \
+  --base-url https://your-preview-or-sites-url.example \
+  --payload fixtures/codex-sites-executive-brief-valid-payload.json
+```
+
+The script:
+
+- posts the fixture to `POST /api/brief/agent-ingest`;
+- requires the response to include `ok`, `snapshotId`, `slot`, `generatedAt`, and `taskPersistence: candidate_only`;
+- reads `GET /api/sites-d1-health`;
+- fails unless the health response reports the ingested snapshot as the latest D1 snapshot.
+
+If this fails, keep `BLACKHAWK_BRIEF_SOURCE=supabase`, keep `BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true`, and treat D1 as non-production until the proof lane is repaired.
 
 ## Parallel-Run Health
 
@@ -77,6 +123,8 @@ BLACKHAWK_BRIEF_SOURCE=d1
 ```
 
 `supabase` is the production-safe default. `parallel` should expose comparison/status surfaces while keeping the Supabase-rendered brief as the primary user experience. `d1` should not be used until direct Sites ingestion has run reliably and D1 structured reads match or improve on the Supabase brief.
+
+Rendering from D1 is not implemented yet. `/brief` remains on the existing Supabase-backed path unless a later change explicitly adds a feature-flagged D1 or parallel renderer.
 
 ## CloudMailIn Retirement Criteria
 

@@ -143,11 +143,30 @@ function pickStructuredBrief(payload: AgentBriefIngestPayload, jsonBundle: JsonV
   return normalizeExecutiveBriefJsonBundle(jsonBundle).structuredBrief;
 }
 
+function configuredIngestSecret() {
+  return (
+    process.env.BLACKHAWK_AGENT_INGEST_SECRET?.trim() ||
+    process.env.BLACKHAWK_BRIEF_INGEST_SECRET?.trim() ||
+    null
+  );
+}
+
+function providedIngestSecret(request: Request) {
+  return (
+    request.headers.get("x-blackhawk-agent-ingest-secret")?.trim() ||
+    request.headers.get("x-blackhawk-brief-ingest-secret")?.trim() ||
+    null
+  );
+}
+
 function hasAgentIngestAuthorization(request: Request, user: SitesAuthenticatedUser | null) {
-  const expectedSecret = process.env.BLACKHAWK_AGENT_INGEST_SECRET?.trim();
-  const providedSecret = request.headers.get("x-blackhawk-agent-ingest-secret")?.trim();
+  const expectedSecret = configuredIngestSecret();
+  const providedSecret = providedIngestSecret(request);
   const secretAllowed = Boolean(expectedSecret && providedSecret && expectedSecret === providedSecret);
-  const workspaceAuthAllowed = process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST !== "false" && Boolean(user);
+  const workspaceAuthAllowed =
+    process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST === "true" &&
+    Boolean(request.headers.get("oai-authenticated-user-email")?.trim()) &&
+    Boolean(user);
   return secretAllowed || workspaceAuthAllowed;
 }
 

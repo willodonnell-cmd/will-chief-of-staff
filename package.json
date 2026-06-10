@@ -16,6 +16,7 @@
     "import:agent-signals:live-example": "tsx scripts/import-agent-signals-live-example.ts",
     "smoke:agent-signals:import": "tsx scripts/smoke-test-agent-signals-import.ts",
     "smoke:priority-inbox:durable-read": "tsx scripts/smoke-test-priority-inbox-durable-read.ts",
+    "prove:sites-d1-brief-ingest": "tsx scripts/prove-sites-d1-brief-ingest.ts",
     "validate:investment-committee-cycle": "tsx scripts/validate-investment-committee-cycle.ts",
     "run:blackhawk-m365-signal-agent": "tsx src/blackhawk-m365-signal-agent/index.ts"
   },

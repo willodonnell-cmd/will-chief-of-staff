@@ -1,0 +1,122 @@
+{
+  "slot": "11 AM",
+  "generated_at": "2026-06-09T18:00:00.000Z",
+  "display_date": "Tuesday, Jun 9",
+  "source_run_id": "codex-sites-valid-example-run",
+  "json_bundle": {
+    "contract_version": "executive_brief.v1",
+    "source_coverage": [
+      {
+        "sourceType": "outlook",
+        "used": true,
+        "itemCount": 8,
+        "summary": "Reviewed priority email threads with direct Will asks."
+      },
+      {
+        "sourceType": "calendar",
+        "used": true,
+        "itemCount": 5,
+        "summary": "Reviewed today's consequential meetings."
+      },
+      {
+        "sourceType": "teams",
+        "used": true,
+        "itemCount": 4,
+        "summary": "Reviewed direct and priority Teams follow-ups."
+      }
+    ],
+    "command_summary": [
+      "Prioritize the lender memo, the IC follow-up, and the 3 PM partner sync."
+    ],
+    "top_3_executive_moves": [
+      {
+        "id": "move-lender-memo",
+        "title": "Finish lender memo",
+        "summary": "Finance comments are ready for review.",
+        "source_lane": "email",
+        "source_refs": [
+          {
+            "sourceType": "outlook",
+            "id": "message-1",
+            "url": "https://outlook.example/message-1"
+          }
+        ],
+        "priority": "high",
+        "recommended_action": "Send the revised memo before the morning review."
+      }
+    ],
+    "decisions_needed": [
+      {
+        "id": "decision-portfolio-review",
+        "title": "Decide whether to move the portfolio review",
+        "summary": "The current meeting time conflicts with lender prep.",
+        "source_lane": "calendar_meetings",
+        "source_refs": [
+          {
+            "sourceType": "calendar",
+            "id": "event-2",
+            "url": "https://outlook.example/calendar/event-2"
+          }
+        ],
+        "priority": "medium",
+        "recommended_action": "Confirm whether the review should move before the partner sync."
+      }
+    ],
+    "meeting_prep": [
+      {
+        "id": "meeting-partner-sync",
+        "title": "3 PM partner sync",
+        "summary": "Bring the IC follow-up list and lender memo status.",
+        "source_lane": "calendar_meetings",
+        "source_refs": [
+          {
+            "sourceType": "calendar",
+            "id": "event-3",
+            "url": "https://outlook.example/calendar/event-3"
+          }
+        ],
+        "priority": "high",
+        "recommended_action": "Prepare the IC follow-up list before the meeting.",
+        "start_at": "2026-06-09T22:00:00.000Z",
+        "end_at": "2026-06-09T22:30:00.000Z",
+        "timezone": "America/Los_Angeles",
+        "organizer": "Amelia Hart",
+        "organizer_email": "amelia@example.com"
+      }
+    ],
+    "carry_forward": [
+      {
+        "id": "carry-forward-data-room",
+        "title": "Data-room owner remains unresolved",
+        "summary": "The owner needs to be confirmed before the next lender package update.",
+        "source_lane": "email",
+        "source_refs": [
+          {
+            "sourceType": "outlook",
+            "id": "message-4",
+            "url": "https://outlook.example/message-4"
+          }
+        ],
+        "priority": "medium",
+        "recommended_action": "Confirm owner and deadline with Maya."
+      }
+    ],
+    "task_candidates": [
+      {
+        "id": "task-maya-lender-update",
+        "title": "Ask Maya for lender update owner",
+        "summary": "Confirm who owns the updated lender package and when it will be ready.",
+        "priority": "medium",
+        "recommended_action": "Ask Maya for owner and deadline.",
+        "due_at": "2026-06-10T00:00:00.000Z",
+        "source_refs": [
+          {
+            "sourceType": "teams",
+            "id": "chat-message-1",
+            "url": "https://teams.example/message/chat-message-1"
+          }
+        ]
+      }
+    ]
+  }
+}
