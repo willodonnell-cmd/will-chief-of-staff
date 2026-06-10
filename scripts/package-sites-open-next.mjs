@@ -33,6 +33,8 @@ function patchOpenNextServerHandler() {
     `import * as __sitesAsyncHooks from "node:async_hooks";
 import * as __sitesBuffer from "node:buffer";
 import * as __sitesCrypto from "node:crypto";
+import * as __sitesFs from "node:fs";
+import * as __sitesFsPromises from "node:fs/promises";
 import * as __sitesOs from "node:os";
 import * as __sitesPath from "node:path";
 import * as __sitesStream from "node:stream";
@@ -48,6 +50,9 @@ const __sitesBuiltinRequire = {
   "node:buffer": __sitesBuffer,
   "crypto": __sitesCrypto,
   "node:crypto": __sitesCrypto,
+  "fs": __sitesFs,
+  "node:fs": __sitesFs,
+  "node:fs/promises": __sitesFsPromises,
   "node:os": __sitesOs,
   "path": __sitesPath,
   "node:path": __sitesPath,
