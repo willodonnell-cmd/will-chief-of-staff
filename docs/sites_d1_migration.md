@@ -5,8 +5,10 @@ Blackhawk is moving toward a new Codex Sites project with D1 as the durable stru
 ## Target Runtime
 
 - Sites hosting metadata lives in `.openai/hosting.json`.
+- The proof-lane Sites project is provisioned as `appgprj_6a28ad7865e481918da8c34aa89a5e4c`.
 - The logical D1 binding is `DB`.
 - The initial D1 schema is `drizzle/0001_sites_d1_initial.sql`, with table names and slot constants mirrored in `db/schema.ts`.
+- OpenNext/Cloudflare Worker build metadata lives in `open-next.config.ts` and `wrangler.jsonc`; `npm run build:sites` produces the Worker artifact.
 - The app uses the Sites workspace-authenticated user email header for Will's single-user workspace mapping. Local fallback values are `BLACKHAWK_PRIMARY_USER_ID` and `BLACKHAWK_PRIMARY_USER_EMAIL`.
 
 ## Direct Agent Brief Ingest
@@ -81,16 +83,18 @@ If this fails, keep `BLACKHAWK_BRIEF_SOURCE=supabase`, keep `BLACKHAWK_CLOUDMAIL
 
 Use this checklist before attempting a real Sites/D1 proof against a preview or hosted runtime. This PR is safe to merge only as a non-production proof lane. It does not deploy Sites, does not make D1 the production source of truth, and does not remove CloudMailIn.
 
-1. Select or provision one Codex Sites project for this app. `.openai/hosting.json` currently declares only the logical binding metadata; it intentionally has no `project_id` until a Sites project is provisioned.
-2. Bind a D1 database to the Sites project with logical binding name `DB`. The runtime guard returns `d1_binding_unavailable` from `POST /api/brief/agent-ingest` and reports `d1BindingAvailable: false` from `GET /api/sites-d1-health` until this binding exists.
-3. Apply `drizzle/0001_sites_d1_initial.sql` to that D1 database before posting proof payloads.
-4. Configure runtime env vars with `BLACKHAWK_BRIEF_SOURCE=supabase`, `BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true`, `BLACKHAWK_PRIMARY_USER_ID`, `BLACKHAWK_PRIMARY_USER_EMAIL`, and `BLACKHAWK_AGENT_INGEST_SECRET`. Keep `BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST=false` unless intentionally proving workspace-header writes.
-5. Confirm the app still builds and tests locally with `npm run verify`.
-6. Run `npm run prove:sites-d1-brief-ingest -- --base-url <preview-or-sites-url>` with `BLACKHAWK_AGENT_INGEST_SECRET` set locally to the same shared secret.
-7. Verify both `GET /api/sites-d1-health` and `/sites-d1-health` show the latest D1 snapshot produced by the proof run.
-8. Inspect the proof response and D1 records for structured-only storage. The unsafe fixture should report sanitized `excludedColumns`; the D1 schema should not contain raw email, raw Graph payload, protected-context, or CloudMailIn raw payload columns.
-9. Confirm `/brief` remains Supabase-backed. Rendering from D1 is not implemented on this branch.
-10. Roll back by leaving or restoring `BLACKHAWK_BRIEF_SOURCE=supabase`, keeping `BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true`, and stopping posts to `/api/brief/agent-ingest`.
+1. Reuse the provisioned Codex Sites project in `.openai/hosting.json`; do not create a second Sites project for this proof lane.
+2. Build the Worker-compatible artifact with `npm run build:sites`. The route code reads D1 from OpenNext's Cloudflare runtime context and still falls back to the local `globalThis.__BLACKHAWK_D1_DB__` test hook.
+3. Bind a D1 database to the Sites project with logical binding name `DB`. The runtime guard returns `d1_binding_unavailable` from `POST /api/brief/agent-ingest` and reports `d1BindingAvailable: false` from `GET /api/sites-d1-health` until this binding exists.
+4. If using raw Wrangler outside Codex Sites, add the matching `d1_databases` entry to `wrangler.jsonc` with `binding: "DB"`, the selected `database_name`, and the Cloudflare `database_id`. Do not commit placeholder database ids.
+5. Apply `drizzle/0001_sites_d1_initial.sql` to that D1 database before posting proof payloads.
+6. Configure runtime env vars with `BLACKHAWK_BRIEF_SOURCE=supabase`, `BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true`, `BLACKHAWK_PRIMARY_USER_ID`, `BLACKHAWK_PRIMARY_USER_EMAIL`, and `BLACKHAWK_AGENT_INGEST_SECRET`. Keep `BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST=false` unless intentionally proving workspace-header writes.
+7. Confirm the app still builds and tests locally with `npm run verify`.
+8. Run `npm run prove:sites-d1-brief-ingest -- --base-url <preview-or-sites-url>` with `BLACKHAWK_AGENT_INGEST_SECRET` set locally to the same shared secret.
+9. Verify both `GET /api/sites-d1-health` and `/sites-d1-health` show the latest D1 snapshot produced by the proof run.
+10. Inspect the proof response and D1 records for structured-only storage. The unsafe fixture should report sanitized `excludedColumns`; the D1 schema should not contain raw email, raw Graph payload, protected-context, or CloudMailIn raw payload columns.
+11. Confirm `/brief` remains Supabase-backed. Rendering from D1 is not implemented on this branch.
+12. Roll back by leaving or restoring `BLACKHAWK_BRIEF_SOURCE=supabase`, keeping `BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true`, and stopping posts to `/api/brief/agent-ingest`.
 
 ## Parallel-Run Health
 
@@ -155,4 +159,4 @@ Rollback is to keep `BLACKHAWK_BRIEF_SOURCE=supabase`, keep `BLACKHAWK_CLOUDMAIL
 
 ## Known Deployment Blocker
 
-This branch adds Sites metadata and D1 contracts, but the app still builds as a Next.js artifact. Before production Sites deployment, the repo needs a confirmed Cloudflare Worker-compatible build path, likely OpenNext or an equivalent Sites-supported build artifact. Until that is proven, this branch should be treated as the D1 proof lane rather than a deployable Sites cutover.
+This branch now includes initial OpenNext metadata for a Cloudflare Worker-compatible build path, but it has not yet been deployed through Codex Sites with a live `DB` binding. Until `npm run build:sites`, Sites version save/deploy, D1 migration, and `npm run prove:sites-d1-brief-ingest` all succeed against a hosted URL, this branch remains the D1 proof lane rather than a production Sites cutover.

@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 next dev",
     "build": "next build",
+    "build:sites": "WRANGLER_LOG_PATH=.local/wrangler opennextjs-cloudflare build",
+    "preview:sites": "WRANGLER_LOG_PATH=.local/wrangler opennextjs-cloudflare build && WRANGLER_LOG_PATH=.local/wrangler opennextjs-cloudflare preview",
+    "cf-typegen": "WRANGLER_LOG_PATH=.local/wrangler wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "start": "next start",
     "test": "tsx --test tests/*.test.ts",
     "lint": "eslint app components lib scripts tests trigger middleware.ts next.config.ts tailwind.config.ts --ext .ts,.tsx",
@@ -35,6 +38,7 @@
     "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.19.11",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
@@ -46,6 +50,7 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.22.3",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.29.1"
+    "typescript-eslint": "^8.29.1",
+    "wrangler": "^4.86.0"
   }
 }

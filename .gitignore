@@ -1,7 +1,9 @@
 .next
+.open-next
 .next-build
 node_modules
 .vercel
+.wrangler
 dist
 coverage
 *.log

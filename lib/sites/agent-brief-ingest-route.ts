@@ -14,6 +14,7 @@ import {
 import { sanitizeStructuredOnlyJson } from "@/lib/d1/structured-migration";
 import type { D1Database } from "@/lib/d1/types";
 import { resolveSitesAuthenticatedUser, type SitesAuthenticatedUser } from "@/lib/sites/authenticated-user";
+import { loadRuntimeD1Database } from "@/lib/sites/runtime-d1";
 
 export type AgentBriefIngestDependencies = {
   repository?: ExecutiveBriefD1Repository;
@@ -45,21 +46,11 @@ type AgentBriefIngestPayload = {
   source_run_id?: unknown;
 };
 
-type GlobalWithD1 = typeof globalThis & {
-  DB?: D1Database;
-  __BLACKHAWK_D1_DB__?: D1Database;
-};
-
 type BoundedJsonPayloadResult =
   | { payload: AgentBriefIngestPayload }
   | { error: "payload_too_large" | "invalid_json" };
 
 export const DEFAULT_AGENT_BRIEF_INGEST_MAX_BYTES = 256 * 1024;
-
-function runtimeD1Database() {
-  const globalWithD1 = globalThis as GlobalWithD1;
-  return globalWithD1.__BLACKHAWK_D1_DB__ ?? globalWithD1.DB ?? null;
-}
 
 function jsonResponse(body: JsonRecord, init?: ResponseInit) {
   return Response.json(body, init);
@@ -218,7 +209,7 @@ export async function handleAgentBriefIngestRequest(request: Request, dependenci
   }
   const payload = parsedPayload.payload;
 
-  const db = dependencies.db ?? runtimeD1Database();
+  const db = dependencies.db ?? await loadRuntimeD1Database();
   const repository = dependencies.repository ?? (db ? createExecutiveBriefD1Repository(db) : null);
   if (!repository) {
     return jsonResponse(

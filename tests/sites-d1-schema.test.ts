@@ -10,14 +10,14 @@ import {
 } from "../db/schema";
 import { EXECUTIVE_BRIEF_SLOT_LABELS } from "../lib/brief/executive-brief-snapshots";
 
-test("Sites hosting metadata declares the D1 binding without provisioning a second project id", () => {
+test("Sites hosting metadata declares the provisioned Sites project and D1 binding", () => {
   const hosting = JSON.parse(readFileSync(".openai/hosting.json", "utf8")) as {
     project_id?: string;
     d1?: string;
     r2?: string | null;
   };
 
-  assert.equal(hosting.project_id, undefined);
+  assert.match(hosting.project_id ?? "", /^appgprj_/);
   assert.equal(hosting.d1, D1_BINDING_NAME);
   assert.equal(hosting.r2, null);
 });

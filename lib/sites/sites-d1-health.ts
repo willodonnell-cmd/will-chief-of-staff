@@ -1,5 +1,6 @@
 import { D1_BINDING_NAME, D1_TABLES } from "@/db/schema";
 import type { D1Database } from "@/lib/d1/types";
+import { loadRuntimeD1Database } from "@/lib/sites/runtime-d1";
 
 export type SitesD1Health = {
   d1BindingName: string;
@@ -24,16 +25,6 @@ type LatestSnapshotRow = {
   generated_at: string | null;
   created_at: string;
 };
-
-type GlobalWithD1 = typeof globalThis & {
-  DB?: D1Database;
-  __BLACKHAWK_D1_DB__?: D1Database;
-};
-
-function runtimeD1Database() {
-  const globalWithD1 = globalThis as GlobalWithD1;
-  return globalWithD1.__BLACKHAWK_D1_DB__ ?? globalWithD1.DB ?? null;
-}
 
 function briefSourceMode(): SitesD1Health["briefSourceMode"] {
   const configured = process.env.BLACKHAWK_BRIEF_SOURCE?.trim().toLowerCase();
@@ -80,7 +71,7 @@ async function latestSnapshot(db: D1Database | null) {
 }
 
 export async function loadSitesD1Health(): Promise<SitesD1Health> {
-  const db = runtimeD1Database();
+  const db = await loadRuntimeD1Database();
   return {
     d1BindingName: D1_BINDING_NAME,
     d1BindingAvailable: Boolean(db),
