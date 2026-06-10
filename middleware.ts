@@ -1,51 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
-import { withSupabaseTimeout } from "@/lib/supabase/request-timeout";
-
-type CookieToSet = {
-  name: string;
-  value: string;
-  options: CookieOptions;
-};
-
-export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
+export function middleware(request: NextRequest) {
+  return NextResponse.next({
     request
   });
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !anonKey) {
-    return response;
-  }
-
-  try {
-    const supabase = createServerClient(url, anonKey, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet: CookieToSet[]) {
-          response = NextResponse.next({
-            request
-          });
-
-          cookiesToSet.forEach(({ name, value, options }: CookieToSet) => {
-            response.cookies.set(name, value, options);
-          });
-        }
-      }
-    });
-
-    await withSupabaseTimeout(supabase.auth.getUser(), 1500);
-  } catch {
-    return response;
-  }
-
-  return response;
 }
 
 export const config = {
