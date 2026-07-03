@@ -79,6 +79,12 @@ Candidate actions are feedback on attention, not mutations of the source workflo
 - Mark Reviewed records that Will has seen the current candidate.
 - Task creation, pinning, and priority-learning are future packages.
 
+## Admin Audit View
+
+The Admin Audit View is for transparency and debugging. It shows candidate eligibility, interaction state, and source metadata so operators can understand why a candidate is appearing or disappearing from Today.
+
+The audit view is read-only. It does not mutate candidates, candidate interactions, or source workflows. Editing or clearing interactions is a future package if needed.
+
 ## Meetings as Candidate Source
 
 Meetings nominate Executive Item candidates only when they create a current attention claim. Normal calendar presence is insufficient.
