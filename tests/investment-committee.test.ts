@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 
 import {
   buildInvestmentCommitteeBoard,
+  buildInvestmentCommitteeCandidateRegistryEntries,
   buildInvestmentCommitteeBoardFromSignals,
   calculateInvestmentCommitteeCounts,
   calculateInvestmentCommitteeSteps,
@@ -17,6 +18,7 @@ import {
   type InvestmentCommitteeCycleRecord,
   type InvestmentCommitteeDealRecord
 } from "../lib/investment-committee";
+import { shouldNominateExecutiveItem } from "../lib/executive-item-nomination";
 import type { ChiefOfStaffSignal } from "../lib/chief-of-staff-signal";
 import {
   LOCAL_INVESTMENT_COMMITTEE_AGENT_PAYLOAD_PATH,
@@ -238,7 +240,7 @@ test("marks the workflow done when the cycle is fully progressed", () => {
 
   assert.deepEqual(
     steps.map((step) => step.state),
-    ["done", "done"]
+    ["done", "done", "done", "done", "done", "waiting"]
   );
 });
 
@@ -251,8 +253,8 @@ test("flags questions as needs attention when the deadline has passed", () => {
     buildDeal({ id: "deal-2", status: "not_started" })
   ]);
 
-  assert.equal(steps.find((step) => step.key === "package_and_deals")?.state, "done");
-  assert.equal(steps.find((step) => step.key === "questions")?.state, "needs_attention");
+  assert.equal(steps.find((step) => step.key === "package_received")?.state, "done");
+  assert.equal(steps.find((step) => step.key === "send_will_questions")?.state, "needs_attention");
 });
 
 test("uses detected package traffic and detected deals when no cycle has been saved yet", () => {
@@ -264,8 +266,12 @@ test("uses detected package traffic and detected deals when no cycle has been sa
   assert.deepEqual(
     steps.map((step) => [step.key, step.state, step.detail]),
     [
-      ["package_and_deals", "in_progress", "3 deals detected from this week's IC traffic."],
-      ["questions", "waiting", "0 drafted, 0 sent, 3 total deals."]
+      ["package_received", "in_progress", "3 deals detected from this week's IC traffic."],
+      ["read_pdfs", "in_progress", "0 reviewed, 3 total deals."],
+      ["review_peer_questions", "in_progress", "Review other IC member questions while drafting Will's questions."],
+      ["draft_will_questions", "waiting", "0 drafted, 0 sent, 3 total deals."],
+      ["send_will_questions", "waiting", "0 sent, 3 total deals."],
+      ["monday_vote", "waiting", "Normal Monday vote stays quiet unless an exception appears."]
     ]
   );
 });
@@ -386,6 +392,167 @@ test("merges persisted Will notes into the payload-backed weekly board", () => {
 
   assert.equal(board.deals[0]?.persistedDealId, "persisted-grumman");
   assert.equal(board.deals[0]?.willNotes, "Need sharper final question on Walmart timeline.");
+});
+
+test("derives IC attention reasons and suppresses routine approvals", () => {
+  const board = buildInvestmentCommitteeBoard(
+    buildAgentEnvelope({
+      deals: [
+        {
+          id: "energy-ic-x",
+          title: "Energy IC X Storage Exception",
+          memoUrl: "https://box.example/energy",
+          peerQuestionSummary: "Several peer questions flagged risk.",
+          answerSummary: null,
+          threads: [
+            {
+              id: "question-1",
+              subject: "Energy IC X Storage question",
+              sender: "Peer One",
+              kind: "question",
+              occurredAt: "2026-05-29T18:40:41Z",
+              sourceUrl: "https://outlook.example/question-1",
+              summary: "Question flags execution risk.",
+              mentionsWill: false
+            },
+            {
+              id: "question-2",
+              subject: "Energy IC X Storage follow-up",
+              sender: "Peer Two",
+              kind: "question",
+              occurredAt: "2026-05-29T19:40:41Z",
+              sourceUrl: "https://outlook.example/question-2",
+              summary: "Follow-up asks Will for input.",
+              mentionsWill: true
+            },
+            {
+              id: "approval",
+              subject: "Approved: Energy IC X Storage",
+              sender: "Pi, Susan",
+              kind: "general",
+              occurredAt: "2026-06-01T19:40:41Z",
+              sourceUrl: "https://outlook.example/approval",
+              summary: "Approved by Susan.",
+              mentionsWill: false
+            }
+          ]
+        }
+      ]
+    }),
+    [],
+    "local"
+  );
+
+  assert.deepEqual(board.deals[0]?.attentionReasons, [
+    "ic_x_detected",
+    "energy_ic_detected",
+    "will_mentioned",
+    "material_peer_question_activity",
+    "exception_or_unusual_status",
+    "will_questions_not_sent"
+  ]);
+  assert.equal(board.dealsRequiringAttention.length, 1);
+  assert.equal(board.suppressedApprovalItems.length, 1);
+  assert.equal(board.deals[0]?.threads.some((thread) => thread.id === "approval"), false);
+  assert.equal(board.executiveItemCandidates.length, 2);
+  assert.equal(board.executiveItemCandidates.some((candidate) => candidate.sourceEntityType === "deal"), true);
+  assert.equal(board.executiveItemCandidates.every(shouldNominateExecutiveItem), true);
+
+  const registryEntries = buildInvestmentCommitteeCandidateRegistryEntries(board, new Date("2026-06-01T12:00:00.000Z"));
+  assert.equal(registryEntries.some((entry) => entry.candidate.sourceEntityType === "deal" && entry.eligibleForToday), true);
+});
+
+test("normal IC package stays inside IC without Executive Item nomination", () => {
+  const board = buildInvestmentCommitteeBoard(
+    buildAgentEnvelope({
+      cycle: {
+        weekOf: "2099-06-01",
+        meetingDate: "2099-06-07T08:30:00-07:00",
+        packageEmailSubject: "IC Memos for Monday, June 7",
+        packageEmailUrl: "https://outlook.example/package",
+        boxFolderUrl: "https://box.example/folder",
+        questionsDueAt: "2099-06-05T17:00:00-07:00",
+        resetAt: "2099-06-08T23:59:59-07:00"
+      },
+      deals: [
+        {
+          id: "routine-deal",
+          title: "Routine Logistics Park",
+          memoUrl: "https://box.example/routine",
+          peerQuestionSummary: null,
+          answerSummary: null,
+          threads: [
+            {
+              id: "thread-package",
+              subject: "IC Memos for Monday, June 7",
+              sender: "Pi, Susan",
+              kind: "package",
+              occurredAt: "2099-06-02T23:30:15Z",
+              sourceUrl: "https://outlook.example/package",
+              summary: "Susan package.",
+              mentionsWill: false
+            }
+          ]
+        }
+      ]
+    }),
+    [],
+    "local"
+  );
+
+  assert.equal(board.dealsRequiringAttention.length, 0);
+  assert.equal(board.executiveItemCandidates.length, 0);
+  assert.equal(buildInvestmentCommitteeCandidateRegistryEntries(board).length, 0);
+});
+
+test("IC questions due with unsent Will questions produces an Executive Item candidate", () => {
+  const board = buildInvestmentCommitteeBoard(
+    buildAgentEnvelope({
+      cycle: {
+        weekOf: "2020-06-01",
+        meetingDate: "2020-06-08T08:30:00-07:00",
+        packageEmailSubject: "IC Memos for Monday, June 8",
+        packageEmailUrl: "https://outlook.example/package",
+        boxFolderUrl: "https://box.example/folder",
+        questionsDueAt: "2020-06-05T17:00:00-07:00",
+        resetAt: null
+      },
+      deals: [
+        {
+          id: "routine-overdue-deal",
+          title: "Routine Overdue Deal",
+          memoUrl: "https://box.example/routine-overdue",
+          peerQuestionSummary: null,
+          answerSummary: null,
+          threads: [
+            {
+              id: "thread-package",
+              subject: "IC Memos for Monday, June 8",
+              sender: "Pi, Susan",
+              kind: "package",
+              occurredAt: "2020-06-02T23:30:15Z",
+              sourceUrl: "https://outlook.example/package",
+              summary: "Susan package.",
+              mentionsWill: false
+            }
+          ]
+        }
+      ]
+    }),
+    [],
+    "local"
+  );
+
+  assert.deepEqual(
+    board.executiveItemCandidates.map((candidate) => [candidate.sourceEntityType, candidate.attentionReasons]),
+    [["cycle", ["deadline_approaching", "will_questions_not_sent"]]]
+  );
+  assert.equal(shouldNominateExecutiveItem(board.executiveItemCandidates[0]!), true);
+
+  const registryEntries = buildInvestmentCommitteeCandidateRegistryEntries(board, new Date("2026-07-01T12:00:00.000Z"));
+  assert.equal(registryEntries.length, 1);
+  assert.equal(registryEntries[0]?.sourceType, "investment_committee");
+  assert.equal(registryEntries[0]?.eligibleForToday, true);
 });
 
 test("builds a current-week board from routed IC and Energy IC traffic", () => {

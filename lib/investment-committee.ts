@@ -1,6 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ChiefOfStaffSignal } from "@/lib/chief-of-staff-signal";
+import {
+  registerExecutiveItemCandidates,
+  type ExecutiveItemRegistryEntry
+} from "@/lib/executive-item-candidate-registry";
+import {
+  createExecutiveItemCandidate,
+  type AttentionReason,
+  type ExecutiveItemCandidate
+} from "@/lib/executive-item-nomination";
 import type {
   InvestmentCommitteeAgentThread,
   InvestmentCommitteeAgentEnvelope,
@@ -20,8 +29,12 @@ export const INVESTMENT_COMMITTEE_DEAL_STATUSES = [
   "questions_sent"
 ] as const;
 export const INVESTMENT_COMMITTEE_STEP_KEYS = [
-  "package_and_deals",
-  "questions"
+  "package_received",
+  "read_pdfs",
+  "review_peer_questions",
+  "draft_will_questions",
+  "send_will_questions",
+  "monday_vote"
 ] as const;
 
 export type InvestmentCommitteeCycleStatus = (typeof INVESTMENT_COMMITTEE_CYCLE_STATUSES)[number];
@@ -117,6 +130,8 @@ export type InvestmentCommitteeBoardDeal = {
   answerSummary: string | null;
   threads: InvestmentCommitteeAgentDeal["threads"];
   willNotes: string;
+  willQuestionsSent: boolean;
+  attentionReasons: AttentionReason[];
   persistedDealId: string | null;
 };
 
@@ -130,6 +145,12 @@ export type InvestmentCommitteeBoard = {
   boxFolderUrl: string | null;
   questionsDueAt: string | null;
   resetAt: string | null;
+  packageReceived: boolean;
+  dealCount: number;
+  workflowSteps: InvestmentCommitteeWorkflowStep[];
+  dealsRequiringAttention: InvestmentCommitteeBoardDeal[];
+  suppressedApprovalItems: InvestmentCommitteeAgentThread[];
+  executiveItemCandidates: ExecutiveItemCandidate[];
   deals: InvestmentCommitteeBoardDeal[];
 };
 
@@ -324,7 +345,7 @@ export function buildInvestmentCommitteeBoard(
   source: "local" | "fixture" | "cloudmailin",
   statusNotice: string | null = null
 ): InvestmentCommitteeBoard {
-  return {
+  return finalizeInvestmentCommitteeBoard({
     source,
     statusNotice,
     weekOf: envelope.cycle.weekOf,
@@ -336,6 +357,7 @@ export function buildInvestmentCommitteeBoard(
     resetAt: envelope.cycle.resetAt,
     deals: envelope.deals.map((deal) => {
       const persisted = findPersistedDealForBoard(persistedDeals, deal);
+      const willQuestionsSent = persisted?.status === "questions_sent";
 
       return {
         id: deal.id,
@@ -345,10 +367,12 @@ export function buildInvestmentCommitteeBoard(
         answerSummary: deal.answerSummary,
         threads: [...deal.threads].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt)),
         willNotes: persisted?.question_notes ?? "",
+        willQuestionsSent,
+        attentionReasons: deriveDealAttentionReasons(deal, willQuestionsSent),
         persistedDealId: persisted?.id ?? null
       };
     })
-  };
+  });
 }
 
 function signalLooksAnswerRelated(signal: ChiefOfStaffSignal) {
@@ -448,7 +472,7 @@ export function buildInvestmentCommitteeBoardFromSignals(
   const source = options?.source ?? "agent_run";
   const statusNotice = options?.statusNotice ?? buildTrafficBoardStatusNotice(source, options?.producedAt ?? null);
 
-  return {
+  return finalizeInvestmentCommitteeBoard({
     source,
     statusNotice,
     weekOf,
@@ -465,6 +489,7 @@ export function buildInvestmentCommitteeBoardFromSignals(
         .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
       const persisted = findPersistedDealForTitle(persistedDeals, deal.title);
       const threads = relatedSignals.map(mapSignalToBoardThread);
+      const willQuestionsSent = persisted?.status === "questions_sent";
       const questionSignal = relatedSignals.find(signalLooksQuestionPromptRelated);
       const answerSignal = relatedSignals.find(signalLooksAnswerRelated);
       const memoSignal = relatedSignals.find((signal) => Boolean(signal.sourceUrl));
@@ -477,10 +502,22 @@ export function buildInvestmentCommitteeBoardFromSignals(
         answerSummary: answerSignal?.summary ?? null,
         threads,
         willNotes: persisted?.question_notes ?? "",
+        willQuestionsSent,
+        attentionReasons: deriveDealAttentionReasons(
+          {
+            id: deal.key,
+            title: deal.title,
+            memoUrl: memoSignal?.sourceUrl ?? null,
+            peerQuestionSummary: questionSignal?.summary ?? null,
+            answerSummary: answerSignal?.summary ?? null,
+            threads
+          },
+          willQuestionsSent
+        ),
         persistedDealId: persisted?.id ?? null
       };
     })
-  };
+  });
 }
 
 export function selectCurrentInvestmentCommitteeCycle(
@@ -540,7 +577,7 @@ export function calculateInvestmentCommitteeSteps(
   const detectedDealCount = options?.detectedDealCount ?? 0;
   const hasPackageSignal = options?.hasPackageSignal ?? false;
   const displayDealCount = counts.totalDeals > 0 ? counts.totalDeals : detectedDealCount;
-  const packageAndDealsState: InvestmentCommitteeStepState =
+  const packageReceivedState: InvestmentCommitteeStepState =
     counts.packageLinked || counts.totalDeals > 0
       ? "done"
       : hasPackageSignal || detectedDealCount > 0
@@ -548,22 +585,38 @@ export function calculateInvestmentCommitteeSteps(
         : cycle && timingRequiresAttention(cycle.memo_due_at)
           ? "needs_attention"
           : "waiting";
-  const questionsState: InvestmentCommitteeStepState =
+  const reviewState: InvestmentCommitteeStepState =
+    displayDealCount > 0
+      ? counts.reviewedDeals >= displayDealCount || counts.sentQuestionSets >= displayDealCount
+        ? "done"
+        : "in_progress"
+      : "waiting";
+  const draftState: InvestmentCommitteeStepState =
     displayDealCount === 0
       ? "waiting"
-      : counts.sentQuestionSets >= displayDealCount && displayDealCount > 0
+      : counts.draftedQuestionSets >= displayDealCount
         ? "done"
         : counts.draftedQuestionSets > 0 || counts.reviewedDeals > 0
           ? "in_progress"
           : timingRequiresAttention(cycle?.questions_due_at ?? null)
             ? "needs_attention"
             : "waiting";
+  const sendState: InvestmentCommitteeStepState =
+    displayDealCount === 0
+      ? "waiting"
+      : counts.sentQuestionSets >= displayDealCount
+        ? "done"
+        : timingRequiresAttention(cycle?.questions_due_at ?? null)
+          ? "needs_attention"
+          : counts.draftedQuestionSets > 0
+            ? "in_progress"
+            : "waiting";
 
   return [
     {
-      key: "package_and_deals",
-      label: "Package and Deals",
-      state: packageAndDealsState,
+      key: "package_received",
+      label: "Package received",
+      state: packageReceivedState,
       detail:
         counts.totalDeals > 0
           ? `${counts.totalDeals} tracked deal${counts.totalDeals === 1 ? "" : "s"} in this cycle.`
@@ -574,13 +627,46 @@ export function calculateInvestmentCommitteeSteps(
               : "Waiting for the weekly package or deal list."
     },
     {
-      key: "questions",
-      label: "Questions",
-      state: questionsState,
+      key: "read_pdfs",
+      label: "Read PDFs",
+      state: reviewState,
+      detail:
+        displayDealCount > 0
+          ? `${counts.reviewedDeals} reviewed, ${displayDealCount} total deal${displayDealCount === 1 ? "" : "s"}.`
+          : "PDF review starts after this week's deals are identified."
+    },
+    {
+      key: "review_peer_questions",
+      label: "Review peer questions",
+      state: counts.sentQuestionSets >= displayDealCount && displayDealCount > 0 ? "done" : displayDealCount > 0 ? "in_progress" : "waiting",
+      detail:
+        displayDealCount > 0
+          ? "Review other IC member questions while drafting Will's questions."
+          : "Peer-question review starts after this week's deals are identified."
+    },
+    {
+      key: "draft_will_questions",
+      label: "Draft Will questions",
+      state: draftState,
       detail:
         displayDealCount > 0
           ? `${counts.draftedQuestionSets} drafted, ${counts.sentQuestionSets} sent, ${displayDealCount} total deal${displayDealCount === 1 ? "" : "s"}.`
           : "Questions stay quiet until this week's deals are identified."
+    },
+    {
+      key: "send_will_questions",
+      label: "Send Will questions",
+      state: sendState,
+      detail:
+        displayDealCount > 0
+          ? `${counts.sentQuestionSets} sent, ${displayDealCount} total deal${displayDealCount === 1 ? "" : "s"}.`
+          : "Nothing to send until this week's deals are identified."
+    },
+    {
+      key: "monday_vote",
+      label: "Monday vote",
+      state: cycle?.status === "completed" ? "done" : "waiting",
+      detail: cycle?.status === "completed" ? "Cycle is completed." : "Normal Monday vote stays quiet unless an exception appears."
     }
   ];
 }
@@ -748,6 +834,288 @@ function signalLooksApprovedStatus(signal: ChiefOfStaffSignal) {
     [signal.title, signal.sourceReference ?? "", signal.sourceLabel].filter(Boolean).join(" ")
   );
   return /\bapproved\b/.test(combined);
+}
+
+function threadLooksSuppressedApproval(thread: InvestmentCommitteeAgentThread) {
+  const combined = normalizeSignalText([thread.subject, thread.summary].join(" "));
+  return /\bapproved\b/.test(combined) && !/\b(not approved|deferred|conditional|follow[- ]?up|exception|issue|will)\b/.test(combined);
+}
+
+function threadLooksEnergyIc(thread: InvestmentCommitteeAgentThread) {
+  const combined = normalizeSignalText([thread.subject, thread.summary].join(" "));
+  return /\benergy (investment committee|ic)\b/.test(combined);
+}
+
+function threadLooksIcX(thread: InvestmentCommitteeAgentThread) {
+  const combined = normalizeSignalText([thread.subject, thread.summary].join(" "));
+  return /\bic\s*x\b|\bicx\b/.test(combined);
+}
+
+function threadLooksUnusual(thread: InvestmentCommitteeAgentThread) {
+  const combined = normalizeSignalText([thread.subject, thread.summary].join(" "));
+  return /\b(deferred|conditional|not approved|unusual|exception|material issue|risk|escalat|follow[- ]?up)\b/.test(combined);
+}
+
+function deriveDealAttentionReasons(deal: InvestmentCommitteeAgentDeal, willQuestionsSent: boolean): AttentionReason[] {
+  const reasons = new Set<AttentionReason>();
+  const combinedTitle = normalizeSignalText(deal.title);
+
+  if (/\bic\s*x\b|\bicx\b/.test(combinedTitle) || deal.threads.some(threadLooksIcX)) {
+    reasons.add("ic_x_detected");
+  }
+
+  if (/\benergy (investment committee|ic)\b/.test(combinedTitle) || deal.threads.some(threadLooksEnergyIc)) {
+    reasons.add("energy_ic_detected");
+  }
+
+  if (deal.threads.some((thread) => thread.mentionsWill)) {
+    reasons.add("will_mentioned");
+  }
+
+  const questionThreads = deal.threads.filter((thread) => thread.kind === "question");
+  if (questionThreads.length >= 2) {
+    reasons.add("material_peer_question_activity");
+  }
+
+  if (deal.threads.some(threadLooksUnusual)) {
+    reasons.add("exception_or_unusual_status");
+  }
+
+  if ((deal.peerQuestionSummary || questionThreads.length > 0) && !willQuestionsSent) {
+    reasons.add("will_questions_not_sent");
+  }
+
+  return [...reasons];
+}
+
+function buildBoardWorkflowSteps(input: {
+  packageReceived: boolean;
+  deals: InvestmentCommitteeBoardDeal[];
+  boxFolderUrl: string | null;
+  questionsDueAt: string | null;
+  meetingDate: string | null;
+}): InvestmentCommitteeWorkflowStep[] {
+  const hasDeals = input.deals.length > 0;
+  const hasPeerQuestions = input.deals.some(
+    (deal) => Boolean(deal.peerQuestionSummary) || deal.threads.some((thread) => thread.kind === "question")
+  );
+  const hasWillDrafts = input.deals.some((deal) => deal.willNotes.trim().length > 0);
+  const allQuestionsSent = hasDeals && input.deals.every((deal) => deal.willQuestionsSent);
+  const questionsOverdue = timingRequiresAttention(input.questionsDueAt);
+  const meetingDue = timingRequiresAttention(input.meetingDate);
+
+  return [
+    {
+      key: "package_received",
+      label: "Package received",
+      state: input.packageReceived ? "done" : "needs_attention",
+      detail: input.packageReceived
+        ? input.boxFolderUrl
+          ? "Susan package and Box folder are available."
+          : "Susan package is available; Box folder link is missing."
+        : "Waiting for Susan's weekly package."
+    },
+    {
+      key: "read_pdfs",
+      label: "Read PDFs",
+      state: hasDeals ? "in_progress" : "waiting",
+      detail: hasDeals
+        ? `${input.deals.length} memo${input.deals.length === 1 ? "" : "s"} in this week's package.`
+        : "PDF review starts after the package arrives."
+    },
+    {
+      key: "review_peer_questions",
+      label: "Review peer questions",
+      state: hasPeerQuestions ? "in_progress" : "waiting",
+      detail: hasPeerQuestions ? "Peer questions are available by deal." : "No peer-question threads found yet."
+    },
+    {
+      key: "draft_will_questions",
+      label: "Draft Will questions",
+      state: hasWillDrafts ? "in_progress" : questionsOverdue && hasDeals ? "needs_attention" : "waiting",
+      detail: hasWillDrafts ? "Will draft questions are saved." : "No Will draft questions saved yet."
+    },
+    {
+      key: "send_will_questions",
+      label: "Send Will questions",
+      state: allQuestionsSent ? "done" : questionsOverdue && hasDeals ? "needs_attention" : "waiting",
+      detail: allQuestionsSent ? "Will questions are marked sent for all deals." : "Will questions are not marked sent for every deal."
+    },
+    {
+      key: "monday_vote",
+      label: "Monday vote",
+      state: meetingDue ? "in_progress" : "waiting",
+      detail: input.meetingDate ? "Monday meeting date is known." : "Monday meeting date is not set."
+    }
+  ];
+}
+
+function isDueWithin(value: string | null, now: Date, windowMs: number) {
+  if (!value) {
+    return false;
+  }
+
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return false;
+  }
+
+  const delta = parsed - now.getTime();
+  return delta >= 0 && delta <= windowMs;
+}
+
+function isOverdue(value: string | null, now: Date) {
+  if (!value) {
+    return false;
+  }
+
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed) && parsed < now.getTime();
+}
+
+function buildInvestmentCommitteeExecutiveItemCandidates(
+  board: Omit<InvestmentCommitteeBoard, "executiveItemCandidates">,
+  now = new Date()
+): ExecutiveItemCandidate[] {
+  const generatedAt = now.toISOString();
+  const candidates: ExecutiveItemCandidate[] = [];
+  const questionsDueSoon = isDueWithin(board.questionsDueAt, now, 48 * 60 * 60 * 1000);
+  const questionsOverdue = isOverdue(board.questionsDueAt, now);
+  const hasUnsentQuestions = board.deals.some((deal) => !deal.willQuestionsSent);
+
+  if (board.packageReceived && hasUnsentQuestions && (questionsDueSoon || questionsOverdue)) {
+    candidates.push(
+      createExecutiveItemCandidate({
+        id: `investment-committee:${board.weekOf}:questions-due`,
+        title: "Investment Committee questions due",
+        summary: questionsOverdue
+          ? "Will questions are past due for the current Investment Committee package."
+          : "Will questions are due soon for the current Investment Committee package.",
+        recommendedAction: "Open Investment Committee, review peer questions, and send Will's questions.",
+        sourceWorkflow: "investment_committee",
+        sourceEntityType: "cycle",
+        sourceEntityId: board.weekOf,
+        href: "/investment-committee",
+        dueAt: board.questionsDueAt,
+        priority: questionsOverdue ? "high" : "medium",
+        attentionReasons: ["deadline_approaching", "will_questions_not_sent"],
+        evidence: [
+          { label: "Week of", value: board.weekOf },
+          { label: "Deal count", value: String(board.dealCount) }
+        ],
+        generatedAt
+      })
+    );
+  }
+
+  for (const deal of board.dealsRequiringAttention) {
+    const candidateReasons = deal.attentionReasons.filter((reason) => reason !== "will_questions_not_sent");
+    if (candidateReasons.length === 0) {
+      continue;
+    }
+
+    candidates.push(
+      createExecutiveItemCandidate({
+        id: `investment-committee:${board.weekOf}:deal:${deal.id}`,
+        title: deal.title,
+        summary: "Investment Committee deal has an attention trigger outside normal weekly cadence.",
+        recommendedAction: "Open the IC deal, review the supporting threads, and decide whether Will needs to send or revise questions.",
+        sourceWorkflow: "investment_committee",
+        sourceEntityType: "deal",
+        sourceEntityId: deal.id,
+        href: "/investment-committee",
+        dueAt: board.questionsDueAt,
+        priority: candidateReasons.some((reason) => reason === "ic_x_detected" || reason === "exception_or_unusual_status")
+          ? "high"
+          : "medium",
+        attentionReasons: candidateReasons,
+        evidence: [
+          ...(deal.memoUrl ? [{ label: "Memo", value: deal.memoUrl, href: deal.memoUrl }] : []),
+          ...deal.threads.slice(0, 3).map((thread) => ({
+            label: threadKindLabelForEvidence(thread.kind),
+            value: thread.subject,
+            href: thread.sourceUrl
+          }))
+        ],
+        generatedAt
+      })
+    );
+  }
+
+  return candidates;
+}
+
+function threadKindLabelForEvidence(kind: InvestmentCommitteeAgentThreadKind) {
+  switch (kind) {
+    case "question":
+      return "Peer question";
+    case "answer":
+      return "Team response";
+    case "package":
+      return "Package";
+    case "general":
+    default:
+      return "Thread";
+  }
+}
+
+function finalizeInvestmentCommitteeBoard(
+  board: Omit<
+    InvestmentCommitteeBoard,
+    | "packageReceived"
+    | "dealCount"
+    | "workflowSteps"
+    | "dealsRequiringAttention"
+    | "suppressedApprovalItems"
+    | "executiveItemCandidates"
+  >
+): InvestmentCommitteeBoard {
+  const suppressedApprovalItems = board.deals.flatMap((deal) => deal.threads.filter(threadLooksSuppressedApproval));
+  const deals = board.deals.map((deal) => ({
+    ...deal,
+    threads: deal.threads.filter((thread) => !threadLooksSuppressedApproval(thread))
+  }));
+  const packageReceived = Boolean(board.packageEmailSubject.trim()) || Boolean(board.packageEmailUrl) || Boolean(board.boxFolderUrl);
+
+  const finalized = {
+    ...board,
+    packageReceived,
+    dealCount: deals.length,
+    workflowSteps: buildBoardWorkflowSteps({
+      packageReceived,
+      deals,
+      boxFolderUrl: board.boxFolderUrl,
+      questionsDueAt: board.questionsDueAt,
+      meetingDate: board.meetingDate
+    }),
+    dealsRequiringAttention: deals.filter((deal) => deal.attentionReasons.length > 0),
+    suppressedApprovalItems,
+    executiveItemCandidates: [],
+    deals
+  };
+
+  return {
+    ...finalized,
+    executiveItemCandidates: buildInvestmentCommitteeExecutiveItemCandidates(finalized)
+  };
+}
+
+export function buildInvestmentCommitteeCandidateRegistryEntries(
+  board: InvestmentCommitteeBoard | null,
+  now = new Date()
+): ExecutiveItemRegistryEntry[] {
+  if (!board) {
+    return [];
+  }
+
+  return registerExecutiveItemCandidates({
+    candidates: board.executiveItemCandidates,
+    sourceType: "investment_committee",
+    sourceId: board.weekOf,
+    sourceLabel: `Investment Committee week of ${board.weekOf}`,
+    generatedAt: now.toISOString(),
+    now
+  });
 }
 
 function extractDealCandidateFromSignal(signal: ChiefOfStaffSignal) {
