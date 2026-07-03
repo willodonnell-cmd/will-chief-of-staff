@@ -21,6 +21,11 @@ import {
 } from "@/lib/today-view-model";
 import { buildInvestmentCommitteeCandidateRegistryEntries, getInvestmentCommitteePageData } from "@/lib/investment-committee";
 import { selectTodayExecutiveItemCandidates } from "@/lib/today-executive-item-candidates";
+import {
+  applyCandidateInteractions,
+  createSupabaseExecutiveItemCandidateInteractionsRepository,
+  type ExecutiveItemCandidateInteraction
+} from "@/lib/executive-item-candidate-interactions";
 
 export type TodayPageData = TodayViewModel;
 
@@ -50,6 +55,10 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     getLatestExecutiveBriefForUser().catch(() => null),
     listOpenLibraryTasks().catch(() => [])
   ]);
+  const candidateInteractions = await listCandidateInteractionsForToday(resolved).catch((error) => {
+    console.error("[today] Failed to load Executive Item candidate interactions.", error);
+    return [];
+  });
   const investmentCommitteeCandidateEntries = await getTodayInvestmentCommitteeCandidateEntries().catch((error) => {
     console.error("[today] Failed to load Executive Item candidates.", error);
     return [];
@@ -58,7 +67,9 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
   const model = buildTodayViewModel({
     snapshot,
     openTasks: openTasks.slice(0, TODAY_OPEN_TASK_LIMIT),
-    executiveItemCandidates: selectTodayExecutiveItemCandidates(investmentCommitteeCandidateEntries)
+    executiveItemCandidates: selectTodayExecutiveItemCandidates(
+      applyCandidateInteractions(investmentCommitteeCandidateEntries, candidateInteractions)
+    )
   });
   const calendarLookups =
     model.sourceLanes
@@ -79,8 +90,10 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
       lookups: calendarLookups
     });
     const executiveItemCandidates = selectTodayExecutiveItemCandidates([
-      ...investmentCommitteeCandidateEntries,
-      ...buildMeetingCandidateRegistryEntries(records)
+      ...applyCandidateInteractions(
+        [...investmentCommitteeCandidateEntries, ...buildMeetingCandidateRegistryEntries(records)],
+        candidateInteractions
+      )
     ]);
 
     return {
@@ -98,4 +111,11 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
 export async function getTodayInvestmentCommitteeCandidateEntries() {
   const investmentCommitteeData = await getInvestmentCommitteePageData();
   return buildInvestmentCommitteeCandidateRegistryEntries(investmentCommitteeData?.board ?? null);
+}
+
+async function listCandidateInteractionsForToday(
+  resolved: NonNullable<Awaited<ReturnType<typeof resolveCurrentAppUser>>>
+): Promise<ExecutiveItemCandidateInteraction[]> {
+  const repository = createSupabaseExecutiveItemCandidateInteractionsRepository(resolved.client);
+  return repository.listForUser({ userId: resolved.user.id });
 }

@@ -10,6 +10,11 @@ import {
   registerExecutiveItemCandidates
 } from "../lib/executive-item-candidate-registry";
 import {
+  applyCandidateInteractions,
+  buildCandidateInteractionKey,
+  type ExecutiveItemCandidateInteraction
+} from "../lib/executive-item-candidate-interactions";
+import {
   createExecutiveItemCandidate,
   suppressExecutiveItemCandidate,
   type ExecutiveItemCandidate
@@ -165,4 +170,44 @@ test("Today candidate limit is enforced", () => {
 
   assert.equal(selectTodayExecutiveItemCandidates(entries).length, 7);
   assert.equal(selectTodayExecutiveItemCandidates(entries, 99).length, TODAY_EXECUTIVE_ITEM_CANDIDATE_MAX_LIMIT);
+});
+
+test("Today candidate selector applies interactions across mixed IC and meeting candidates", () => {
+  const entries = registerExecutiveItemCandidates({
+    candidates: [
+      buildCandidate({ id: "ic-candidate", priority: "high" }),
+      buildCandidate({ id: "meeting-candidate", priority: "medium" })
+    ],
+    sourceType: "investment_committee",
+    sourceId: "ic-1",
+    sourceLabel: "Investment Committee",
+    now: new Date("2026-07-01T12:00:00.000Z")
+  });
+  const meetingEntries = registerExecutiveItemCandidates({
+    candidates: [buildCandidate({ id: "meeting-only", priority: "low" })],
+    sourceType: "meeting",
+    sourceId: "meeting-1",
+    sourceLabel: "Meeting",
+    now: new Date("2026-07-01T12:00:00.000Z")
+  });
+  const dismissed: ExecutiveItemCandidateInteraction = {
+    id: "interaction-1",
+    userId: "user-1",
+    candidateId: entries[0]!.candidate.id,
+    interactionKey: buildCandidateInteractionKey(entries[0]!),
+    sourceType: entries[0]!.sourceType,
+    sourceId: entries[0]!.sourceId,
+    action: "dismissed",
+    snoozedUntil: null,
+    reason: null,
+    createdAt: "2026-07-01T12:00:00.000Z",
+    updatedAt: "2026-07-01T12:00:00.000Z"
+  };
+
+  assert.deepEqual(
+    selectTodayExecutiveItemCandidates(applyCandidateInteractions([...entries, ...meetingEntries], [dismissed])).map(
+      (entry) => entry.candidate.id
+    ),
+    ["meeting-candidate", "meeting-only"]
+  );
 });

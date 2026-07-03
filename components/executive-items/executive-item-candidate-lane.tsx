@@ -1,3 +1,5 @@
+import { recordExecutiveItemCandidateInteractionAction } from "@/app/executive-item-candidates/actions";
+import { buildCandidateInteractionKey } from "@/lib/executive-item-candidate-interactions";
 import type { ExecutiveItemRegistryEntry } from "@/lib/executive-item-candidate-registry";
 import { formatAttentionReason } from "@/lib/executive-item-nomination";
 
@@ -48,6 +50,7 @@ export function ExecutiveItemCandidateLane({
       <div className="mt-4 space-y-3">
         {candidates.map((entry) => {
           const dueAt = formatDueAt(entry.candidate.dueAt);
+          const interactionKey = buildCandidateInteractionKey(entry);
 
           return (
             <article key={`${entry.sourceType}:${entry.candidate.id}`} className="rounded-[1rem] border border-line/65 bg-white/66 px-4 py-4">
@@ -92,20 +95,79 @@ export function ExecutiveItemCandidateLane({
                 </div>
               ) : null}
 
-              {entry.candidate.href ? (
-                <div className="mt-4">
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {entry.candidate.href ? (
                   <a
                     href={entry.candidate.href}
                     className="rounded-full border border-line/75 bg-white/84 px-3 py-1.5 text-xs font-medium text-text transition hover:bg-white"
                   >
                     Open Source
                   </a>
-                </div>
-              ) : null}
+                ) : null}
+
+                <CandidateInteractionForm entry={entry} interactionKey={interactionKey} action="reviewed" label="Reviewed" />
+
+                <CandidateInteractionForm entry={entry} interactionKey={interactionKey} action="dismissed" label="Dismiss" />
+
+                <CandidateInteractionForm
+                  entry={entry}
+                  interactionKey={interactionKey}
+                  action="snoozed"
+                  label="Later today"
+                  snoozePreset="later_today"
+                />
+
+                <CandidateInteractionForm
+                  entry={entry}
+                  interactionKey={interactionKey}
+                  action="snoozed"
+                  label="Tomorrow"
+                  snoozePreset="tomorrow"
+                />
+
+                <CandidateInteractionForm
+                  entry={entry}
+                  interactionKey={interactionKey}
+                  action="snoozed"
+                  label="Next week"
+                  snoozePreset="next_week"
+                />
+              </div>
             </article>
           );
         })}
       </div>
     </section>
+  );
+}
+
+function CandidateInteractionForm({
+  entry,
+  interactionKey,
+  action,
+  label,
+  snoozePreset
+}: {
+  entry: ExecutiveItemRegistryEntry;
+  interactionKey: string;
+  action: "dismissed" | "snoozed" | "reviewed";
+  label: string;
+  snoozePreset?: "later_today" | "tomorrow" | "next_week";
+}) {
+  return (
+    <form action={recordExecutiveItemCandidateInteractionAction}>
+      <input type="hidden" name="candidateId" value={entry.candidate.id} />
+      <input type="hidden" name="interactionKey" value={interactionKey} />
+      <input type="hidden" name="sourceType" value={entry.sourceType} />
+      <input type="hidden" name="sourceId" value={entry.sourceId} />
+      <input type="hidden" name="action" value={action} />
+      {snoozePreset ? <input type="hidden" name="snoozePreset" value={snoozePreset} /> : null}
+      <button
+        type="submit"
+        className="rounded-full border border-line/75 bg-white/84 px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-white hover:text-text"
+      >
+        {label}
+      </button>
+    </form>
   );
 }
