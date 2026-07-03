@@ -18,7 +18,7 @@ export default async function InvestmentCommitteePage({ searchParams }: Investme
         <PageIntro
           eyebrow="Investment Committee"
           title="Investment Committee"
-          description="Current IC and Energy IC memo set."
+          description="Weekly memo review and question generation."
         />
       </div>
     );
@@ -29,7 +29,7 @@ export default async function InvestmentCommitteePage({ searchParams }: Investme
       <PageIntro
         eyebrow="Investment Committee"
         title="Investment Committee"
-        description="Current IC and Energy IC memo set."
+        description="Weekly memo review and question generation."
       />
 
       <InvestmentCommitteeWorkspace data={pageData} notice={notice} error={error} />
