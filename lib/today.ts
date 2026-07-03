@@ -8,6 +8,7 @@ import {
   meetingCalendarEventIdFromBriefItemId,
   summarizeMeetingRecordStatus
 } from "@/lib/meetings/meeting-records";
+import { buildMeetingCandidateRegistryEntries } from "@/lib/meeting-executive-item-candidates";
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 import {
   listLibraryItems,
@@ -49,7 +50,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     getLatestExecutiveBriefForUser().catch(() => null),
     listOpenLibraryTasks().catch(() => [])
   ]);
-  const executiveItemCandidates = await getTodayExecutiveItemCandidates().catch((error) => {
+  const investmentCommitteeCandidateEntries = await getTodayInvestmentCommitteeCandidateEntries().catch((error) => {
     console.error("[today] Failed to load Executive Item candidates.", error);
     return [];
   });
@@ -57,7 +58,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
   const model = buildTodayViewModel({
     snapshot,
     openTasks: openTasks.slice(0, TODAY_OPEN_TASK_LIMIT),
-    executiveItemCandidates
+    executiveItemCandidates: selectTodayExecutiveItemCandidates(investmentCommitteeCandidateEntries)
   });
   const calendarLookups =
     model.sourceLanes
@@ -77,8 +78,15 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
       userId: resolved.user.id,
       lookups: calendarLookups
     });
+    const executiveItemCandidates = selectTodayExecutiveItemCandidates([
+      ...investmentCommitteeCandidateEntries,
+      ...buildMeetingCandidateRegistryEntries(records)
+    ]);
 
-    return attachMeetingRecordStatusesToTodayViewModel(model, records.map(summarizeMeetingRecordStatus));
+    return {
+      ...attachMeetingRecordStatusesToTodayViewModel(model, records.map(summarizeMeetingRecordStatus)),
+      executiveItemCandidates
+    };
   } catch (error) {
     if (!isMeetingRecordsSchemaUnavailableError(error)) {
       console.error("[today] Failed to load meeting record statuses.", error);
@@ -87,9 +95,7 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
   }
 }
 
-export async function getTodayExecutiveItemCandidates() {
+export async function getTodayInvestmentCommitteeCandidateEntries() {
   const investmentCommitteeData = await getInvestmentCommitteePageData();
-  return selectTodayExecutiveItemCandidates(
-    buildInvestmentCommitteeCandidateRegistryEntries(investmentCommitteeData?.board ?? null)
-  );
+  return buildInvestmentCommitteeCandidateRegistryEntries(investmentCommitteeData?.board ?? null);
 }

@@ -98,7 +98,7 @@ export function ExecutiveItemCandidateLane({
                     href={entry.candidate.href}
                     className="rounded-full border border-line/75 bg-white/84 px-3 py-1.5 text-xs font-medium text-text transition hover:bg-white"
                   >
-                    Open Investment Committee
+                    Open Source
                   </a>
                 </div>
               ) : null}

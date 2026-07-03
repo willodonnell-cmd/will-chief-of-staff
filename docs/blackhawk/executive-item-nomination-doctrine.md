@@ -69,3 +69,11 @@ Today and Executive Brief should consume registry output only after candidates h
 Today consumes eligible candidates from the Executive Item Candidate Registry. It does not decide workflow-specific nomination logic, and it does not surface normal standing workflow activity merely because a workflow exists.
 
 The initial Today integration renders eligible candidates read-only. Mutation actions such as dismiss, snooze, create task, mark done, and pin remain future packages.
+
+## Meetings as Candidate Source
+
+Meetings nominate Executive Item candidates only when they create a current attention claim. Normal calendar presence is insufficient.
+
+Meeting-specific nomination logic belongs in the meeting candidate builder. Today consumes eligible meeting candidates through the shared registry and selector, alongside candidates from other source workflows.
+
+Meeting candidates render read-only until mutation actions are added in a future package.
