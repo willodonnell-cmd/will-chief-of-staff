@@ -8,6 +8,7 @@ import {
   meetingCalendarEventIdFromBriefItemId,
   summarizeMeetingRecordStatus
 } from "@/lib/meetings/meeting-records";
+import { buildMeetingCandidateRegistryEntries } from "@/lib/meeting-executive-item-candidates";
 import { resolveCurrentAppUser } from "@/lib/supabase/current-user";
 import {
   listLibraryItems,
@@ -18,6 +19,13 @@ import {
   buildTodayViewModel,
   type TodayViewModel
 } from "@/lib/today-view-model";
+import { buildInvestmentCommitteeCandidateRegistryEntries, getInvestmentCommitteePageData } from "@/lib/investment-committee";
+import { selectTodayExecutiveItemCandidates } from "@/lib/today-executive-item-candidates";
+import {
+  applyCandidateInteractions,
+  createSupabaseExecutiveItemCandidateInteractionsRepository,
+  type ExecutiveItemCandidateInteraction
+} from "@/lib/executive-item-candidate-interactions";
 
 export type TodayPageData = TodayViewModel;
 
@@ -47,10 +55,21 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     getLatestExecutiveBriefForUser().catch(() => null),
     listOpenLibraryTasks().catch(() => [])
   ]);
+  const candidateInteractions = await listCandidateInteractionsForToday(resolved).catch((error) => {
+    console.error("[today] Failed to load Executive Item candidate interactions.", error);
+    return [];
+  });
+  const investmentCommitteeCandidateEntries = await getTodayInvestmentCommitteeCandidateEntries().catch((error) => {
+    console.error("[today] Failed to load Executive Item candidates.", error);
+    return [];
+  });
 
   const model = buildTodayViewModel({
     snapshot,
-    openTasks: openTasks.slice(0, TODAY_OPEN_TASK_LIMIT)
+    openTasks: openTasks.slice(0, TODAY_OPEN_TASK_LIMIT),
+    executiveItemCandidates: selectTodayExecutiveItemCandidates(
+      applyCandidateInteractions(investmentCommitteeCandidateEntries, candidateInteractions)
+    )
   });
   const calendarLookups =
     model.sourceLanes
@@ -70,12 +89,33 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
       userId: resolved.user.id,
       lookups: calendarLookups
     });
+    const executiveItemCandidates = selectTodayExecutiveItemCandidates([
+      ...applyCandidateInteractions(
+        [...investmentCommitteeCandidateEntries, ...buildMeetingCandidateRegistryEntries(records)],
+        candidateInteractions
+      )
+    ]);
 
-    return attachMeetingRecordStatusesToTodayViewModel(model, records.map(summarizeMeetingRecordStatus));
+    return {
+      ...attachMeetingRecordStatusesToTodayViewModel(model, records.map(summarizeMeetingRecordStatus)),
+      executiveItemCandidates
+    };
   } catch (error) {
     if (!isMeetingRecordsSchemaUnavailableError(error)) {
       console.error("[today] Failed to load meeting record statuses.", error);
     }
     return model;
   }
+}
+
+export async function getTodayInvestmentCommitteeCandidateEntries() {
+  const investmentCommitteeData = await getInvestmentCommitteePageData();
+  return buildInvestmentCommitteeCandidateRegistryEntries(investmentCommitteeData?.board ?? null);
+}
+
+async function listCandidateInteractionsForToday(
+  resolved: NonNullable<Awaited<ReturnType<typeof resolveCurrentAppUser>>>
+): Promise<ExecutiveItemCandidateInteraction[]> {
+  const repository = createSupabaseExecutiveItemCandidateInteractionsRepository(resolved.client);
+  return repository.listForUser({ userId: resolved.user.id });
 }
