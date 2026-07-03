@@ -6,6 +6,7 @@ import {
   researchMeetingContextAction,
   saveMeetingToObsidianAction
 } from "@/app/meetings/actions";
+import { ExecutiveItemCandidateLane } from "@/components/executive-items/executive-item-candidate-lane";
 import { MeetingResearchSummaryPanel } from "@/components/meetings/meeting-research-summary-panel";
 import { CompactExecutiveList, type CompactExecutiveListItem } from "@/components/today/compact-executive-list";
 import { ExecutiveCockpitSection } from "@/components/today/executive-cockpit-section";
@@ -490,6 +491,8 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           href="/brief"
         />
       </section>
+
+      <ExecutiveItemCandidateLane candidates={todayData.executiveItemCandidates} />
 
       {todayData.emptyState ? (
         <section className="refined-b rounded-[1.9rem] p-5 md:p-7">

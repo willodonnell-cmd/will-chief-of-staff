@@ -63,3 +63,9 @@ Workflow modules nominate Executive Item candidates; they do not control Today o
 The Executive Item Candidate Registry is the shared inspection and eligibility layer between workflow modules and any surface that may later render Executive Items. It receives candidates from source workflows, preserves source metadata and evidence, applies suppression and eligibility checks, and exposes deterministic sorting and summary output.
 
 Today and Executive Brief should consume registry output only after candidates have attention reasons, no active suppression reasons, and a clear recommended next action. Normal standing workflow activity remains inside the source module unless the registry entry represents a real current attention claim.
+
+## Today Surface Integration
+
+Today consumes eligible candidates from the Executive Item Candidate Registry. It does not decide workflow-specific nomination logic, and it does not surface normal standing workflow activity merely because a workflow exists.
+
+The initial Today integration renders eligible candidates read-only. Mutation actions such as dismiss, snooze, create task, mark done, and pin remain future packages.

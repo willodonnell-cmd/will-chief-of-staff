@@ -12,6 +12,7 @@ import {
 } from "@/lib/brief/source-lanes";
 import type { LibraryItemSummary } from "@/lib/capture-library";
 import type { MeetingRecordStatusSummary } from "@/lib/meetings/meeting-records";
+import type { ExecutiveItemRegistryEntry } from "@/lib/executive-item-candidate-registry";
 
 export type TodayBriefItem = {
   id: string;
@@ -79,6 +80,7 @@ export type TodayBriefFreshness = {
 export type TodayViewModel = {
   hasBriefSnapshot: boolean;
   commandSummary: string[];
+  executiveItemCandidates: ExecutiveItemRegistryEntry[];
   currentFocus: TodayBriefItem[];
   decisionsNeeded: TodayBriefItem[];
   meetingPrep: TodayBriefItem[];
@@ -374,15 +376,18 @@ export function mapLibraryTaskToTodayTask(item: LibraryItemSummary): TodayTaskIt
 export function buildTodayViewModel(input: {
   snapshot: ExecutiveBriefSnapshot | null;
   openTasks: LibraryItemSummary[];
+  executiveItemCandidates?: ExecutiveItemRegistryEntry[];
 }): TodayViewModel {
   const structuredBrief: StructuredExecutiveBrief | null = input.snapshot?.structuredBrief ?? null;
   const mappedTasks = input.openTasks.map(mapLibraryTaskToTodayTask);
   const briefOriginTasks = mappedTasks.filter((task) => task.sourcePath === "/brief").slice(0, 3);
+  const executiveItemCandidates = input.executiveItemCandidates ?? [];
 
   if (!structuredBrief) {
     return {
       hasBriefSnapshot: Boolean(input.snapshot),
       commandSummary: [],
+      executiveItemCandidates,
       currentFocus: [],
       decisionsNeeded: [],
       meetingPrep: [],
@@ -404,6 +409,7 @@ export function buildTodayViewModel(input: {
   return {
     hasBriefSnapshot: true,
     commandSummary: compactStringList(structuredBrief.commandSummary),
+    executiveItemCandidates,
     currentFocus: mapBriefItems(structuredBrief.topMoves, "focus"),
     decisionsNeeded: mapBriefItems(structuredBrief.decisionsNeeded, "decision"),
       meetingPrep: mapBriefItems(structuredBrief.meetingPrep, "meeting"),

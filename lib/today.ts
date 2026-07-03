@@ -18,6 +18,8 @@ import {
   buildTodayViewModel,
   type TodayViewModel
 } from "@/lib/today-view-model";
+import { buildInvestmentCommitteeCandidateRegistryEntries, getInvestmentCommitteePageData } from "@/lib/investment-committee";
+import { selectTodayExecutiveItemCandidates } from "@/lib/today-executive-item-candidates";
 
 export type TodayPageData = TodayViewModel;
 
@@ -47,10 +49,15 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     getLatestExecutiveBriefForUser().catch(() => null),
     listOpenLibraryTasks().catch(() => [])
   ]);
+  const executiveItemCandidates = await getTodayExecutiveItemCandidates().catch((error) => {
+    console.error("[today] Failed to load Executive Item candidates.", error);
+    return [];
+  });
 
   const model = buildTodayViewModel({
     snapshot,
-    openTasks: openTasks.slice(0, TODAY_OPEN_TASK_LIMIT)
+    openTasks: openTasks.slice(0, TODAY_OPEN_TASK_LIMIT),
+    executiveItemCandidates
   });
   const calendarLookups =
     model.sourceLanes
@@ -78,4 +85,11 @@ export async function getTodayPageData(): Promise<TodayPageData | null> {
     }
     return model;
   }
+}
+
+export async function getTodayExecutiveItemCandidates() {
+  const investmentCommitteeData = await getInvestmentCommitteePageData();
+  return selectTodayExecutiveItemCandidates(
+    buildInvestmentCommitteeCandidateRegistryEntries(investmentCommitteeData?.board ?? null)
+  );
 }
