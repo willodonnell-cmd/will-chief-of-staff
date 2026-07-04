@@ -158,6 +158,37 @@ test("agent brief ingest strips unsafe fields from fixture payload before storag
   }
 });
 
+test("agent brief ingest rejects wrong shared secrets with JSON 401", async () => {
+  const repository = new FakeExecutiveBriefRepository();
+  const response = await handleAgentBriefIngestRequest(
+    new Request("http://localhost/api/brief/agent-ingest", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-blackhawk-agent-ingest-secret": "wrong-secret"
+      },
+      body: JSON.stringify({
+        json_bundle: {
+          contract_version: "executive_brief.v1",
+          command_summary: ["Do not store."]
+        }
+      })
+    }),
+    {
+      repository,
+      env: {
+        BLACKHAWK_AGENT_INGEST_SECRET: "proof-secret",
+        BLACKHAWK_PRIMARY_USER_EMAIL: "will@example.com"
+      }
+    }
+  );
+
+  assert.equal(response.status, 401);
+  assert.equal(response.headers.get("content-type")?.includes("application/json"), true);
+  assert.deepEqual(await response.json(), { error: "unauthorized" });
+  assert.equal(repository.snapshots.length, 0);
+});
+
 test("agent brief ingest rejects malformed JSON", async () => {
   const previousPrimaryEmail = process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
   const previousSecret = process.env.BLACKHAWK_AGENT_INGEST_SECRET;
@@ -191,6 +222,92 @@ test("agent brief ingest rejects malformed JSON", async () => {
       process.env.BLACKHAWK_AGENT_INGEST_SECRET = previousSecret;
     }
   }
+});
+
+test("agent brief ingest rejects malformed structured payloads with JSON 400", async () => {
+  const repository = new FakeExecutiveBriefRepository();
+  const response = await handleAgentBriefIngestRequest(
+    new Request("http://localhost/api/brief/agent-ingest", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-blackhawk-agent-ingest-secret": "proof-secret"
+      },
+      body: JSON.stringify({
+        json_bundle: {
+          contract_version: "executive_brief.v1"
+        }
+      })
+    }),
+    {
+      repository,
+      env: {
+        BLACKHAWK_AGENT_INGEST_SECRET: "proof-secret",
+        BLACKHAWK_PRIMARY_USER_EMAIL: "will@example.com"
+      }
+    }
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(response.headers.get("content-type")?.includes("application/json"), true);
+  assert.deepEqual(await response.json(), { error: "structured_brief_required" });
+  assert.equal(repository.snapshots.length, 0);
+});
+
+test("agent brief ingest stores the latest D1 snapshot through shared-secret machine auth without browser auth", async () => {
+  const repository = new FakeExecutiveBriefRepository();
+  const request = new Request("http://localhost/api/brief/agent-ingest", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-blackhawk-brief-ingest-secret": "proof-secret"
+    },
+    body: JSON.stringify({
+      slot: "Manual",
+      generated_at: "2026-07-02T18:30:00.000Z",
+      json_bundle: {
+        contract_version: "executive_brief.v1",
+        command_summary: ["Machine bridge proof."],
+        task_candidates: [
+          {
+            id: "task-bridge-1",
+            title: "Confirm public bridge write",
+            priority: "medium",
+            protected_context: "do not persist"
+          }
+        ]
+      }
+    })
+  });
+
+  const response = await handleAgentBriefIngestRequest(request, {
+    repository,
+    env: {
+      BLACKHAWK_BRIEF_INGEST_SECRET: "proof-secret",
+      BLACKHAWK_PRIMARY_USER_ID: "will-primary",
+      BLACKHAWK_PRIMARY_USER_EMAIL: "will@example.com"
+    }
+  });
+  const body = (await response.json()) as {
+    ok: boolean;
+    snapshotId: string;
+    generatedAt: string;
+    taskPersistence: string;
+    excludedColumns: string[];
+  };
+
+  assert.equal(response.status, 201);
+  assert.equal(body.ok, true);
+  assert.equal(body.snapshotId, "brief-test-1");
+  assert.equal(body.generatedAt, "2026-07-02T18:30:00.000Z");
+  assert.equal(body.taskPersistence, "candidate_only");
+  assert.deepEqual(body.excludedColumns, ["task_candidates[0].protected_context"]);
+  assert.equal(repository.users[0]?.userId, "will-primary");
+  assert.equal(repository.users[0]?.email, "will@example.com");
+  assert.equal(repository.snapshots.at(-1)?.generatedAt, "2026-07-02T18:30:00.000Z");
+  assert.equal(repository.snapshots.at(-1)?.slot, "Manual");
+  assert.doesNotMatch(JSON.stringify(repository.snapshots.at(-1)), /do not persist/);
+  assert.equal(repository.taskCandidates[0]?.title, "Confirm public bridge write");
 });
 
 test("agent brief ingest rejects oversized payloads before persistence", async () => {

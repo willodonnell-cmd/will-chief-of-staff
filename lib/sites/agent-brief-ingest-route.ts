@@ -16,9 +16,18 @@ import type { D1Database } from "@/lib/d1/types";
 import { resolveSitesAuthenticatedUser, type SitesAuthenticatedUser } from "@/lib/sites/authenticated-user";
 import { loadRuntimeD1Database } from "@/lib/sites/runtime-d1";
 
+export type AgentBriefIngestEnv = Record<string, string | undefined> & {
+  BLACKHAWK_AGENT_INGEST_SECRET?: string;
+  BLACKHAWK_BRIEF_INGEST_SECRET?: string;
+  BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST?: string;
+  BLACKHAWK_PRIMARY_USER_EMAIL?: string;
+  BLACKHAWK_PRIMARY_USER_ID?: string;
+};
+
 export type AgentBriefIngestDependencies = {
   repository?: ExecutiveBriefD1Repository;
   db?: D1Database;
+  env?: AgentBriefIngestEnv;
   now?: () => Date;
   maxRequestBytes?: number;
 };
@@ -134,10 +143,10 @@ function pickStructuredBrief(payload: AgentBriefIngestPayload, jsonBundle: JsonV
   return normalizeExecutiveBriefJsonBundle(jsonBundle).structuredBrief;
 }
 
-function configuredIngestSecret() {
+function configuredIngestSecret(env: AgentBriefIngestEnv = process.env) {
   return (
-    process.env.BLACKHAWK_AGENT_INGEST_SECRET?.trim() ||
-    process.env.BLACKHAWK_BRIEF_INGEST_SECRET?.trim() ||
+    env.BLACKHAWK_AGENT_INGEST_SECRET?.trim() ||
+    env.BLACKHAWK_BRIEF_INGEST_SECRET?.trim() ||
     null
   );
 }
@@ -150,12 +159,12 @@ function providedIngestSecret(request: Request) {
   );
 }
 
-function hasAgentIngestAuthorization(request: Request, user: SitesAuthenticatedUser | null) {
-  const expectedSecret = configuredIngestSecret();
+function hasAgentIngestAuthorization(request: Request, user: SitesAuthenticatedUser | null, env: AgentBriefIngestEnv = process.env) {
+  const expectedSecret = configuredIngestSecret(env);
   const providedSecret = providedIngestSecret(request);
   const secretAllowed = Boolean(expectedSecret && providedSecret && expectedSecret === providedSecret);
   const workspaceAuthAllowed =
-    process.env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST === "true" &&
+    env.BLACKHAWK_ENABLE_WORKSPACE_AGENT_INGEST === "true" &&
     Boolean(request.headers.get("oai-authenticated-user-email")?.trim()) &&
     Boolean(user);
   return secretAllowed || workspaceAuthAllowed;
@@ -187,8 +196,9 @@ export async function handleAgentBriefIngestRequest(request: Request, dependenci
     return jsonResponse({ error: "method_not_allowed" }, { status: 405 });
   }
 
-  const user = resolveSitesAuthenticatedUser(request.headers);
-  if (!hasAgentIngestAuthorization(request, user)) {
+  const env = dependencies.env ?? process.env;
+  const user = resolveSitesAuthenticatedUser(request.headers, env);
+  if (!hasAgentIngestAuthorization(request, user, env)) {
     return jsonResponse({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -224,7 +234,7 @@ export async function handleAgentBriefIngestRequest(request: Request, dependenci
   const jsonBundle = pickJsonBundle(payload);
   const structuredBrief = pickStructuredBrief(payload, jsonBundle);
   if (!structuredBrief) {
-    return jsonResponse({ error: "structured_brief_required" }, { status: 422 });
+    return jsonResponse({ error: "structured_brief_required" }, { status: 400 });
   }
 
   const sanitizedJsonBundle = sanitizeStructuredOnlyJson(jsonBundle);

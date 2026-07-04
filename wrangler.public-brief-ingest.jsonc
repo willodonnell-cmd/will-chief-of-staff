@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "will-chief-of-staff-brief-ingest",
+  "main": "workers/public-brief-ingest.ts",
+  "compatibility_date": "2026-05-03",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "will-chief-of-staff-sites",
+      "database_id": "96e7fd5a-c104-465e-a544-6788abd662a3"
+    }
+  ]
+}

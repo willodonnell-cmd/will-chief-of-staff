@@ -33,6 +33,34 @@ Authentication uses either:
 
 The ingest route also accepts `BLACKHAWK_BRIEF_INGEST_SECRET` and `x-blackhawk-brief-ingest-secret` as aliases for the manual proof workflow. Prefer `BLACKHAWK_AGENT_INGEST_SECRET` for new environments.
 
+Production ChatGPT Team Sites access protects the human app before requests reach Next.js. Keep that protection in place. Production machine ingest should use the separate public bridge Worker instead of making the main app or all app APIs public.
+
+Bridge architecture:
+
+- The human app remains protected on ChatGPT Sites.
+- The public bridge Worker exposes only `POST /api/brief/agent-ingest` and `GET /health`.
+- The bridge validates `BLACKHAWK_AGENT_INGEST_SECRET` or `BLACKHAWK_BRIEF_INGEST_SECRET` before writing anything.
+- The bridge binds to the same D1 database as the protected Sites app using logical binding `DB`.
+- The bridge calls the same ingest handler as the protected app route, preserving parsing, structured-only sanitization, D1 persistence, `taskPersistence: candidate_only`, and excluded raw/protected field behavior.
+
+Bridge deployment config lives in `wrangler.public-brief-ingest.jsonc`. Configure runtime variables as Worker secrets or vars; do not commit secret values:
+
+```text
+BLACKHAWK_PRIMARY_USER_ID=will-primary
+BLACKHAWK_PRIMARY_USER_EMAIL=<primary user email>
+BLACKHAWK_AGENT_INGEST_SECRET=<shared machine secret>
+BLACKHAWK_BRIEF_SOURCE=d1
+BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true
+```
+
+Deploy the bridge with:
+
+```bash
+npm run deploy:public-brief-ingest
+```
+
+Do not add a catch-all route from the bridge to the app. If a custom domain or route is attached later, scope it only to the bridge Worker surface, not to the protected human app.
+
 The unsafe sample proof payload is checked in at `fixtures/codex-sites-executive-brief-payload.json`. It intentionally includes raw/protected fields so the sanitizer tests can prove those fields do not land in D1. A clean contract fixture is checked in at `fixtures/codex-sites-executive-brief-valid-payload.json`.
 
 ## Manual Proof Workflow
@@ -62,6 +90,14 @@ Run the proof against the unsafe sanitizer fixture:
 npm run prove:sites-d1-brief-ingest
 ```
 
+Run the proof against the public bridge:
+
+```bash
+BLACKHAWK_BRIEF_INGEST_URL=https://your-bridge-worker.example \
+BLACKHAWK_AGENT_INGEST_SECRET=<same-shared-secret> \
+npm run prove:sites-d1-brief-ingest
+```
+
 Or pass an explicit base URL and clean contract fixture:
 
 ```bash
@@ -70,11 +106,20 @@ npm run prove:sites-d1-brief-ingest -- \
   --payload fixtures/codex-sites-executive-brief-valid-payload.json
 ```
 
+Or pass explicit bridge URLs:
+
+```bash
+npm run prove:sites-d1-brief-ingest -- \
+  --ingest-url https://your-bridge-worker.example/api/brief/agent-ingest \
+  --health-url https://your-bridge-worker.example/health \
+  --payload fixtures/codex-sites-executive-brief-valid-payload.json
+```
+
 The script:
 
-- posts the fixture to `POST /api/brief/agent-ingest`;
+- posts the fixture to `POST /api/brief/agent-ingest` on either the protected app preview or the public bridge;
 - requires the response to include `ok`, `snapshotId`, `slot`, `generatedAt`, and `taskPersistence: candidate_only`;
-- reads `GET /api/sites-d1-health`;
+- reads `GET /api/sites-d1-health` for app URL mode or `GET /health` for bridge URL mode;
 - fails unless the health response reports the ingested snapshot as the latest D1 snapshot.
 
 If this fails, keep `BLACKHAWK_BRIEF_SOURCE=supabase`, keep `BLACKHAWK_CLOUDMAILIN_FALLBACK_ACTIVE=true`, and treat D1 as non-production until the proof lane is repaired.

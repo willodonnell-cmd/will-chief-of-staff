@@ -30,13 +30,12 @@ function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
 }
 
-function requiredEnv(name: string) {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} is required.`);
+function resolveUrl(value: string, path: string) {
+  const url = new URL(value);
+  if (url.pathname === "/" || url.pathname === "") {
+    url.pathname = path;
   }
-
-  return value;
+  return url.toString();
 }
 
 function ingestSecret() {
@@ -85,7 +84,19 @@ async function readJsonResponse<T>(response: Response) {
 }
 
 async function main() {
-  const baseUrl = trimTrailingSlash(argValue("--base-url") ?? requiredEnv("BLACKHAWK_BASE_URL"));
+  const baseUrlValue = argValue("--base-url") ?? process.env.BLACKHAWK_BASE_URL?.trim();
+  const ingestUrlValue = argValue("--ingest-url") ?? process.env.BLACKHAWK_BRIEF_INGEST_URL?.trim();
+  if (!baseUrlValue && !ingestUrlValue) {
+    throw new Error("BLACKHAWK_BASE_URL, BLACKHAWK_BRIEF_INGEST_URL, --base-url, or --ingest-url is required.");
+  }
+  const baseUrl = baseUrlValue ? trimTrailingSlash(baseUrlValue) : null;
+  const ingestUrl = ingestUrlValue ? resolveUrl(ingestUrlValue, "/api/brief/agent-ingest") : `${baseUrl}/api/brief/agent-ingest`;
+  const healthUrlValue = argValue("--health-url") ?? process.env.BLACKHAWK_D1_HEALTH_URL?.trim();
+  const healthUrl = healthUrlValue
+    ? resolveUrl(healthUrlValue, "/health")
+    : ingestUrlValue
+      ? resolveUrl(ingestUrlValue, "/health")
+      : `${baseUrl}/api/sites-d1-health`;
   const payloadPath = argValue("--payload") ?? "fixtures/codex-sites-executive-brief-payload.json";
   const secret = ingestSecret();
   if (!secret) {
@@ -93,7 +104,7 @@ async function main() {
   }
 
   const payload = await readFile(payloadPath, "utf8");
-  const ingestResponse = await fetch(`${baseUrl}/api/brief/agent-ingest`, {
+  const ingestResponse = await fetch(ingestUrl, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -107,7 +118,7 @@ async function main() {
   }
   assertProofResponse(ingestBody);
 
-  const healthResponse = await fetch(`${baseUrl}/api/sites-d1-health`, {
+  const healthResponse = await fetch(healthUrl, {
     headers: {
       accept: "application/json"
     }
@@ -128,6 +139,7 @@ async function main() {
         taskPersistence: ingestBody.taskPersistence,
         excludedColumns: ingestBody.excludedColumns,
         health: {
+          url: healthUrl,
           d1BindingAvailable: healthBody.d1BindingAvailable,
           briefSourceMode: healthBody.briefSourceMode,
           latestSnapshot: healthBody.latestSnapshot

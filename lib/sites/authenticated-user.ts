@@ -4,6 +4,11 @@ export type SitesAuthenticatedUser = {
   displayName: string | null;
 };
 
+export type SitesUserEnv = Record<string, string | undefined> & {
+  BLACKHAWK_PRIMARY_USER_EMAIL?: string;
+  BLACKHAWK_PRIMARY_USER_ID?: string;
+};
+
 function normalizeEmail(value: string | null | undefined) {
   return value?.trim().toLowerCase() || null;
 }
@@ -22,9 +27,9 @@ function decodeOptionalFullName(headers: Headers) {
   }
 }
 
-export function resolveSitesAuthenticatedUser(headers: Headers): SitesAuthenticatedUser | null {
+export function resolveSitesAuthenticatedUser(headers: Headers, env: SitesUserEnv = process.env): SitesAuthenticatedUser | null {
   const headerEmail = normalizeEmail(headers.get("oai-authenticated-user-email"));
-  const configuredEmail = normalizeEmail(process.env.BLACKHAWK_PRIMARY_USER_EMAIL);
+  const configuredEmail = normalizeEmail(env.BLACKHAWK_PRIMARY_USER_EMAIL);
   const email = headerEmail ?? configuredEmail;
   if (!email) {
     return null;
@@ -35,7 +40,7 @@ export function resolveSitesAuthenticatedUser(headers: Headers): SitesAuthentica
   }
 
   return {
-    id: process.env.BLACKHAWK_PRIMARY_USER_ID?.trim() || "will-primary",
+    id: env.BLACKHAWK_PRIMARY_USER_ID?.trim() || "will-primary",
     email,
     displayName: decodeOptionalFullName(headers)
   };
