@@ -1,8 +1,10 @@
 import type { D1Database } from "@/lib/d1/types";
+import { handleCloudMailinBriefIngestRequest, type CloudMailinBriefIngestEnv } from "@/lib/sites/cloudmailin-brief-ingest-route";
 import { handleAgentBriefIngestRequest, type AgentBriefIngestEnv } from "@/lib/sites/agent-brief-ingest-route";
 import { loadSitesD1Health, type SitesD1HealthEnv } from "@/lib/sites/sites-d1-health";
 
 type PublicBriefIngestEnv = AgentBriefIngestEnv &
+  CloudMailinBriefIngestEnv &
   SitesD1HealthEnv & {
     DB?: D1Database;
   };
@@ -31,6 +33,13 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/brief/agent-ingest") {
       return await handleAgentBriefIngestRequest(request, {
+        db: env.DB,
+        env
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/inbox/cloudmailin") {
+      return await handleCloudMailinBriefIngestRequest(request, {
         db: env.DB,
         env
       });
