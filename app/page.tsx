@@ -472,25 +472,48 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           href="/brief"
         />
         <GlanceChip
-          label="Email"
+          label="Email signals"
           value={String((emailLane?.items.length ?? 0) + (emailLane?.tasks.length ?? 0))}
-          detail="Priority asks, decisions, and follow-up"
+          detail="Coverage from the latest brief"
           href="/brief"
         />
         <GlanceChip
-          label="Calendar / Meetings"
+          label="Calendar / meetings signals"
           value={String(calendarLane?.items.length ?? 0)}
-          detail="Meeting context from the latest brief"
+          detail="Coverage from the latest brief"
           href="/brief"
         />
         <GlanceChip
-          label="Teams"
+          label="Teams signals"
           value={String(teamsLane?.items.length ?? 0)}
-          detail="Internal urgency and coordination"
+          detail="Coverage from the latest brief"
           tone="quiet"
           href="/brief"
         />
       </section>
+
+      <ExecutiveCockpitSection
+        eyebrow="Recommended Focus"
+        title="The few items that should get attention before the next brief."
+        count={countLabel(todayData.recommendedFocus.length, "item")}
+      >
+        <CompactExecutiveList
+          items={briefItemsToCompactList(todayData.recommendedFocus)}
+          emptyState="No immediate focus items from the latest brief."
+        />
+      </ExecutiveCockpitSection>
+
+      <ExecutiveCockpitSection
+        eyebrow="Open Loops"
+        title="Active follow-ups and unresolved asks."
+        count={countLabel(todayData.openLoops.length, "loop")}
+        compact
+      >
+        <CompactExecutiveList
+          items={briefItemsToCompactList(todayData.openLoops)}
+          emptyState="No open loops detected."
+        />
+      </ExecutiveCockpitSection>
 
       <ExecutiveItemCandidateLane candidates={todayData.executiveItemCandidates} />
 
@@ -513,6 +536,10 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 
       {todayData.sourceLanes.length > 0 ? (
         <section className="space-y-4">
+          <div>
+            <p className="section-label">Source Detail</p>
+            <h2 className="section-title">Supporting evidence by channel.</h2>
+          </div>
           {todayData.sourceLanes.map((lane) => {
             const laneItems = [
               ...briefItemsToCompactList(lane.items),

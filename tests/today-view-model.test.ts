@@ -162,6 +162,56 @@ test("Today view model uses latest Executive Brief structured sections", () => {
   assert.equal(model.taskCandidates[0]?.title, "Ask finance for lender update");
 });
 
+test("Today derives Recommended Focus and Open Loops from brief attention signals", () => {
+  const baseSnapshot = buildSnapshot();
+  const model = buildTodayViewModel({
+    snapshot: buildSnapshot({
+      structuredBrief: {
+        ...baseSnapshot.structuredBrief!,
+        topMoves: [
+          {
+            id: "generic-move",
+            title: "Review weekly operating note",
+            summary: "Low-noise context for the week.",
+            source: "Executive Brief",
+            priority: "low",
+            recommendedAction: null,
+            dueAt: null,
+            attendees: []
+          },
+          ...baseSnapshot.structuredBrief!.topMoves
+        ],
+        carryForward: [
+          ...baseSnapshot.structuredBrief!.carryForward,
+          {
+            id: "waiting-loop",
+            title: "Waiting on data center response",
+            summary: "Someone still owes Will the response package.",
+            source: "Outlook",
+            sourceUrl: "https://outlook.example/waiting-loop",
+            priority: "medium",
+            recommendedAction: "Follow up",
+            dueAt: null,
+            attendees: []
+          }
+        ]
+      }
+    }),
+    openTasks: [],
+    now: new Date("2026-06-08T14:00:00.000Z")
+  });
+
+  assert.deepEqual(
+    model.recommendedFocus.map((item) => item.title),
+    ["Board approval path", "Approve memo release", "LP call prep"]
+  );
+  assert.equal(model.recommendedFocus.length, 3);
+  assert.deepEqual(
+    model.openLoops.map((item) => item.title),
+    ["Carry financing context", "Waiting on data center response", "Ask finance for lender update"]
+  );
+});
+
 test("Today brief-derived cards link to source URLs or specific Executive Brief anchors", () => {
   const model = buildTodayViewModel({
     snapshot: buildSnapshot({

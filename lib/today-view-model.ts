@@ -81,6 +81,8 @@ export type TodayViewModel = {
   hasBriefSnapshot: boolean;
   commandSummary: string[];
   executiveItemCandidates: ExecutiveItemRegistryEntry[];
+  recommendedFocus: TodayBriefItem[];
+  openLoops: TodayBriefItem[];
   currentFocus: TodayBriefItem[];
   decisionsNeeded: TodayBriefItem[];
   meetingPrep: TodayBriefItem[];
@@ -337,6 +339,97 @@ function dedupeTodayLaneItems(items: TodayBriefItem[]) {
   });
 }
 
+function dedupeTodayItems(items: TodayBriefItem[]) {
+  return dedupeTodayLaneItems(items);
+}
+
+function resolveNow(value: number | Date | undefined) {
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  return value ?? Date.now();
+}
+
+function hasDueSoonDate(item: TodayBriefItem, now: number) {
+  if (!item.taskDueAt) {
+    return false;
+  }
+
+  const parsed = Date.parse(item.taskDueAt);
+  if (Number.isNaN(parsed)) {
+    return false;
+  }
+
+  const threeDaysFromNow = now + 3 * 24 * 60 * 60 * 1000;
+  return parsed <= threeDaysFromNow;
+}
+
+function focusScore(item: TodayBriefItem, now: number) {
+  let score = 0;
+  const text = [item.title, item.summary, item.actionLabel, item.sourceLabel, ...item.meta].join(" ").toLowerCase();
+
+  if (item.taskPriority === "high") {
+    score += 50;
+  } else if (item.taskPriority === "medium") {
+    score += 20;
+  }
+
+  if (item.meta.some((value) => value.toLowerCase().includes("decision"))) {
+    score += 40;
+  }
+
+  if (item.sourceLane === "calendar_meetings") {
+    score += 30;
+  }
+
+  if (item.actionLabel) {
+    score += 25;
+  }
+
+  if (hasDueSoonDate(item, now)) {
+    score += 25;
+  }
+
+  if (/\b(escalat|risk|blocked|urgent|deadline|waiting|approval|approve|decide|decision|prep|prepare)\b/.test(text)) {
+    score += 20;
+  }
+
+  return score;
+}
+
+function buildRecommendedFocus(input: {
+  currentFocus: TodayBriefItem[];
+  decisionsNeeded: TodayBriefItem[];
+  meetingPrep: TodayBriefItem[];
+  taskCandidates: TodayBriefItem[];
+  now: number;
+}) {
+  return dedupeTodayItems([
+    ...input.decisionsNeeded,
+    ...input.meetingPrep,
+    ...input.currentFocus,
+    ...input.taskCandidates
+  ])
+    .map((item, index) => ({ item, index, score: focusScore(item, input.now) }))
+    .filter(({ item, score }) => score > 0 || item.taskPriority === "high")
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(({ item }) => item)
+    .slice(0, 3);
+}
+
+function buildOpenLoops(input: {
+  carryForward: TodayBriefItem[];
+  taskCandidates: TodayBriefItem[];
+  recommendedFocus: TodayBriefItem[];
+}) {
+  const focusKeys = new Set(input.recommendedFocus.map(todayItemDedupeKey));
+
+  return dedupeTodayItems([...input.carryForward, ...input.taskCandidates])
+    .filter((item) => !focusKeys.has(todayItemDedupeKey(item)))
+    .slice(0, 6);
+}
+
 function taskPriorityLabel(item: LibraryItemSummary) {
   const priority = item.task?.priority ?? item.priority;
   if (!priority) {
@@ -377,8 +470,10 @@ export function buildTodayViewModel(input: {
   snapshot: ExecutiveBriefSnapshot | null;
   openTasks: LibraryItemSummary[];
   executiveItemCandidates?: ExecutiveItemRegistryEntry[];
+  now?: number | Date;
 }): TodayViewModel {
   const structuredBrief: StructuredExecutiveBrief | null = input.snapshot?.structuredBrief ?? null;
+  const now = resolveNow(input.now);
   const mappedTasks = input.openTasks.map(mapLibraryTaskToTodayTask);
   const briefOriginTasks = mappedTasks.filter((task) => task.sourcePath === "/brief").slice(0, 3);
   const executiveItemCandidates = input.executiveItemCandidates ?? [];
@@ -388,6 +483,8 @@ export function buildTodayViewModel(input: {
       hasBriefSnapshot: Boolean(input.snapshot),
       commandSummary: [],
       executiveItemCandidates,
+      recommendedFocus: [],
+      openLoops: [],
       currentFocus: [],
       decisionsNeeded: [],
       meetingPrep: [],
@@ -406,29 +503,49 @@ export function buildTodayViewModel(input: {
     };
   }
 
+  const currentFocus = mapBriefItems(structuredBrief.topMoves, "focus");
+  const decisionsNeeded = mapBriefItems(structuredBrief.decisionsNeeded, "decision");
+  const meetingPrep = mapBriefItems(structuredBrief.meetingPrep, "meeting");
+  const carryForward = mapBriefItems(structuredBrief.carryForward, "carry-forward");
+  const taskCandidates = mapBriefItems(structuredBrief.taskCandidates, "task-candidate");
+  const recommendedFocus = buildRecommendedFocus({
+    currentFocus,
+    decisionsNeeded,
+    meetingPrep,
+    taskCandidates,
+    now
+  });
+  const openLoops = buildOpenLoops({
+    carryForward,
+    taskCandidates,
+    recommendedFocus
+  });
+
   return {
     hasBriefSnapshot: true,
     commandSummary: compactStringList(structuredBrief.commandSummary),
     executiveItemCandidates,
-    currentFocus: mapBriefItems(structuredBrief.topMoves, "focus"),
-    decisionsNeeded: mapBriefItems(structuredBrief.decisionsNeeded, "decision"),
-      meetingPrep: mapBriefItems(structuredBrief.meetingPrep, "meeting"),
-      carryForward: mapBriefItems(structuredBrief.carryForward, "carry-forward"),
-      taskCandidates: mapBriefItems(structuredBrief.taskCandidates, "task-candidate"),
-      openTasks: mappedTasks,
-      sourceLanes: buildStructuredBriefSourceLanes({ structuredBrief })
-        .map((lane) => ({
-          id: lane.id,
-          label: lane.label,
-          items: dedupeTodayLaneItems(
-            lane.entries.map((entry) => mapLaneEntry(entry, lane.id)).filter((item): item is TodayBriefItem => Boolean(item))
-          ),
-          tasks: lane.id === "email" ? briefOriginTasks : []
-        }))
-        .filter((lane) => lane.items.length > 0 || lane.tasks.length > 0),
-      meetingRecordStatuses: {},
-      briefFreshness: buildFreshness(input.snapshot),
-      emptyState: null
+    recommendedFocus,
+    openLoops,
+    currentFocus,
+    decisionsNeeded,
+    meetingPrep,
+    carryForward,
+    taskCandidates,
+    openTasks: mappedTasks,
+    sourceLanes: buildStructuredBriefSourceLanes({ structuredBrief })
+      .map((lane) => ({
+        id: lane.id,
+        label: lane.label,
+        items: dedupeTodayLaneItems(
+          lane.entries.map((entry) => mapLaneEntry(entry, lane.id)).filter((item): item is TodayBriefItem => Boolean(item))
+        ),
+        tasks: lane.id === "email" ? briefOriginTasks : []
+      }))
+      .filter((lane) => lane.items.length > 0 || lane.tasks.length > 0),
+    meetingRecordStatuses: {},
+    briefFreshness: buildFreshness(input.snapshot),
+    emptyState: null
   };
 }
 
