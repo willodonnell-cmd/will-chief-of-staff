@@ -57,6 +57,26 @@ test("parses human brief and fenced JSON bundle from CloudMailIn body", () => {
   assert.deepEqual(parsed.validationWarnings, ["JSON bundle did not contain recognized Executive Brief sections."]);
 });
 
+test("reports missing or invalid CloudMailIn Executive Brief JSON bundles", () => {
+  const missing = parseExecutiveBriefBundleEmail({
+    destinationAddress: "priority+will@example.com",
+    subject: "BLACKHAWK_BRIEF_BUNDLE 11 AM",
+    rawText: "Human brief only. No structured bundle was included."
+  });
+  const invalid = parseExecutiveBriefBundleEmail({
+    destinationAddress: "priority+will@example.com",
+    subject: "BLACKHAWK_BRIEF_BUNDLE 11 AM",
+    rawText: ["Human brief first.", "", "```json", "{\"slot\":", "```"].join("\n")
+  });
+
+  assert.equal(missing.jsonBundle, null);
+  assert.equal(invalid.jsonBundle, null);
+  assert.deepEqual(missing.validationWarnings, ["No JSON object bundle was found."]);
+  assert.deepEqual(invalid.validationWarnings, ["No JSON object bundle was found."]);
+  assert.match(missing.humanBrief ?? "", /Human brief only/);
+  assert.match(invalid.humanBrief ?? "", /Human brief first/);
+});
+
 test("falls back to manual slot and forwarded date when bundle lacks metadata", () => {
   const parsed = parseExecutiveBriefBundleEmail({
     destinationAddress: "priority+will@example.com",

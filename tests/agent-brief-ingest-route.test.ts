@@ -189,6 +189,36 @@ test("agent brief ingest rejects wrong shared secrets with JSON 401", async () =
   assert.equal(repository.snapshots.length, 0);
 });
 
+test("agent brief ingest rejects missing shared secrets with JSON 401", async () => {
+  const repository = new FakeExecutiveBriefRepository();
+  const response = await handleAgentBriefIngestRequest(
+    new Request("http://localhost/api/brief/agent-ingest", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        json_bundle: {
+          contract_version: "executive_brief.v1",
+          command_summary: ["Do not store."]
+        }
+      })
+    }),
+    {
+      repository,
+      env: {
+        BLACKHAWK_AGENT_INGEST_SECRET: "proof-secret",
+        BLACKHAWK_PRIMARY_USER_EMAIL: "will@example.com"
+      }
+    }
+  );
+
+  assert.equal(response.status, 401);
+  assert.equal(response.headers.get("content-type")?.includes("application/json"), true);
+  assert.deepEqual(await response.json(), { error: "unauthorized" });
+  assert.equal(repository.snapshots.length, 0);
+});
+
 test("agent brief ingest rejects malformed JSON", async () => {
   const previousPrimaryEmail = process.env.BLACKHAWK_PRIMARY_USER_EMAIL;
   const previousSecret = process.env.BLACKHAWK_AGENT_INGEST_SECRET;

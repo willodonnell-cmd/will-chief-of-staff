@@ -22,6 +22,43 @@ function logCloudMailinInbound(message: string, details?: Record<string, unknown
   console.info("[priority-inbox.cloudmailin]", message, safeDetails);
 }
 
+function getHeaderValue(
+  headers: Record<string, string | string[] | null | undefined> | null | undefined,
+  name: string
+) {
+  if (!headers) {
+    return null;
+  }
+
+  const requestedName = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() !== requestedName) {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      return value.find((entry) => entry.trim()) ?? null;
+    }
+
+    return value ?? null;
+  }
+
+  return null;
+}
+
+function emailDiagnostics(input: {
+  subject?: string | null;
+  forwardedByEmail?: string | null;
+  forwardedByName?: string | null;
+  headers?: Record<string, string | string[] | null | undefined> | null;
+}) {
+  return {
+    subject: input.subject,
+    sender: input.forwardedByEmail ?? input.forwardedByName ?? null,
+    messageId: getHeaderValue(input.headers, "message-id")
+  };
+}
+
 function textResponse(status: number, body: string) {
   return new NextResponse(body, {
     status,
@@ -92,6 +129,15 @@ export async function POST(request: Request) {
 
     if (isExecutiveBriefBundleSubject(parsedRequest.input.subject)) {
       const parsedBrief = parseExecutiveBriefBundleEmail(parsedRequest.input);
+      const parsedBriefDiagnostics = {
+        ...emailDiagnostics(parsedRequest.input),
+        kind: "executive_brief",
+        jsonBundleParsed: Boolean(parsedBrief.jsonBundle),
+        validationWarnings: parsedBrief.validationWarnings,
+        slot: parsedBrief.slot,
+        generatedAt: parsedBrief.generatedAt
+      };
+      logCloudMailinInbound("Received Executive Brief bundle from CloudMailin.", parsedBriefDiagnostics);
       const snapshot = await upsertExecutiveBriefSnapshot({
         client,
         userId: forwardingConfig.user_id,
@@ -99,6 +145,8 @@ export async function POST(request: Request) {
       });
 
       logCloudMailinInbound("Persisted Executive Brief snapshot from CloudMailin.", {
+        ...parsedBriefDiagnostics,
+        d1SnapshotWriteSucceeded: true,
         snapshotId: snapshot.id,
         slot: snapshot.slot,
         sourceMessageId: snapshot.sourceMessageId
@@ -116,6 +164,10 @@ export async function POST(request: Request) {
     }
 
     if (isInvestmentCommitteeBundleSubject(parsedRequest.input.subject)) {
+      logCloudMailinInbound("Received Investment Committee bundle from CloudMailin.", {
+        ...emailDiagnostics(parsedRequest.input),
+        kind: "investment_committee"
+      });
       const parsedBundle = parseInvestmentCommitteeBundleEmail(parsedRequest.input);
       const bundle = await upsertInvestmentCommitteeAgentBundle({
         client,
@@ -158,6 +210,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     logCloudMailinInbound("CloudMailin request failed during ingest.", {
+      subject: parsedRequest.ok ? parsedRequest.input.subject : null,
+      sender: parsedRequest.ok
+        ? parsedRequest.input.forwardedByEmail ?? parsedRequest.input.forwardedByName ?? null
+        : null,
       error: error instanceof Error ? error.message : "Unknown ingest error."
     });
     return textResponse(500, "CloudMailin email could not be processed.");

@@ -19,6 +19,14 @@ Codex/GPT producers can post structured Executive Brief bundles to:
 POST /api/brief/agent-ingest
 ```
 
+For production machine callers, use the public bridge Worker rather than the protected ChatGPT Team Site app:
+
+```text
+https://will-chief-of-staff-brief-ingest.blackhawk-will.workers.dev/api/brief/agent-ingest
+```
+
+Do not use `https://will-chief-of-staff.prologis.chatgpt-team.site/api/brief/agent-ingest` for machine ingest. The ChatGPT Team Site app is protected by auth and returns a sign-in wall before machine callers reach the route handler.
+
 The endpoint accepts the existing Executive Brief JSON contract and writes:
 
 - one structured brief snapshot;
@@ -33,7 +41,7 @@ Authentication uses either:
 
 The ingest route also accepts `BLACKHAWK_BRIEF_INGEST_SECRET` and `x-blackhawk-brief-ingest-secret` as aliases for the manual proof workflow. Prefer `BLACKHAWK_AGENT_INGEST_SECRET` for new environments.
 
-Production ChatGPT Team Sites access protects the human app before requests reach Next.js. Keep that protection in place. Production machine ingest should use the separate public bridge Worker instead of making the main app or all app APIs public.
+Production ChatGPT Team Sites access protects the human app before requests reach Next.js. Keep that protection in place. Production machine ingest should use the separate public bridge Worker instead of making the main app or all app APIs public. Current scheduled Executive Brief delivery still runs through Outlook Email -> CloudMailIn -> `/api/inbox/cloudmailin`; do not replace that path until the ChatGPT Workspace Agent has a real direct HTTP/API action.
 
 Bridge architecture:
 
@@ -60,6 +68,8 @@ npm run deploy:public-brief-ingest
 ```
 
 Do not add a catch-all route from the bridge to the app. If a custom domain or route is attached later, scope it only to the bridge Worker surface, not to the protected human app.
+
+The bridge currently keeps `workers_dev` enabled because production depends on the `workers.dev` URL. Preview Worker URLs are disabled in `wrangler.public-brief-ingest.jsonc` because they are not used for production ingest.
 
 The unsafe sample proof payload is checked in at `fixtures/codex-sites-executive-brief-payload.json`. It intentionally includes raw/protected fields so the sanitizer tests can prove those fields do not land in D1. A clean contract fixture is checked in at `fixtures/codex-sites-executive-brief-valid-payload.json`.
 
