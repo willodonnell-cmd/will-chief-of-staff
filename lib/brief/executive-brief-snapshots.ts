@@ -5,6 +5,13 @@ import { withSupabaseTimeout } from "@/lib/supabase/request-timeout";
 
 export const EXECUTIVE_BRIEF_BUNDLE_SUBJECT_PREFIX = "BLACKHAWK_BRIEF_BUNDLE";
 export const EXECUTIVE_BRIEF_SLOT_LABELS = ["7 AM", "11 AM", "1 PM", "3 PM", "5 PM", "7 PM", "Manual"] as const;
+const EXECUTIVE_BRIEF_AGENT_SLOT_LABELS: Record<string, ExecutiveBriefSlotLabel> = {
+  morning_0700: "7 AM",
+  midday_1100: "11 AM",
+  afternoon_1430: "3 PM",
+  evening_1730: "5 PM",
+  evening_1930: "7 PM"
+};
 
 export type ExecutiveBriefSlotLabel = (typeof EXECUTIVE_BRIEF_SLOT_LABELS)[number];
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -83,6 +90,7 @@ export type StructuredExecutiveBrief = {
   meetingPrep: StructuredExecutiveBriefItem[];
   carryForward: StructuredExecutiveBriefItem[];
   taskCandidates: StructuredExecutiveBriefItem[];
+  sourceCoverage?: JsonValue[];
 };
 
 type JsonExtraction = {
@@ -258,6 +266,11 @@ export function isExecutiveBriefBundleSubject(subject: string | null | undefined
 function slotFromText(value: string | null | undefined): ExecutiveBriefSlotLabel | null {
   if (!value) {
     return null;
+  }
+
+  const normalizedAgentSlot = value.toLowerCase().match(/\b(morning_0700|midday_1100|afternoon_1430|evening_1730|evening_1930)\b/)?.[1];
+  if (normalizedAgentSlot) {
+    return EXECUTIVE_BRIEF_AGENT_SLOT_LABELS[normalizedAgentSlot];
   }
 
   const normalized = value.toUpperCase();
@@ -452,6 +465,15 @@ function normalizeCommandSummary(record: JsonRecord | null) {
     .slice(0, 5);
 }
 
+function normalizeSourceCoverage(record: JsonRecord | null) {
+  const value = firstJsonValue(record, ["source_coverage", "sourceCoverage"]);
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is JsonValue => isJsonValue(entry));
+  }
+
+  return isJsonValue(value) && value !== undefined && value !== null ? [value] : [];
+}
+
 export function normalizeExecutiveBriefJsonBundle(value: JsonValue | null) {
   const record = toJsonRecord(value);
   const warnings: string[] = [];
@@ -464,7 +486,16 @@ export function normalizeExecutiveBriefJsonBundle(value: JsonValue | null) {
     commandSummary: normalizeCommandSummary(record),
     topMoves: normalizeStructuredItems(
       record,
-      ["top_3_executive_moves", "topExecutiveMoves", "top_moves", "topMoves", "executive_moves", "moves"],
+      [
+        "top_3_executive_moves",
+        "topExecutiveMoves",
+        "top_moves",
+        "topMoves",
+        "recommended_focus",
+        "recommendedFocus",
+        "executive_moves",
+        "moves"
+      ],
       "move"
     ),
     decisionsNeeded: normalizeStructuredItems(
@@ -486,7 +517,8 @@ export function normalizeExecutiveBriefJsonBundle(value: JsonValue | null) {
       record,
       ["task_candidates", "taskCandidates", "recommended_tasks", "recommendedTasks"],
       "task"
-    )
+    ),
+    sourceCoverage: normalizeSourceCoverage(record)
   };
 
   const itemCount =
@@ -495,7 +527,8 @@ export function normalizeExecutiveBriefJsonBundle(value: JsonValue | null) {
     structuredBrief.decisionsNeeded.length +
     structuredBrief.meetingPrep.length +
     structuredBrief.carryForward.length +
-    structuredBrief.taskCandidates.length;
+    structuredBrief.taskCandidates.length +
+    (structuredBrief.sourceCoverage?.length ?? 0);
 
   if (itemCount === 0) {
     warnings.push("JSON bundle did not contain recognized Executive Brief sections.");

@@ -173,6 +173,89 @@ test("CloudMailIn Executive Brief payload parses and writes to D1-compatible sto
   assert.doesNotMatch(JSON.stringify(repository.snapshots[0]), /do not persist/);
 });
 
+test("CloudMailIn Executive Brief payload maps Agent slot ids before writing", async () => {
+  const repository = new FakeExecutiveBriefRepository();
+  const bodyWithoutJsonSlot = [
+    "Human brief:",
+    "Focus on the midday lender packet.",
+    "",
+    "BLACKHAWK_JSON_START",
+    JSON.stringify({
+      contract_version: "executive_brief.v1",
+      task_candidates: [{ id: "task-midday-subject", title: "Ask Maya for lender packet owner", priority: "medium" }]
+    }),
+    "BLACKHAWK_JSON_END"
+  ].join("\n");
+  const response = await handleCloudMailinBriefIngestRequest(
+    new Request("https://worker.example/api/inbox/cloudmailin", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        buildCloudMailinPayload(bodyWithoutJsonSlot, {
+          headers: {
+            subject: "BLACKHAWK_BRIEF_BUNDLE midday_1100 2026-07-04 PST",
+            date: "Sat, 04 Jul 2026 11:00:00 -0700",
+            "message-id": "<brief-live-midday@example.com>",
+            from: "Chief of Staff Agent <chief-of-staff-agent@example.com>"
+          }
+        })
+      )
+    }),
+    {
+      repository,
+      env: {
+        BLACKHAWK_PRIMARY_USER_ID: "will-primary",
+        BLACKHAWK_PRIMARY_USER_EMAIL: "will@example.com"
+      }
+    }
+  );
+
+  assert.equal(response.status, 201);
+  assert.equal(repository.snapshots[0]?.slot, "11 AM");
+});
+
+test("CloudMailIn Executive Brief payload maps JSON Agent slot ids before writing", async () => {
+  const repository = new FakeExecutiveBriefRepository();
+  const body = [
+    "Human brief:",
+    "Focus on the midday lender packet.",
+    "",
+    "BLACKHAWK_JSON_START",
+    JSON.stringify({
+      contract_version: "executive_brief.v1",
+      slot: "midday_1100",
+      task_candidates: [{ id: "task-midday", title: "Ask Maya for lender packet owner", priority: "medium" }]
+    }),
+    "BLACKHAWK_JSON_END"
+  ].join("\n");
+  const response = await handleCloudMailinBriefIngestRequest(
+    new Request("https://worker.example/api/inbox/cloudmailin", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        buildCloudMailinPayload(body, {
+          headers: {
+            subject: "BLACKHAWK_BRIEF_BUNDLE 2026-07-04 PST",
+            date: "Sat, 04 Jul 2026 11:00:00 -0700",
+            "message-id": "<brief-live-json-midday@example.com>",
+            from: "Chief of Staff Agent <chief-of-staff-agent@example.com>"
+          }
+        })
+      )
+    }),
+    {
+      repository,
+      env: {
+        BLACKHAWK_PRIMARY_USER_ID: "will-primary",
+        BLACKHAWK_PRIMARY_USER_EMAIL: "will@example.com"
+      }
+    }
+  );
+
+  assert.equal(response.status, 201);
+  assert.equal(repository.snapshots[0]?.slot, "11 AM");
+});
+
 test("CloudMailIn Executive Brief payload without JSON fails with useful diagnostics", async () => {
   const repository = new FakeExecutiveBriefRepository();
   const response = await handleCloudMailinBriefIngestRequest(

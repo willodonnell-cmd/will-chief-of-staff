@@ -57,6 +57,103 @@ test("parses human brief and fenced JSON bundle from CloudMailIn body", () => {
   assert.deepEqual(parsed.validationWarnings, ["JSON bundle did not contain recognized Executive Brief sections."]);
 });
 
+test("extracts BLACKHAWK marker JSON bundles", () => {
+  const parsed = parseExecutiveBriefBundleEmail({
+    destinationAddress: "priority+will@example.com",
+    subject: "BLACKHAWK_BRIEF_BUNDLE morning_0700 2026-07-04 PST",
+    rawText: [
+      "Recommended Focus",
+      "Confirm the lender memo.",
+      "",
+      "BLACKHAWK_JSON_START",
+      JSON.stringify({
+        slot: "morning_0700",
+        command_summary: ["Lender memo first."],
+        top_3_executive_moves: [{ title: "Confirm lender memo", priority: "high" }]
+      }),
+      "BLACKHAWK_JSON_END"
+    ].join("\n")
+  });
+
+  assert.equal(parsed.slot, "7 AM");
+  assert.deepEqual(parsed.jsonBundle, {
+    slot: "morning_0700",
+    command_summary: ["Lender memo first."],
+    top_3_executive_moves: [{ title: "Confirm lender memo", priority: "high" }]
+  });
+  assert.equal(parsed.structuredBrief?.topMoves[0]?.title, "Confirm lender memo");
+  assert.doesNotMatch(parsed.humanBrief ?? "", /BLACKHAWK_JSON_START/);
+});
+
+test("continues to extract fenced JSON bundles", () => {
+  const parsed = parseExecutiveBriefBundleEmail({
+    destinationAddress: "priority+will@example.com",
+    subject: "BLACKHAWK_BRIEF_BUNDLE midday_1100 2026-07-04 PST",
+    rawText: [
+      "Human brief first.",
+      "",
+      "```json",
+      JSON.stringify({
+        slot: "midday_1100",
+        task_candidates: [{ title: "Ask Maya for the owner", priority: "medium" }]
+      }),
+      "```"
+    ].join("\n")
+  });
+
+  assert.equal(parsed.slot, "11 AM");
+  assert.equal(parsed.structuredBrief?.taskCandidates[0]?.title, "Ask Maya for the owner");
+});
+
+test("maps Agent slot ids from Executive Brief subjects", () => {
+  const cases = [
+    ["morning_0700", "7 AM"],
+    ["midday_1100", "11 AM"],
+    ["afternoon_1430", "3 PM"],
+    ["evening_1730", "5 PM"],
+    ["evening_1930", "7 PM"]
+  ] as const;
+
+  for (const [slotId, expectedSlot] of cases) {
+    const parsed = parseExecutiveBriefBundleEmail({
+      destinationAddress: "priority+will@example.com",
+      subject: `BLACKHAWK_BRIEF_BUNDLE ${slotId} 2026-07-04 PST`,
+      rawText: "Human brief only."
+    });
+
+    assert.equal(parsed.slot, expectedSlot);
+  }
+});
+
+test("maps Agent slot ids from JSON slot fields", () => {
+  const cases = [
+    ["morning_0700", "7 AM"],
+    ["midday_1100", "11 AM"],
+    ["afternoon_1430", "3 PM"],
+    ["evening_1730", "5 PM"],
+    ["evening_1930", "7 PM"]
+  ] as const;
+
+  for (const [slotId, expectedSlot] of cases) {
+    const parsed = parseExecutiveBriefBundleEmail({
+      destinationAddress: "priority+will@example.com",
+      subject: "BLACKHAWK_BRIEF_BUNDLE Manual",
+      rawText: [
+        "Human brief first.",
+        "",
+        "BLACKHAWK_JSON_START",
+        JSON.stringify({
+          slot: slotId,
+          task_candidates: [{ title: `Task for ${slotId}` }]
+        }),
+        "BLACKHAWK_JSON_END"
+      ].join("\n")
+    });
+
+    assert.equal(parsed.slot, expectedSlot);
+  }
+});
+
 test("reports missing or invalid CloudMailIn Executive Brief JSON bundles", () => {
   const missing = parseExecutiveBriefBundleEmail({
     destinationAddress: "priority+will@example.com",
@@ -75,6 +172,18 @@ test("reports missing or invalid CloudMailIn Executive Brief JSON bundles", () =
   assert.deepEqual(invalid.validationWarnings, ["No JSON object bundle was found."]);
   assert.match(missing.humanBrief ?? "", /Human brief only/);
   assert.match(invalid.humanBrief ?? "", /Human brief first/);
+});
+
+test("invalid marked JSON fails cleanly without structuredBrief", () => {
+  const parsed = parseExecutiveBriefBundleEmail({
+    destinationAddress: "priority+will@example.com",
+    subject: "BLACKHAWK_BRIEF_BUNDLE evening_1930 2026-07-04 PST",
+    rawText: ["Human brief first.", "BLACKHAWK_JSON_START", "{\"slot\":", "BLACKHAWK_JSON_END"].join("\n")
+  });
+
+  assert.equal(parsed.jsonBundle, null);
+  assert.equal(parsed.structuredBrief, null);
+  assert.deepEqual(parsed.validationWarnings, ["No JSON object bundle was found."]);
 });
 
 test("falls back to manual slot and forwarded date when bundle lacks metadata", () => {
@@ -219,6 +328,51 @@ test("normalizes marked Executive Brief JSON into structured sections", () => {
   assert.equal(parsed.structuredBrief?.taskCandidates[0]?.priority, "medium");
   assert.match(parsed.humanBrief ?? "", /Focus on the board memo/);
   assert.doesNotMatch(parsed.humanBrief ?? "", /BLACKHAWK_JSON_START/);
+});
+
+test("normalizes Agent-style snake_case and camelCase Executive Brief sections", () => {
+  const parsed = parseExecutiveBriefBundleEmail({
+    destinationAddress: "priority+will@example.com",
+    subject: "BLACKHAWK_BRIEF_BUNDLE midday_1100 2026-07-04 PST",
+    rawText: [
+      "Recommended Focus",
+      "Move the lender packet forward.",
+      "",
+      "BLACKHAWK_JSON_START",
+      JSON.stringify({
+        contract_version: "executive_brief.v1",
+        slot: "midday_1100",
+        command_summary: ["The lender packet is the command item."],
+        recommended_focus: [
+          {
+            title: "Move lender packet",
+            summary: "Maya is waiting for the decision.",
+            source_lane: "email",
+            source_refs: [{ sourceType: "outlook", id: "message-1" }]
+          }
+        ],
+        decisionsNeeded: [{ title: "Decide whether to release the memo" }],
+        meetingPrep: [{ title: "Prep partner sync", action: "Bring lender status." }],
+        carryForward: [{ title: "Remember unresolved data-room owner" }],
+        task_candidates: [{ title: "Ask Maya for owner", priority: "medium" }],
+        source_coverage: [
+          { sourceType: "outlook", used: true, itemCount: 4 },
+          { sourceType: "calendar", used: true, itemCount: 2 }
+        ]
+      }),
+      "BLACKHAWK_JSON_END"
+    ].join("\n")
+  });
+
+  assert.equal(parsed.slot, "11 AM");
+  assert.deepEqual(parsed.validationWarnings, []);
+  assert.equal(parsed.structuredBrief?.commandSummary[0], "The lender packet is the command item.");
+  assert.equal(parsed.structuredBrief?.topMoves[0]?.title, "Move lender packet");
+  assert.equal(parsed.structuredBrief?.taskCandidates[0]?.title, "Ask Maya for owner");
+  assert.deepEqual(parsed.structuredBrief?.sourceCoverage, [
+    { sourceType: "outlook", used: true, itemCount: 4 },
+    { sourceType: "calendar", used: true, itemCount: 2 }
+  ]);
 });
 
 test("normalizes old thin Executive Brief bundles without requiring metadata", () => {
