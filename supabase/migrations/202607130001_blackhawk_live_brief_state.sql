@@ -1,6 +1,6 @@
 create table if not exists public.blackhawk_live_brief_refreshes (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null references public.users(id) on delete cascade,
   trigger text not null check (trigger in ('open', 'scheduled', 'manual')),
   status text not null default 'requested' check (status in ('requested', 'running', 'succeeded', 'partial', 'failed')),
   idempotency_key text not null,
@@ -15,7 +15,7 @@ create table if not exists public.blackhawk_live_brief_refreshes (
 );
 
 create table if not exists public.blackhawk_live_brief_state (
-  user_id uuid primary key references auth.users(id) on delete cascade,
+  user_id uuid primary key references public.users(id) on delete cascade,
   brief_id text not null,
   contract_version text not null,
   brief jsonb not null,
@@ -36,26 +36,46 @@ drop policy if exists "Users read their Blackhawk refreshes" on public.blackhawk
 create policy "Users read their Blackhawk refreshes"
   on public.blackhawk_live_brief_refreshes for select
   to authenticated
-  using ((select auth.uid()) = user_id);
+  using (exists (
+    select 1 from public.users app_user
+    where app_user.id = user_id
+      and app_user.auth_user_id = (select auth.uid())
+  ));
 
 drop policy if exists "Users create their Blackhawk refreshes" on public.blackhawk_live_brief_refreshes;
 create policy "Users create their Blackhawk refreshes"
   on public.blackhawk_live_brief_refreshes for insert
   to authenticated
-  with check ((select auth.uid()) = user_id);
+  with check (exists (
+    select 1 from public.users app_user
+    where app_user.id = user_id
+      and app_user.auth_user_id = (select auth.uid())
+  ));
 
 drop policy if exists "Users update their Blackhawk refreshes" on public.blackhawk_live_brief_refreshes;
 create policy "Users update their Blackhawk refreshes"
   on public.blackhawk_live_brief_refreshes for update
   to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
+  using (exists (
+    select 1 from public.users app_user
+    where app_user.id = user_id
+      and app_user.auth_user_id = (select auth.uid())
+  ))
+  with check (exists (
+    select 1 from public.users app_user
+    where app_user.id = user_id
+      and app_user.auth_user_id = (select auth.uid())
+  ));
 
 drop policy if exists "Users read their current Blackhawk brief" on public.blackhawk_live_brief_state;
 create policy "Users read their current Blackhawk brief"
   on public.blackhawk_live_brief_state for select
   to authenticated
-  using ((select auth.uid()) = user_id);
+  using (exists (
+    select 1 from public.users app_user
+    where app_user.id = user_id
+      and app_user.auth_user_id = (select auth.uid())
+  ));
 
 revoke insert, update, delete on public.blackhawk_live_brief_state from anon, authenticated;
 
@@ -76,7 +96,14 @@ begin
   select * into v_refresh
   from public.blackhawk_live_brief_refreshes
   where id = p_refresh_id
-    and user_id = (select auth.uid())
+    and (
+      (select auth.role()) = 'service_role'
+      or exists (
+        select 1 from public.users app_user
+        where app_user.id = blackhawk_live_brief_refreshes.user_id
+          and app_user.auth_user_id = (select auth.uid())
+      )
+    )
   for update;
 
   if not found then
@@ -154,3 +181,4 @@ $$;
 
 revoke all on function public.promote_blackhawk_live_brief(uuid, jsonb) from public, anon;
 grant execute on function public.promote_blackhawk_live_brief(uuid, jsonb) to authenticated;
+grant execute on function public.promote_blackhawk_live_brief(uuid, jsonb) to service_role;
