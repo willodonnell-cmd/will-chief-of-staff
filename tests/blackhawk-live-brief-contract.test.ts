@@ -134,3 +134,12 @@ test("keeps Investment Committee work out of the main brief", () => {
   assert.equal(result.ok, false);
   assert.match(result.errors.join(" "), /must stay outside the main brief/);
 });
+
+test("blocks items placed in the wrong section", () => {
+  const brief = buildBrief();
+  brief.sections.waitingOn.items = [buildItem({ id: "waiting-1", canonicalIssueKey: "vendor-response" })];
+  brief.sections.topActions.items = [];
+  const result = validateBlackhawkLiveBrief(brief);
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(" "), /appears in Waiting On/);
+});

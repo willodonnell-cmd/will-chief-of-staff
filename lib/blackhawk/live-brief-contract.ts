@@ -112,6 +112,13 @@ export function validateBlackhawkLiveBrief(
 ): LiveBriefValidationResult {
   const errors: string[] = [];
   const visibleItems = allVisibleItems(brief);
+  const sectionKinds: Array<[LiveBriefSection, LiveBriefItem["kind"], string]> = [
+    [brief.sections.topActions, "top_action", "Top Actions"],
+    [brief.sections.decisionsNeeded, "decision", "Decisions Needed"],
+    [brief.sections.meetingPrep, "meeting_prep", "Meeting Preparation"],
+    [brief.sections.waitingOn, "waiting_on", "Waiting On"],
+    [brief.sections.personal, "personal_task", "Personal"]
+  ];
 
   if (brief.contractVersion !== BLACKHAWK_LIVE_BRIEF_CONTRACT_VERSION) {
     errors.push(`Unsupported contract version: ${brief.contractVersion}.`);
@@ -127,6 +134,17 @@ export function validateBlackhawkLiveBrief(
 
   if (brief.sections.topActions.items.length > 5) {
     errors.push("The opening brief may contain at most five top actions.");
+  }
+
+  for (const [section, expectedKind, label] of sectionKinds) {
+    if (section.additionalItemCount < 0 || !Number.isInteger(section.additionalItemCount)) {
+      errors.push(`${label} additionalItemCount must be a non-negative integer.`);
+    }
+    for (const item of section.items) {
+      if (item.kind !== expectedKind) {
+        errors.push(`Item ${item.id} has kind ${item.kind} but appears in ${label}.`);
+      }
+    }
   }
 
   const lowConfidenceItems = visibleItems.filter((item) => item.confidence === "low");
