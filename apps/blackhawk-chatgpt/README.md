@@ -7,7 +7,7 @@ This package exposes the compact Blackhawk executive brief as a ChatGPT MCP App.
 - Local development defaults to `BLACKHAWK_AUTH_MODE=preview`.
 - `NODE_ENV=production` refuses to start in preview mode.
 - Authenticated mode validates Supabase JWT signature, issuer, Blackhawk-specific audience, expiry/not-before, OAuth scopes, client ID, and Will's allowlisted identity.
-- Use `BLACKHAWK_ALLOWED_USER_ID` for the immutable production identity. `BLACKHAWK_ALLOWED_EMAIL` may be used as an additional check.
+- Use `BLACKHAWK_PRIMARY_OWNER_USER_ID` for the immutable primary identity and `BLACKHAWK_RECOVERY_USER_IDS` for explicitly approved recovery identities. Email-only authorization remains a transitional fallback.
 - Every tool advertises OAuth and returns an MCP `mcp/www_authenticate` challenge when no authenticated identity is attached.
 - No tool sends email or Teams messages.
 
@@ -29,8 +29,8 @@ NODE_ENV=production
 BLACKHAWK_AUTH_MODE=supabase
 SUPABASE_URL=https://<project-ref>.supabase.co
 BLACKHAWK_MCP_RESOURCE_URL=https://<blackhawk-host>/mcp
-BLACKHAWK_ALLOWED_USER_ID=<immutable Supabase auth user UUID>
-BLACKHAWK_ALLOWED_EMAIL=<authorized email, optional additional check>
+BLACKHAWK_PRIMARY_OWNER_USER_ID=<immutable primary Supabase auth user UUID>
+BLACKHAWK_RECOVERY_USER_IDS=<optional comma-separated recovery user UUIDs>
 ```
 
 The expected token audience defaults to `BLACKHAWK_MCP_RESOURCE_URL`. The Supabase OAuth server must echo ChatGPT's OAuth `resource` value into the access token audience. Blackhawk intentionally rejects generic project-audience tokens.
@@ -59,4 +59,3 @@ After deployment to a public HTTPS host:
 - ChatGPT developer mode should list three tools and prompt for account linking before a tool returns the fictional checkpoint brief.
 
 Do not connect live Outlook, Teams, Obsidian, or task data until this authenticated checkpoint passes end to end.
-

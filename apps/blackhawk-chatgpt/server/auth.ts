@@ -17,8 +17,9 @@ type SupabaseAuthConfig = {
   audience: string;
   resource: URL;
   resourceMetadataUrl: URL;
-  allowedEmail?: string;
-  allowedUserId?: string;
+  primaryOwnerUserId?: string;
+  recoveryUserIds: Set<string>;
+  fallbackAllowedEmail?: string;
 };
 
 export type AuthConfig = PreviewAuthConfig | SupabaseAuthConfig;
@@ -45,10 +46,21 @@ export function loadAuthConfig(): AuthConfig {
 
   const supabaseUrl = requiredUrl("SUPABASE_URL");
   const resource = requiredUrl("BLACKHAWK_MCP_RESOURCE_URL");
-  const allowedEmail = process.env.BLACKHAWK_ALLOWED_EMAIL?.trim().toLowerCase();
-  const allowedUserId = process.env.BLACKHAWK_ALLOWED_USER_ID?.trim();
-  if (!allowedEmail && !allowedUserId) {
-    throw new Error("Set BLACKHAWK_ALLOWED_USER_ID or BLACKHAWK_ALLOWED_EMAIL to enforce Will-only access.");
+  const primaryOwnerUserId = (
+    process.env.BLACKHAWK_PRIMARY_OWNER_USER_ID ?? process.env.BLACKHAWK_ALLOWED_USER_ID
+  )?.trim();
+  const recoveryUserIds = new Set(
+    (process.env.BLACKHAWK_RECOVERY_USER_IDS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+  );
+  const fallbackAllowedEmail = process.env.BLACKHAWK_ALLOWED_EMAIL?.trim().toLowerCase();
+  if (!primaryOwnerUserId && !fallbackAllowedEmail) {
+    throw new Error("Set BLACKHAWK_PRIMARY_OWNER_USER_ID to enforce owner-only access.");
+  }
+  if (primaryOwnerUserId && recoveryUserIds.has(primaryOwnerUserId)) {
+    throw new Error("The primary owner ID cannot also be listed as a recovery identity.");
   }
 
   return {
@@ -58,8 +70,9 @@ export function loadAuthConfig(): AuthConfig {
     audience: process.env.BLACKHAWK_TOKEN_AUDIENCE ?? resource.toString(),
     resource,
     resourceMetadataUrl: new URL("/.well-known/oauth-protected-resource", resource),
-    allowedEmail,
-    allowedUserId
+    primaryOwnerUserId,
+    recoveryUserIds,
+    fallbackAllowedEmail
   };
 }
 
@@ -91,11 +104,16 @@ export function createSupabaseTokenVerifier(config: SupabaseAuthConfig): OAuthTo
       if (!userId || !clientId || typeof payload.exp !== "number") {
         throw new Error("Access token is missing sub, client_id, or exp.");
       }
-      if (config.allowedUserId && userId !== config.allowedUserId) {
-        throw new Error("The authenticated user is not authorized for Blackhawk.");
-      }
-      if (config.allowedEmail && email !== config.allowedEmail) {
-        throw new Error("The authenticated email is not authorized for Blackhawk.");
+      let identityRole: "primary_owner" | "recovery" | "email_fallback";
+      if (config.primaryOwnerUserId) {
+        if (userId === config.primaryOwnerUserId) identityRole = "primary_owner";
+        else if (config.recoveryUserIds.has(userId)) identityRole = "recovery";
+        else throw new Error("The authenticated user is not authorized for Blackhawk.");
+      } else {
+        if (!config.fallbackAllowedEmail || email !== config.fallbackAllowedEmail) {
+          throw new Error("The authenticated email is not authorized for Blackhawk.");
+        }
+        identityRole = "email_fallback";
       }
 
       const scopes = tokenScopes(payload);
@@ -109,7 +127,7 @@ export function createSupabaseTokenVerifier(config: SupabaseAuthConfig): OAuthTo
         scopes,
         expiresAt: payload.exp,
         resource: config.resource,
-        extra: { userId, email }
+        extra: { userId, email, identityRole }
       };
     }
   };

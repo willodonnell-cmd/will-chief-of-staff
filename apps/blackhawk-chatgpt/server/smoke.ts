@@ -83,7 +83,8 @@ const authChild = spawn(process.execPath, [serverPath], {
     BLACKHAWK_AUTH_MODE: "supabase",
     SUPABASE_URL: "https://example.supabase.co",
     BLACKHAWK_MCP_RESOURCE_URL: "https://blackhawk.example.com/mcp",
-    BLACKHAWK_ALLOWED_EMAIL: "will@example.com"
+    BLACKHAWK_PRIMARY_OWNER_USER_ID: "00000000-0000-4000-8000-000000000001",
+    BLACKHAWK_RECOVERY_USER_IDS: "00000000-0000-4000-8000-000000000002"
   },
   stdio: ["ignore", "pipe", "pipe"]
 });
