@@ -30,6 +30,18 @@ type LiveBriefRefreshRow = {
   error_message: string | null;
 };
 
+export type BlackhawkBriefRefresh = {
+  id: string;
+  trigger: LiveBriefRefreshRow["trigger"];
+  status: LiveBriefRefreshRow["status"];
+  idempotencyKey: string;
+  startedAt: string;
+  completedAt: string | null;
+  sourceCoverage: Record<string, unknown>;
+  validationErrors: string[];
+  errorMessage: string | null;
+};
+
 export type CurrentLiveBrief = {
   brief: BlackhawkLiveBrief;
   revision: number;
@@ -40,6 +52,20 @@ function assertNoSupabaseError(error: { message?: string } | null, fallback: str
   if (error) {
     throw new Error(error.message || fallback);
   }
+}
+
+function mapRefreshRow(row: LiveBriefRefreshRow): BlackhawkBriefRefresh {
+  return {
+    id: row.id,
+    trigger: row.trigger,
+    status: row.status,
+    idempotencyKey: row.idempotency_key,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    sourceCoverage: row.source_coverage,
+    validationErrors: row.validation_errors,
+    errorMessage: row.error_message
+  };
 }
 
 export async function getCurrentBlackhawkLiveBrief(params: {
@@ -97,10 +123,26 @@ export async function requestBlackhawkBriefRefresh(params: {
       .eq("idempotency_key", params.idempotencyKey)
       .single<LiveBriefRefreshRow>();
     assertNoSupabaseError(existing.error, "The Blackhawk refresh could not be requested.");
-    return existing.data;
+    return mapRefreshRow(existing.data);
   }
 
-  return response.data;
+  return mapRefreshRow(response.data);
+}
+
+export async function getBlackhawkBriefRefresh(params: {
+  client: SupabaseClient;
+  userId: string;
+  refreshId: string;
+}): Promise<BlackhawkBriefRefresh | null> {
+  const response = await params.client
+    .from("blackhawk_live_brief_refreshes")
+    .select("id, user_id, trigger, status, idempotency_key, started_at, completed_at, source_coverage, validation_errors, error_message")
+    .eq("id", params.refreshId)
+    .eq("user_id", params.userId)
+    .maybeSingle<LiveBriefRefreshRow>();
+
+  assertNoSupabaseError(response.error, "The Blackhawk refresh could not be loaded.");
+  return response.data ? mapRefreshRow(response.data) : null;
 }
 
 export async function promoteBlackhawkLiveBrief(params: {

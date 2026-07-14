@@ -57,9 +57,10 @@ Task, Waiting On, drafting, research, and Adjust handlers are represented in the
 
 1. Canonical live-brief contract and validator (complete).
 2. Supabase live-state repository and atomic refresh promotion (complete in code; migration not deployed).
-3. Read/refresh MCP tools with OAuth and Will-only authorization.
-4. Compact stacked ChatGPT widget with expanded item controls.
-5. Connector orchestration, scheduled refresh handoff, and end-to-end launch-blocker evals.
+3. Authenticated current-state and idempotent opening-refresh service (complete in code).
+4. Read/refresh MCP tools with OAuth and Will-only authorization.
+5. Compact stacked ChatGPT widget with expanded item controls.
+6. Connector orchestration, scheduled refresh handoff, and end-to-end launch-blocker evals.
 
 ## Deliberately deferred
 
