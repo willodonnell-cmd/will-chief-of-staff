@@ -2,6 +2,8 @@
 
 This package exposes the compact Blackhawk executive brief as a ChatGPT MCP App. It currently serves explicitly fictional preview data; the live-state adapter is the next binding step.
 
+ChatGPT is the user interface. The Cloudflare Worker in this package is only the hidden MCP transport that makes the brief tools and interactive card available to ChatGPT. It is separate from, and does not modify, the existing Sites project.
+
 ## Safety boundary
 
 - Local development defaults to `BLACKHAWK_AUTH_MODE=preview`.
@@ -18,6 +20,7 @@ npm install
 npm run typecheck
 npm run build
 npm run smoke
+npm run worker:smoke
 ```
 
 The smoke suite covers the fictional preview contract plus protected-resource discovery and an unauthenticated tool challenge in Supabase mode. It does not use a real Supabase token or live Blackhawk data.
@@ -59,3 +62,7 @@ After deployment to a public HTTPS host:
 - ChatGPT developer mode should list three tools and prompt for account linking before a tool returns the fictional checkpoint brief.
 
 Do not connect live Outlook, Teams, Obsidian, or task data until this authenticated checkpoint passes end to end.
+
+## Fictional-data Worker checkpoint
+
+`wrangler.jsonc` packages the same three MCP tools and widget for Cloudflare's Web Standards runtime. The Worker is deliberately locked to the fictional fixture adapter: its health response and every MCP response include a fictional-preview marker, and there are no live connector or Supabase data imports. This public test surface is suitable only for the fictional checkpoint. Before any live data is bound, switch the Worker to Supabase OAuth mode and pass the authenticated identity into the MCP transport.

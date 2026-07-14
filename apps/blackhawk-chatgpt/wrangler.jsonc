@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "blackhawk-mcp-preview",
+  "main": "server/worker.ts",
+  "compatibility_date": "2026-07-13",
+  "workers_dev": true,
+  "preview_urls": true,
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.html"],
+      "fallthrough": true
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
