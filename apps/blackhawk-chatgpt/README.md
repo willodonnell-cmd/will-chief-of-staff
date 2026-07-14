@@ -66,3 +66,5 @@ Do not connect live Outlook, Teams, Obsidian, or task data until this authentica
 ## Fictional-data Worker checkpoint
 
 `wrangler.jsonc` packages the same three MCP tools and widget for Cloudflare's Web Standards runtime. The Worker is deliberately locked to the fictional fixture adapter: its health response and every MCP response include a fictional-preview marker, and there are no live connector or Supabase data imports. This public test surface is suitable only for the fictional checkpoint. Before any live data is bound, switch the Worker to Supabase OAuth mode and pass the authenticated identity into the MCP transport.
+
+Cloudflare Workers Builds uses `codex/blackhawk-phase-1-live-brief-contract` as the checkpoint production branch and `/apps/blackhawk-chatgpt` as its root directory. Non-production branch builds are disabled for this isolated preview Worker.
