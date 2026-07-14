@@ -58,9 +58,23 @@ Task, Waiting On, drafting, research, and Adjust handlers are represented in the
 1. Canonical live-brief contract and validator (complete).
 2. Supabase live-state repository and atomic refresh promotion (complete in code; migration not deployed).
 3. Authenticated current-state and idempotent opening-refresh service (complete in code).
-4. Read/refresh MCP tools with OAuth and Will-only authorization.
-5. Compact stacked ChatGPT widget with expanded item controls.
+4. Preview MCP server and read/refresh tool contracts (complete with fictional test data).
+5. Compact stacked ChatGPT widget with expanded item controls (implemented; ChatGPT-host rendering review pending).
 6. Connector orchestration, scheduled refresh handoff, and end-to-end launch-blocker evals.
+
+## Checkpoint app status
+
+The preview app lives in `apps/blackhawk-chatgpt` and uses the official TypeScript MCP SDK, MCP Apps extension helpers, Streamable HTTP, and a versioned `text/html;profile=mcp-app` widget resource.
+
+Preview tools:
+
+- `show_live_brief`
+- `request_brief_refresh`
+- `get_brief_item`
+
+The app compiles, type-checks, advertises the expected tool metadata, serves the expected widget resource, and returns the expected fictional preview contract in its MCP smoke test. It is deliberately unauthenticated and preview-only at this point and must not be deployed as the production connector.
+
+The local browser binary could not remain running in the current sandbox, so final desktop/mobile interaction and visual review must occur through ChatGPT developer mode or another supported browser environment before this slice is accepted.
 
 ## Deliberately deferred
 
