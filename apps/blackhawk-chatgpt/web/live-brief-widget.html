@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: light-dark(#ffffff, #171717);
+      --surface: light-dark(#f7f7f5, #202020);
+      --surface-strong: light-dark(#f0f0ed, #292929);
+      --text: light-dark(#171717, #f4f4f4);
+      --muted: light-dark(#6f6f69, #a6a6a0);
+      --line: light-dark(#e4e4df, #363633);
+      --accent: light-dark(#315c45, #7fbd98);
+      --critical: light-dark(#a33a2b, #e98b7d);
+      --warning: light-dark(#95651d, #deb46d);
+      --focus: light-dark(#2563eb, #8ab4ff);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: transparent; color: var(--text); }
+    button, a { font: inherit; }
+    button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .shell { width: 100%; max-width: 760px; margin: 0 auto; background: var(--bg); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+    .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
+    .title { margin: 0; font-size: 18px; line-height: 1.25; font-weight: 680; letter-spacing: -0.015em; }
+    .meta { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .preview { color: var(--warning); }
+    .refresh { border: 1px solid var(--line); background: var(--surface); color: var(--text); padding: 7px 11px; border-radius: 9px; cursor: pointer; font-size: 12px; font-weight: 620; }
+    .refresh:hover { background: var(--surface-strong); }
+    .refresh[disabled] { opacity: .55; cursor: wait; }
+    .section { border-bottom: 1px solid var(--line); }
+    .section:last-of-type { border-bottom: 0; }
+    .section-title { margin: 0; padding: 13px 20px 8px; color: var(--muted); font-size: 11px; line-height: 1; font-weight: 720; letter-spacing: .075em; text-transform: uppercase; }
+    details.section > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 13px 20px; color: var(--text); font-size: 13px; font-weight: 650; }
+    details.section > summary::-webkit-details-marker { display: none; }
+    .count { color: var(--muted); font-size: 12px; font-weight: 500; }
+    .list { margin: 0; padding: 0 12px 12px; list-style: none; }
+    .item { border-radius: 11px; }
+    .item + .item { margin-top: 3px; }
+    .item-button { width: 100%; border: 0; border-radius: 11px; background: transparent; color: inherit; text-align: left; padding: 11px 8px; display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; cursor: pointer; }
+    .item-button:hover, .item[data-open="true"] .item-button { background: var(--surface); }
+    .rank { color: var(--muted); font-size: 12px; line-height: 19px; text-align: center; }
+    .headline { font-size: 14px; line-height: 1.35; font-weight: 640; letter-spacing: -.005em; }
+    .explanation { margin-top: 3px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+    .change { align-self: start; margin-top: 1px; color: var(--accent); font-size: 10px; line-height: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .change[data-change="unchanged"] { display: none; }
+    .detail { display: none; margin: -4px 8px 10px 42px; padding: 12px 13px; border-left: 2px solid var(--line); }
+    .item[data-open="true"] .detail { display: block; }
+    .detail-heading { margin: 0 0 4px; font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .055em; }
+    .detail-copy { margin: 0 0 11px; font-size: 12.5px; line-height: 1.5; }
+    .sources { margin: 0 0 12px; padding-left: 17px; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .action { border: 1px solid var(--line); background: var(--bg); color: var(--text); padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 620; }
+    .action:hover { background: var(--surface-strong); }
+    .additional { margin: 3px 8px 0 42px; color: var(--muted); font-size: 11.5px; }
+    .coverage { padding: 11px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .coverage strong { color: var(--warning); font-weight: 650; }
+    .footer { display: flex; flex-wrap: wrap; gap: 14px; padding: 12px 20px 14px; background: var(--surface); }
+    .footer button { border: 0; padding: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 11.5px; font-weight: 620; }
+    .footer button:hover { color: var(--text); }
+    .empty { padding: 13px 20px; color: var(--muted); font-size: 12px; }
+    @media (max-width: 520px) {
+      .shell { border-left: 0; border-right: 0; border-radius: 0; }
+      .header { padding: 16px; }
+      .section-title, details.section > summary { padding-left: 16px; padding-right: 16px; }
+      .item-button { grid-template-columns: 20px 1fr; }
+      .change { grid-column: 2; }
+      .detail { margin-left: 38px; }
+      .footer, .coverage { padding-left: 16px; padding-right: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <main id="root" aria-live="polite"></main>
+  <script type="module">
+    const fallback = {
+      mode: "preview",
+      brief: {
+        generatedAt: "2026-07-13T16:05:00.000Z",
+        sourceCoverage: { outlook: { status: "available" }, calendar: { status: "available" }, teams: { status: "partial", warning: "Teams coverage is partial in this preview." } },
+        sections: {
+          topActions: { additionalItemCount: 0, items: [
+            { id: "preview-action-1", headline: "Approve the board-prep direction", explanation: "Your decision will unblock the team before tomorrow's preparation session.", change: "new", rank: 1, context: "The working team has converged on one direction and is waiting before finalizing the materials.", whyNow: "The preparation session begins tomorrow morning.", recommendedNextMove: "Review the recommendation and approve or revise the direction.", evidence: [{ label: "Preview email · Board prep recommendation" }, { label: "Preview Teams thread · Materials status" }] },
+            { id: "preview-action-2", headline: "Resolve the partner follow-up", explanation: "A concise response today will preserve momentum on an important relationship.", change: "reranked", rank: 2, context: "The latest note narrows the open question to one commercial point.", whyNow: "The counterparty asked for a response today.", recommendedNextMove: "Draft a direct response addressing the remaining point.", evidence: [{ label: "Preview email · Partner follow-up" }] }
+          ] },
+          decisionsNeeded: { additionalItemCount: 0, items: [{ id: "preview-decision-1", headline: "Choose the budget sequencing", explanation: "The team needs one sequencing choice before it can finalize the plan.", change: "changed", context: "Two feasible sequences remain, with different timing tradeoffs.", whyNow: "Planning closes this week.", recommendedNextMove: "Review the two alternatives and select one.", evidence: [{ label: "Preview Teams thread · Sequencing options" }] }] },
+          meetingPrep: { additionalItemCount: 1, items: [{ id: "preview-meeting-1", headline: "Operating review", explanation: "Tomorrow's meeting requires a decision on the two open operating issues.", change: "unchanged", context: "The agenda centers on performance, the open dependency, and the decision required from you.", whyNow: "The meeting starts within 24 hours.", recommendedNextMove: "Review the open issues and desired meeting outcome.", evidence: [{ label: "Preview calendar event · Operating review" }] }] },
+          waitingOn: { additionalItemCount: 0, items: [] },
+          personal: { additionalItemCount: 0, items: [{ id: "preview-personal-1", headline: "Renew personal membership", explanation: "A personal task you explicitly added.", change: "unchanged", context: null, whyNow: null, recommendedNextMove: null, evidence: [{ label: "Preview personal task" }] }] }
+        }
+      }
+    };
+
+    const root = document.getElementById("root");
+    let data = fallback;
+    let requestId = 0;
+    const pending = new Map();
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+    }
+
+    function rpc(method, params) {
+      const id = ++requestId;
+      window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+      return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+    }
+
+    function message(text) {
+      window.parent.postMessage({ jsonrpc: "2.0", method: "ui/message", params: { role: "user", content: [{ type: "text", text }] } }, "*");
+    }
+
+    function itemHtml(item, index) {
+      const sources = (item.evidence ?? []).map((source) => `<li>${escapeHtml(source.label)}</li>`).join("");
+      return `<li class="item" data-id="${escapeHtml(item.id)}" data-open="false">
+        <button class="item-button" data-expand="${escapeHtml(item.id)}" aria-expanded="false">
+          <span class="rank">${item.rank ?? index + 1}</span>
+          <span><span class="headline">${escapeHtml(item.headline)}</span><span class="explanation">${escapeHtml(item.explanation)}</span></span>
+          <span class="change" data-change="${escapeHtml(item.change)}">${escapeHtml(item.change === "reranked" ? "Re-ranked" : item.change)}</span>
+        </button>
+        <div class="detail">
+          ${item.context ? `<p class="detail-heading">Context</p><p class="detail-copy">${escapeHtml(item.context)}</p>` : ""}
+          ${item.whyNow ? `<p class="detail-heading">Why now</p><p class="detail-copy">${escapeHtml(item.whyNow)}</p>` : ""}
+          ${sources ? `<p class="detail-heading">Sources</p><ul class="sources">${sources}</ul>` : ""}
+          <div class="actions">
+            <button class="action" data-action="draft" data-id="${escapeHtml(item.id)}">Draft response</button>
+            <button class="action" data-action="research" data-id="${escapeHtml(item.id)}">Deeper research</button>
+            <button class="action" data-action="task" data-id="${escapeHtml(item.id)}">Accept as task</button>
+            <button class="action" data-action="adjust" data-id="${escapeHtml(item.id)}">Adjust</button>
+          </div>
+        </div>
+      </li>`;
+    }
+
+    function items(section) {
+      if (!section?.items?.length) return `<p class="empty">Nothing requires attention.</p>`;
+      const rows = section.items.map(itemHtml).join("");
+      const additional = section.additionalItemCount ? `<p class="additional">Additional items · ${section.additionalItemCount}</p>` : "";
+      return `<ul class="list">${rows}</ul>${additional}`;
+    }
+
+    function collapsedSection(label, section, open = false) {
+      if (!section?.items?.length && !section?.additionalItemCount) return "";
+      const count = (section.items?.length ?? 0) + (section.additionalItemCount ?? 0);
+      return `<details class="section" ${open ? "open" : ""}><summary><span>${escapeHtml(label)}</span><span class="count">${count}</span></summary>${items(section)}</details>`;
+    }
+
+    function render(next) {
+      data = next?.brief ? next : fallback;
+      const brief = data.brief;
+      const sections = brief.sections;
+      const partial = Object.entries(brief.sourceCoverage ?? {}).filter(([, coverage]) => coverage.status !== "available");
+      const time = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(brief.generatedAt));
+      root.innerHTML = `<article class="shell">
+        <header class="header"><div><h1 class="title">Blackhawk</h1><div class="meta"><span class="preview">Preview data</span> · Updated ${escapeHtml(time)}</div></div><button class="refresh" data-refresh>Refresh</button></header>
+        <section class="section"><h2 class="section-title">Top actions</h2>${items(sections.topActions)}</section>
+        ${collapsedSection("Decisions needed", sections.decisionsNeeded, true)}
+        ${collapsedSection("Meeting preparation", sections.meetingPrep)}
+        ${collapsedSection("Waiting on", sections.waitingOn)}
+        ${collapsedSection("Personal", sections.personal, true)}
+        ${partial.length ? `<div class="coverage"><strong>Coverage:</strong> ${partial.map(([name, coverage]) => `${escapeHtml(name)} — ${escapeHtml(coverage.warning ?? coverage.status)}`).join(" · ")}</div>` : ""}
+        <footer class="footer"><button data-nav="Investment Committee">Investment Committee</button><button data-nav="Tasks & Waiting On">Tasks & Waiting On</button><button data-nav="Admin & Settings">Admin & Settings</button></footer>
+      </article>`;
+    }
+
+    root.addEventListener("click", async (event) => {
+      const target = event.target.closest("button");
+      if (!target) return;
+      if (target.dataset.expand) {
+        const row = target.closest(".item");
+        const open = row.dataset.open !== "true";
+        row.dataset.open = String(open);
+        target.setAttribute("aria-expanded", String(open));
+      } else if (target.dataset.refresh !== undefined) {
+        target.disabled = true;
+        target.textContent = "Refreshing…";
+        try {
+          const result = await rpc("tools/call", { name: "request_brief_refresh", arguments: {} });
+          render(result?.structuredContent ?? fallback);
+        } catch { render(fallback); }
+      } else if (target.dataset.action) {
+        const item = Object.values(data.brief.sections).flatMap((section) => section.items).find((candidate) => candidate.id === target.dataset.id);
+        if (!item) return;
+        const prompts = {
+          draft: `Draft a response for “${item.headline}” using only its supporting sources. Do not send it.`,
+          research: `Run a deeper research brief for “${item.headline}”.`,
+          task: `I accept “${item.headline}” as a task. Ask me for the due timing, including a no-date option.`,
+          adjust: `Help me adjust the ranking or entity match for “${item.headline}”.`
+        };
+        message(prompts[target.dataset.action]);
+      } else if (target.dataset.nav) {
+        message(`Open Blackhawk ${target.dataset.nav}.`);
+      }
+    });
+
+    window.addEventListener("message", (event) => {
+      if (event.source !== window.parent) return;
+      const message = event.data;
+      if (!message || message.jsonrpc !== "2.0") return;
+      if (message.id && pending.has(message.id)) {
+        const handler = pending.get(message.id); pending.delete(message.id);
+        message.error ? handler.reject(message.error) : handler.resolve(message.result);
+      }
+      if (message.method === "ui/notifications/tool-result") render(message.params?.structuredContent);
+    }, { passive: true });
+
+    render(fallback);
+  </script>
+</body>
+</html>
