@@ -8,7 +8,7 @@ const port = 8790;
 const baseUrl = `http://127.0.0.1:${port}`;
 const serverPath = fileURLToPath(new URL("./index.js", import.meta.url));
 const child = spawn(process.execPath, [serverPath], {
-  env: { ...process.env, HOST: "127.0.0.1", PORT: String(port) },
+  env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), BLACKHAWK_AUTH_MODE: "preview", NODE_ENV: "test" },
   stdio: ["ignore", "pipe", "pipe"]
 });
 
@@ -56,8 +56,67 @@ try {
     throw new Error("show_live_brief did not return the expected preview contract.");
   }
 
+  const rawListResponse = await fetch(`${baseUrl}/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/list", params: {} })
+  });
+  const rawText = await rawListResponse.text();
+  if (!rawText.includes('"securitySchemes"') || !rawText.includes('"oauth2"')) {
+    throw new Error(`Raw tools/list does not advertise OAuth security.\n${rawText}`);
+  }
+
   await client.close();
   console.log(JSON.stringify({ health, toolNames, resourceUri, briefId: structured.brief.briefId }, null, 2));
 } finally {
   child.kill("SIGTERM");
+}
+
+const authPort = 8791;
+const authBaseUrl = `http://127.0.0.1:${authPort}`;
+const authChild = spawn(process.execPath, [serverPath], {
+  env: {
+    ...process.env,
+    HOST: "127.0.0.1",
+    PORT: String(authPort),
+    NODE_ENV: "test",
+    BLACKHAWK_AUTH_MODE: "supabase",
+    SUPABASE_URL: "https://example.supabase.co",
+    BLACKHAWK_MCP_RESOURCE_URL: "https://blackhawk.example.com/mcp",
+    BLACKHAWK_ALLOWED_EMAIL: "will@example.com"
+  },
+  stdio: ["ignore", "pipe", "pipe"]
+});
+
+let authLogs = "";
+authChild.stdout.on("data", (chunk) => { authLogs += chunk.toString(); });
+authChild.stderr.on("data", (chunk) => { authLogs += chunk.toString(); });
+
+try {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      const response = await fetch(`${authBaseUrl}/health`);
+      if (response.ok) break;
+    } catch {}
+    if (attempt === 29) throw new Error(`Authenticated server did not become healthy.\n${authLogs}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  const metadataResponse = await fetch(`${authBaseUrl}/.well-known/oauth-protected-resource`);
+  const metadata = await metadataResponse.json() as { resource?: string; authorization_servers?: string[] };
+  if (metadata.resource !== "https://blackhawk.example.com/mcp" || metadata.authorization_servers?.[0] !== "https://example.supabase.co/auth/v1") {
+    throw new Error("Protected-resource metadata is incorrect.");
+  }
+
+  const authClient = new Client({ name: "blackhawk-auth-smoke", version: "0.1.0" });
+  await authClient.connect(new StreamableHTTPClientTransport(new URL(`${authBaseUrl}/mcp`)));
+  const challengeResult = await authClient.callTool({ name: "show_live_brief", arguments: {} });
+  const challenge = (challengeResult._meta as { "mcp/www_authenticate"?: string[] } | undefined)?.["mcp/www_authenticate"]?.[0];
+  if (!challengeResult.isError || !challenge?.includes("resource_metadata=") || !challenge.includes("error_description=")) {
+    throw new Error("Unauthenticated tool calls do not return the required OAuth challenge.");
+  }
+  await authClient.close();
+  console.log(JSON.stringify({ authMode: "supabase", metadata, challenge: "verified" }, null, 2));
+} finally {
+  authChild.kill("SIGTERM");
 }
