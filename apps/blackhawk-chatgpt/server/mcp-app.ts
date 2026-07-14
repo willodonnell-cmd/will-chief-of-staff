@@ -8,15 +8,15 @@ import { previewBrief } from "./fixture.js";
 
 export const WIDGET_URI = "ui://blackhawk/live-brief-v1.html";
 
-const oauthSecurity = {
-  securitySchemes: [{ type: "oauth2", scopes: [...OAUTH_SCOPES] }]
-};
+function toolSecuritySchemes(config: AuthConfig) {
+  return config.mode === "preview"
+    ? [{ type: "noauth" as const }]
+    : [{ type: "oauth2" as const, scopes: [...OAUTH_SCOPES] }];
+}
 
-const advertisedToolSecurity = [{ type: "oauth2", scopes: [...OAUTH_SCOPES] }];
-
-function installOAuthAwareToolList(server: McpServer) {
+function installOAuthAwareToolList(server: McpServer, authConfig: AuthConfig) {
   const objectSchema = { type: "object" as const, properties: {}, additionalProperties: false };
-  const common = { securitySchemes: advertisedToolSecurity };
+  const common = { securitySchemes: toolSecuritySchemes(authConfig) };
   server.server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
@@ -73,6 +73,7 @@ function requireToolAuth(config: AuthConfig, authInfo: unknown) {
 }
 
 export function buildServer(authConfig: AuthConfig, widgetHtml: string) {
+  const toolSecurity = { securitySchemes: toolSecuritySchemes(authConfig) };
   const server = new McpServer(
     { name: "blackhawk", version: "0.1.0" },
     {
@@ -91,7 +92,7 @@ export function buildServer(authConfig: AuthConfig, widgetHtml: string) {
   }));
 
   registerAppTool(server, "show_live_brief", {
-    ...oauthSecurity,
+    ...toolSecurity,
     title: "Show Blackhawk live brief",
     description: "Shows Will's current canonical Blackhawk executive brief. In the Phase 1 checkpoint this returns clearly marked preview data.",
     inputSchema: {},
@@ -113,7 +114,7 @@ export function buildServer(authConfig: AuthConfig, widgetHtml: string) {
   });
 
   registerAppTool(server, "request_brief_refresh", {
-    ...oauthSecurity,
+    ...toolSecurity,
     title: "Refresh Blackhawk brief",
     description: "Requests an idempotent refresh of the current brief. The Phase 1 checkpoint simulates the refresh without accessing live sources.",
     inputSchema: {},
@@ -135,7 +136,7 @@ export function buildServer(authConfig: AuthConfig, widgetHtml: string) {
   });
 
   registerAppTool(server, "get_brief_item", {
-    ...oauthSecurity,
+    ...toolSecurity,
     title: "Expand Blackhawk brief item",
     description: "Returns the source-backed detail already present for one displayed brief item.",
     inputSchema: { itemId: z.string().min(1) },
@@ -158,7 +159,7 @@ export function buildServer(authConfig: AuthConfig, widgetHtml: string) {
   // The current MCP TypeScript SDK does not yet preserve the Apps SDK
   // securitySchemes extension in its high-level tool registry. Override only
   // tools/list so ChatGPT receives the required per-tool OAuth declaration.
-  installOAuthAwareToolList(server);
+  installOAuthAwareToolList(server, authConfig);
 
   return server;
 }

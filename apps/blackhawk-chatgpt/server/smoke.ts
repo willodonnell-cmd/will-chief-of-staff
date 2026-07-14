@@ -62,8 +62,8 @@ try {
     body: JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/list", params: {} })
   });
   const rawText = await rawListResponse.text();
-  if (!rawText.includes('"securitySchemes"') || !rawText.includes('"oauth2"')) {
-    throw new Error(`Raw tools/list does not advertise OAuth security.\n${rawText}`);
+  if (!rawText.includes('"securitySchemes"') || !rawText.includes('"noauth"') || rawText.includes('"oauth2"')) {
+    throw new Error(`Preview tools/list does not advertise no-auth preview security.\n${rawText}`);
   }
 
   await client.close();
@@ -107,6 +107,16 @@ try {
   const metadata = await metadataResponse.json() as { resource?: string; authorization_servers?: string[] };
   if (metadata.resource !== "https://blackhawk.example.com/mcp" || metadata.authorization_servers?.[0] !== "https://example.supabase.co/auth/v1") {
     throw new Error("Protected-resource metadata is incorrect.");
+  }
+
+  const authListResponse = await fetch(`${authBaseUrl}/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 11, method: "tools/list", params: {} })
+  });
+  const authListText = await authListResponse.text();
+  if (!authListText.includes('"securitySchemes"') || !authListText.includes('"oauth2"') || authListText.includes('"noauth"')) {
+    throw new Error(`Authenticated tools/list does not advertise OAuth security.\n${authListText}`);
   }
 
   const authClient = new Client({ name: "blackhawk-auth-smoke", version: "0.1.0" });
